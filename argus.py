@@ -5,8 +5,8 @@ import os
 from datetime import datetime
 
 # ── Config ──────────────────────────────────────────────
-TELEGRAM_TOKEN   = "8673407952:AAGd20xArXTfZw27v2NtyaoGHMOeKebC0QA"
-TELEGRAM_CHAT_ID = "1169760852"
+TELEGRAM_TOKEN   = os.environ["TELEGRAM_TOKEN"]
+TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 MEMORY_FILE      = "argus_memory.csv"
 WATCHLIST_FILE   = "argus_watchlist.csv"
 MIN_SCORE        = 65
