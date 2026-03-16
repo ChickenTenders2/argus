@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import os
 from datetime import datetime
+from fmp_fetch import run_fmp_enrichment
 
 # ── Config ──────────────────────────────────────────────
 TELEGRAM_TOKEN   = os.environ["TELEGRAM_TOKEN"]
@@ -302,6 +303,7 @@ def main():
     body      = "\n".join([format_pick(p, memory_df) for p in results])
     footer    = f"\n{'─'*30}\n_Scanned {len(tickers)} tickers • Top {len(results)} picks shown_"
     send_telegram(header + body + footer)
+    run_fmp_enrichment(results, send_telegram)
 
     # ── Watchlist monitor ──
     run_watchlist_monitor()
