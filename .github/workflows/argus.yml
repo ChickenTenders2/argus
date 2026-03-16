@@ -1,5 +1,8 @@
 name: Argus Daily Scan
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '0 7 * * 1-5'  # 7am UTC weekdays
