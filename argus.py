@@ -188,6 +188,18 @@ def score_stock(ticker):
         elif mkt_cap >= 10_000_000_000:
             score += 5
 
+        # NEW: ROCE (Priority 1)
+        roce = info.get("returnOnCapitalEmployed", info.get("returnOnCapital", 0)) or 0
+        if roce > 0.20:
+            score += 8
+            reasons.append(f"ROCE {roce*100:.0f}%")
+
+        # NEW: P/S Valuation (Priority 3)
+        ps_ratio = info.get("priceToSalesTrailing12Months", 999)
+        if 0 < ps_ratio < 4:
+            score += 10
+            reasons.append(f"P/S {ps_ratio:.1f}x")
+
         # ── RED FLAG VETOES ──
         debt_eq = info.get("debtToEquity", 0) or 0
         if debt_eq > 500:
@@ -200,6 +212,16 @@ def score_stock(ticker):
         shares_out = info.get("sharesPercentSharesOut", 0) or 0
         if shares_out > 0.15:
             red_flags.append("Dilution risk")
+
+        try:
+            earnings = stock.calendar
+            if not earnings.empty and 'EPS Estimate' in earnings.columns and 'Reported EPS' in earnings.columns:
+                last_est = earnings['EPS Estimate'].dropna().iloc[-1]
+                last_rep = earnings['Reported EPS'].dropna().iloc[-1] if len(earnings['Reported EPS'].dropna()) > 0 else 0
+                if last_est > 0 and last_rep / last_est < 0.90:  # >10% miss
+                    red_flags.append("Earnings miss")
+        except:
+            pass
 
         if red_flags:
             return None
@@ -214,6 +236,7 @@ def score_stock(ticker):
 
         return {
             "ticker":  ticker,
+            "sector": info.get("sector", "Unknown"),  # ← ADD THIS
             "score":   score,
             "tier":    tier,
             "reasons": reasons,
@@ -291,19 +314,25 @@ def main():
                 continue
             if (not data['Close'].dropna().empty and 
                 data['Close'].iloc[-1] > 2 and 
-                data['Volume'].mean() > 100000):
+                data['Volume'].mean() > 200000):
                 valid_tickers.append(t)
         except:
             continue
 
-    tickers = valid_tickers[:200]
+    tickers = valid_tickers[:400]
 
     for ticker in tickers:
         pick = score_stock(ticker)
         if pick:
             results.append(pick)
 
-    results = sorted(results, key=lambda x: x["score"], reverse=True)[:TOP_N]
+    from collections import Counter
+    sector_picks = {}
+    for p in results:
+        sector = p.get("sector", "Unknown")
+        if sector not in sector_picks or len(sector_picks[sector]) < 3:
+            sector_picks.setdefault(sector, []).append(p)
+    results = [p for picks in sector_picks.values() for p in picks][:TOP_N]
 
     if not results:
         send_telegram(
@@ -318,8 +347,12 @@ def main():
     for pick in results:
         t = pick["ticker"]
         if t in memory_df["ticker"].values:
+            times = int(memory_df.loc[memory_df["ticker"] == t, "times_flagged"].values[0])
             memory_df.loc[memory_df["ticker"] == t, "times_flagged"] += 1
-            memory_df.loc[memory_df["ticker"] == t, "last_score"]    = pick["score"]
+            memory_df.loc[memory_df["ticker"] == t, "last_score"] = pick["score"]
+            if times >= 3:
+                pick["score"] += 5
+                pick["reasons"].append("🔁 Persistence bonus")
         else:
             new_row = pd.DataFrame([{
                 "ticker":        t,
