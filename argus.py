@@ -104,26 +104,23 @@ def score_stock(ticker):
         red_flags = []
 
         # ── FUNDAMENTALS (max 50pts) ──
-        rev_growth = info.get("revenueGrowth", 0) or 0
+        try:
+            financials = stock.quarterly_financials
+            if "Total Revenue" in financials.index and financials.shape[1] >= 5:
+                rev_now = financials.loc["Total Revenue"].iloc[:4].sum()
+                rev_prev = financials.loc["Total Revenue"].iloc[4:8].sum()
+                rev_growth = (rev_now - rev_prev) / abs(rev_prev) if rev_prev != 0 else 0
+            else:
+                rev_growth = info.get("revenueGrowth", 0) or 0
+        except:
+            rev_growth = info.get("revenueGrowth", 0) or 0
+
         if rev_growth >= 0.30:
             score += 25
             reasons.append(f"Rev growth {rev_growth*100:.0f}%")
         elif rev_growth >= 0.20:
             score += 15
             reasons.append(f"Rev growth {rev_growth*100:.0f}%")
-
-        gross_margin = info.get("grossMargins", 0) or 0
-        if gross_margin >= 0.50:
-            score += 15
-            reasons.append(f"Gross margin {gross_margin*100:.0f}%")
-        elif gross_margin >= 0.30:
-            score += 8
-            reasons.append(f"Gross margin {gross_margin*100:.0f}%")
-
-        fcf = info.get("freeCashflow", None)
-        if fcf and fcf > 0:
-            score += 10
-            reasons.append("Positive FCF")
 
         # ── VALUATION (max 15pts) ──
         peg = info.get("pegRatio", None)
@@ -156,6 +153,21 @@ def score_stock(ticker):
             if vol_today > vol_avg * 2:
                 score += 10
                 reasons.append("⚡ Unusual volume spike")
+
+        # Relative Strength vs IWM
+        try:
+            iwm_hist = yf.download("IWM", period="3mo", progress=False)
+            iwm = iwm_hist['Close']
+            if (not hist.empty and len(hist) > 20 and len(iwm) > 20 and 
+                hist.index[0] <= iwm.index[-1]):
+                ticker_ret = hist["Close"].iloc[-1] / hist["Close"].iloc[0]
+                iwm_ret = iwm.iloc[-1] / iwm.iloc[0]
+                rs_return = ticker_ret / iwm_ret
+                if rs_return > 1.20:
+                    score += 10
+                    reasons.append("RS outperforms IWM 20%+")
+        except:
+            pass
 
         # ── SMART MONEY (max 20pts) ──
         inst_own = info.get("heldPercentInstitutions", 1) or 1
@@ -264,6 +276,27 @@ def main():
     tickers   = get_universe()
     memory_df = load_memory()
     results   = []
+
+    # Batch download to pre-filter
+    print("Pre-filtering universe...")
+    batch_hist = yf.download(tickers, period="1mo", group_by="ticker", progress=False, threads=True)
+    valid_tickers = []
+    for t in tickers:
+        try:
+            if t in batch_hist.columns.get_level_values(0).unique():
+                data = batch_hist[t]
+            elif t in batch_hist.columns:
+                data = batch_hist[t]
+            else:
+                continue
+            if (not data['Close'].dropna().empty and 
+                data['Close'].iloc[-1] > 2 and 
+                data['Volume'].mean() > 100000):
+                valid_tickers.append(t)
+        except:
+            continue
+
+    tickers = valid_tickers[:200]
 
     for ticker in tickers:
         pick = score_stock(ticker)
