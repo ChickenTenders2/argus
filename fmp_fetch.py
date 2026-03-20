@@ -24,15 +24,16 @@ def safe_get(url):
 
 # ── Fetch All Endpoints ──────────────────────────────────
 def get_fmp_data(ticker):
+    BASE_STABLE = "https://financialmodelingprep.com/stable"
     return {
-        "profile":       safe_get(f"{BASE}/v3/profile/{ticker}?apikey={FMP_API_KEY}"),
-        "income":        safe_get(f"{BASE}/v3/income-statement/{ticker}?limit=2&apikey={FMP_API_KEY}"),
-        "cashflow":      safe_get(f"{BASE}/v3/cash-flow-statement/{ticker}?limit=1&apikey={FMP_API_KEY}"),
-        "key_metrics":   safe_get(f"{BASE}/v3/key-metrics-ttm/{ticker}?apikey={FMP_API_KEY}"),
-        "insiders":      safe_get(f"{BASE}/v4/insider-trading?symbol={ticker}&limit=20&apikey={FMP_API_KEY}"),
-        "institutions":  safe_get(f"{BASE}/v3/institutional-holder/{ticker}?apikey={FMP_API_KEY}"),
-        "earnings_cal":  safe_get(f"{BASE}/v3/historical/earning_calendar/{ticker}?apikey={FMP_API_KEY}"),
-        "analyst_grade": safe_get(f"{BASE}/v3/grade/{ticker}?limit=5&apikey={FMP_API_KEY}"),
+        "profile":       safe_get(f"{BASE_STABLE}/profile?symbol={ticker}&apikey={FMP_API_KEY}"),
+        "income":        safe_get(f"{BASE_STABLE}/income-statement?symbol={ticker}&limit=2&apikey={FMP_API_KEY}"),
+        "cashflow":      safe_get(f"{BASE_STABLE}/cash-flow-statement?symbol={ticker}&limit=1&apikey={FMP_API_KEY}"),
+        "key_metrics":   safe_get(f"{BASE_STABLE}/key-metrics-ttm?symbol={ticker}&apikey={FMP_API_KEY}"),
+        "insiders":      safe_get(f"{BASE_STABLE}/insider-trading?symbol={ticker}&limit=20&apikey={FMP_API_KEY}"),
+        "institutions":  safe_get(f"{BASE_STABLE}/institutional-holder?symbol={ticker}&apikey={FMP_API_KEY}"),
+        "earnings_cal":  safe_get(f"{BASE_STABLE}/historical/earning_calendar?symbol={ticker}&apikey={FMP_API_KEY}"),
+        "analyst_grade": safe_get(f"{BASE_STABLE}/grade?symbol={ticker}&limit=5&apikey={FMP_API_KEY}"),
     }
 
 
@@ -197,3 +198,14 @@ def run_fmp_enrichment(results, send_telegram_fn):
         parsed = parse_fmp_data(ticker, raw)
         send_telegram_fn(format_fmp_block(parsed))
         print(f"  ✅ {ticker} sent")
+
+# ── Temporary Debug Block ─────────────────────────────────
+if __name__ == "__main__":
+    import os
+    key = os.environ.get("FMP_API_KEY", "")
+    print(f"API Key loaded: {'✅ ' + key[:6] + '...' if key else '❌ EMPTY'}")
+
+    test_url = f"https://financialmodelingprep.com/stable/income-statement?symbol=PL&limit=2&apikey={key}"
+    r = requests.get(test_url)
+    print(f"Status code: {r.status_code}")
+    print(f"Response: {r.text[:300]}")
