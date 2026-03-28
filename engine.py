@@ -52,6 +52,9 @@ def load_memory(filepath):
     except:
         return pd.DataFrame(columns=["ticker", "first_seen", "times_flagged", "last_score"])
 
+def save_memory(df, filepath):
+    df.to_csv(filepath, index=False)
+
 def _check_red_flags(info, stock):
     flags = []
     if (info.get("debtToEquity", 0) or 0) > 500:
@@ -155,7 +158,62 @@ def score_stock(ticker, memory_df, config):
         return None
 
 def get_universe():
-    """Attempts to fetch Russell 2000 components from multiple sources."""
-    # ... logic from original argus.py get_universe ...
-    # (Simplified for brevity in engine)
-    return ["ASTS", "RKLB", "LUNR", "PL", "S", "AMPX"] # Placeholder
+    import ssl
+    ssl._create_default_https_context = ssl._create_unverified_context
+
+    # Method 1: Try iShares IWM holdings CSV
+    try:
+        url = "https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/1467271812596.ajax?fileType=csv&fileName=IWM_holdings&dataType=fund"
+        df = pd.read_csv(url, skiprows=9, on_bad_lines='skip')
+        tickers = df.iloc[:, 0].dropna().tolist()
+        tickers = [str(t).strip() for t in tickers if isinstance(t, str) and 1 < len(str(t).strip()) < 6 and str(t).strip().isalpha()]
+        if len(tickers) > 50:
+            logger.info(f"IWM download success: {len(tickers)} tickers")
+            return tickers[:300]
+        raise ValueError("Too few tickers parsed")
+    except Exception as e:
+        logger.warning(f"IWM download failed: {e}")
+
+    # Method 2: Try Wikipedia Russell 2000 component list
+    try:
+        tables = pd.read_html("https://en.wikipedia.org/wiki/Russell_2000_Index")
+        for table in tables:
+            for col in table.columns:
+                if "ticker" in str(col).lower() or "symbol" in str(col).lower():
+                    tickers = table[col].dropna().tolist()
+                    tickers = [str(t).strip() for t in tickers if 1 < len(str(t).strip()) < 6]
+                    if len(tickers) > 50:
+                        logger.info(f"Wikipedia success: {len(tickers)} tickers")
+                        return tickers[:300]
+        raise ValueError("No ticker column found")
+    except Exception as e:
+        logger.warning(f"Wikipedia failed: {e}")
+
+    # Method 3: Try downloading IWM holdings via yfinance
+    try:
+        iwm = yf.Ticker("IWM")
+        holdings = iwm.funds_data.top_holdings
+        if holdings is not None and len(holdings) > 10:
+            tickers = holdings.index.tolist()
+            tickers = [str(t).strip() for t in tickers if 1 < len(str(t).strip()) < 6]
+            logger.info(f"yfinance IWM holdings: {len(tickers)} tickers")
+            return tickers
+        raise ValueError("No holdings data")
+    except Exception as e:
+        logger.warning(f"yfinance IWM failed: {e}")
+
+    # Method 4: Hardcoded fallback
+    logger.error("All sources failed — using hardcoded fallback list")
+    return [
+        "ASTS", "RKLB", "LUNR", "ACHR", "JOBY", "IRDM", "SPIR", "PL",
+        "BBAI", "SOUN", "IONQ", "ARQT", "DAVE", "RELY", "URGN", "CIFR",
+        "IDAI", "IREN", "BTDR", "CLBT", "AMPX", "NRDS", "SEAT", "MAPS",
+        "HOOD", "AFRM", "UPST", "OPEN", "LPRO", "PAYO",
+        "S", "QLYS", "RDWR", "EVTC", "OSPN",
+        "HIMS", "CLOV", "GDRX", "TALK", "GRAL", "MDXG", "NUVL",
+        "JANX", "KROS", "RXRX", "BEAM", "EDIT", "NTLA",
+        "STEM", "NKLA", "BLNK", "CHPT", "SHLS", "ARRY", "FLNC",
+        "CTOS", "LQDT", "RCUS", "ORIC", "PRAX",
+        "SERV", "LIDR", "OUST", "AEVA", "MVIS", "KOPN", "XPOF",
+        "CELH", "VNCE", "VSCO", "LOVE", "CURV", "BURL"
+    ]
