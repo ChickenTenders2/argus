@@ -1,26 +1,49 @@
 import yfinance as yf
 import pandas as pd
 import requests
+import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from fmp_fetch import run_fmp_enrichment
 
-# ── Config ──────────────────────────────────────────────
-TELEGRAM_TOKEN   = os.environ["TELEGRAM_TOKEN"]
-TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-MEMORY_FILE      = "argus_memory.csv"
-WATCHLIST_FILE   = "argus_watchlist.csv"
-MIN_SCORE        = 65
-TOP_N            = 10
+# ── Setup Logging ───────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("Argus")
+
+# ── Configuration ───────────────────────────────────────
+@dataclass(frozen=True)
+class Config:
+    TELEGRAM_TOKEN: str = os.environ.get("TELEGRAM_TOKEN", "")
+    TELEGRAM_CHAT_ID: str = os.environ.get("TELEGRAM_CHAT_ID", "")
+    MEMORY_FILE: str = "argus_memory.csv"
+    WATCHLIST_FILE: str = "argus_watchlist.csv"
+    MIN_SCORE: int = 65
+    TOP_N: int = 10
+    PRICE_FLOOR: float = 2.0
+    VOL_FLOOR: int = 200000
+
+config = Config()
 
 # ── Telegram ─────────────────────────────────────────────
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, json={
-        "chat_id": TELEGRAM_CHAT_ID,
+    if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
+        logger.error("Telegram credentials missing. Cannot send message.")
+        return
+    url = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": config.TELEGRAM_CHAT_ID,
         "text": message,
         "parse_mode": "Markdown"
-    })
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        logger.error(f"Failed to send Telegram message: {e}")
 
 # ── Ticker Universe (Russell 2000 via iShares IWM) ───────
 def get_universe():
@@ -34,11 +57,11 @@ def get_universe():
         tickers = df.iloc[:, 0].dropna().tolist()
         tickers = [str(t).strip() for t in tickers if isinstance(t, str) and 1 < len(str(t).strip()) < 6 and str(t).strip().isalpha()]
         if len(tickers) > 50:
-            print(f"✅ IWM download success: {len(tickers)} tickers")
+            logger.info(f"IWM download success: {len(tickers)} tickers")
             return tickers[:300]
         raise ValueError("Too few tickers parsed")
     except Exception as e:
-        print(f"⚠️ IWM download failed: {e}")
+        logger.warning(f"IWM download failed: {e}")
 
     # Method 2: Try Wikipedia Russell 2000 component list
     try:
@@ -49,11 +72,11 @@ def get_universe():
                     tickers = table[col].dropna().tolist()
                     tickers = [str(t).strip() for t in tickers if 1 < len(str(t).strip()) < 6]
                     if len(tickers) > 50:
-                        print(f"✅ Wikipedia success: {len(tickers)} tickers")
+                        logger.info(f"Wikipedia success: {len(tickers)} tickers")
                         return tickers[:300]
         raise ValueError("No ticker column found")
     except Exception as e:
-        print(f"⚠️ Wikipedia failed: {e}")
+        logger.warning(f"Wikipedia failed: {e}")
 
     # Method 3: Try downloading IWM holdings via yfinance
     try:
@@ -62,14 +85,14 @@ def get_universe():
         if holdings is not None and len(holdings) > 10:
             tickers = holdings.index.tolist()
             tickers = [str(t).strip() for t in tickers if 1 < len(str(t).strip()) < 6]
-            print(f"✅ yfinance IWM holdings: {len(tickers)} tickers")
+            logger.info(f"yfinance IWM holdings: {len(tickers)} tickers")
             return tickers
         raise ValueError("No holdings data")
     except Exception as e:
-        print(f"⚠️ yfinance IWM failed: {e}")
+        logger.warning(f"yfinance IWM failed: {e}")
 
     # Method 4: Hardcoded fallback
-    print("⚠️ All sources failed — using hardcoded fallback list")
+    logger.error("All sources failed — using hardcoded fallback list")
     return [
         "ASTS", "RKLB", "LUNR", "ACHR", "JOBY", "IRDM", "SPIR", "PL",
         "BBAI", "SOUN", "IONQ", "ARQT", "DAVE", "RELY", "URGN", "CIFR",
@@ -87,12 +110,12 @@ def get_universe():
 # ── Load / Save Memory ───────────────────────────────────
 def load_memory():
     try:
-        return pd.read_csv(MEMORY_FILE)
+        return pd.read_csv(config.MEMORY_FILE)
     except:
         return pd.DataFrame(columns=["ticker", "first_seen", "times_flagged", "last_score"])
 
 def save_memory(df):
-    df.to_csv(MEMORY_FILE, index=False)
+    df.to_csv(config.MEMORY_FILE, index=False)
 
 # ── Scoring Engine ───────────────────────────────────────
 def score_stock(ticker):
@@ -268,7 +291,7 @@ def format_pick(pick, memory_df):
 # ── Watchlist Monitor ────────────────────────────────────
 def run_watchlist_monitor():
     try:
-        wl = pd.read_csv(WATCHLIST_FILE)
+        wl = pd.read_csv(config.WATCHLIST_FILE)
         tickers = wl["ticker"].dropna().tolist()
     except:
         return
@@ -295,26 +318,29 @@ def run_watchlist_monitor():
 
 # ── Main ─────────────────────────────────────────────────
 def main():
-    print("👁 Argus scan starting...")
+    if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
+        logger.error("Telegram credentials missing. Exiting.")
+        return
+
+    logger.info("Argus scan starting...")
     tickers   = get_universe()
     memory_df = load_memory()
     results   = []
 
-    # Batch download to pre-filter
-    print("Pre-filtering universe...")
+    logger.info("Pre-filtering universe...")
     batch_hist = yf.download(tickers, period="1mo", group_by="ticker", progress=False, threads=True)
     valid_tickers = []
     for t in tickers:
         try:
-            if t in batch_hist.columns.get_level_values(0).unique():
+            if isinstance(batch_hist.columns, pd.MultiIndex) and t in batch_hist.columns.get_level_values(0):
                 data = batch_hist[t]
             elif t in batch_hist.columns:
                 data = batch_hist[t]
             else:
                 continue
-            if (not data['Close'].dropna().empty and 
-                data['Close'].iloc[-1] > 2 and 
-                data['Volume'].mean() > 200000):
+            if (not data['Close'].dropna().empty and
+                data['Close'].iloc[-1] > config.PRICE_FLOOR and
+                data['Volume'].mean() > config.VOL_FLOOR):
                 valid_tickers.append(t)
         except:
             continue
@@ -322,7 +348,7 @@ def main():
     tickers = valid_tickers[:400]
 
     for ticker in tickers:
-        pick = score_stock(ticker)
+        pick = score_stock(ticker, memory_df)
         if pick:
             results.append(pick)
 
@@ -332,7 +358,7 @@ def main():
         sector = p.get("sector", "Unknown")
         if sector not in sector_picks or len(sector_picks[sector]) < 3:
             sector_picks.setdefault(sector, []).append(p)
-    results = [p for picks in sector_picks.values() for p in picks][:TOP_N]
+    results = [p for picks in sector_picks.values() for p in picks][:config.TOP_N]
 
     if not results:
         send_telegram(
@@ -350,9 +376,6 @@ def main():
             times = int(memory_df.loc[memory_df["ticker"] == t, "times_flagged"].values[0])
             memory_df.loc[memory_df["ticker"] == t, "times_flagged"] += 1
             memory_df.loc[memory_df["ticker"] == t, "last_score"] = pick["score"]
-            if times >= 3:
-                pick["score"] += 5
-                pick["reasons"].append("🔁 Persistence bonus")
         else:
             new_row = pd.DataFrame([{
                 "ticker":        t,
@@ -373,7 +396,7 @@ def main():
 
     # ── Watchlist monitor ──
     run_watchlist_monitor()
-    print("✅ Argus scan complete.")
+    logger.info("Argus scan complete.")
 
 if __name__ == "__main__":
     main()
