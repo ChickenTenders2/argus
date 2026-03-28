@@ -17,12 +17,12 @@ def get_stock_info(ticker):
                 cache = json.load(f)
         else:
             cache = {}
-            
+
         date_str = datetime.now().strftime("%Y-%m-%d")
-        
+
         if ticker in cache and cache[ticker].get("date") == date_str:
             return cache[ticker]["data"]
-            
+
         info = yf.Ticker(ticker).info
         cache[ticker] = {"date": date_str, "data": info}
         with open(CACHE_FILE, "w") as f:
@@ -70,53 +70,125 @@ def _check_red_flags(info, stock):
             last_rep = earnings['Reported EPS'].dropna().iloc[-1] if len(earnings['Reported EPS'].dropna()) > 0 else 0
             if last_est > 0 and last_rep / last_est < 0.90:
                 flags.append("Earnings miss")
-    except: pass
+    except:
+        pass
     return flags
 
 def _score_fundamentals(info, stock):
+    """Score: revenue growth (max 25), ROCE (max 8), gross margin (max 10), FCF (max 8) = 51 pts max."""
     score, reasons = 0, []
+
+    # ── Revenue Growth ──────────────────────────────────────
     try:
         financials = stock.quarterly_financials
         if "Total Revenue" in financials.index and financials.shape[1] >= 5:
-            rev_now = financials.loc["Total Revenue"].iloc[:4].sum()
+            rev_now  = financials.loc["Total Revenue"].iloc[:4].sum()
             rev_prev = financials.loc["Total Revenue"].iloc[4:8].sum()
-            growth = (rev_now - rev_prev) / abs(rev_prev) if rev_prev != 0 else 0
-        else: growth = info.get("revenueGrowth", 0) or 0
-    except: growth = info.get("revenueGrowth", 0) or 0
+            growth   = (rev_now - rev_prev) / abs(rev_prev) if rev_prev != 0 else 0
+        else:
+            growth = info.get("revenueGrowth", 0) or 0
+    except:
+        growth = info.get("revenueGrowth", 0) or 0
 
-    if growth >= 0.30: score += 25; reasons.append(f"Rev growth {growth*100:.0f}%")
+    if growth >= 0.30:   score += 25; reasons.append(f"Rev growth {growth*100:.0f}%")
     elif growth >= 0.20: score += 15; reasons.append(f"Rev growth {growth*100:.0f}%")
-    
+
+    # ── ROCE ────────────────────────────────────────────────
     roce = info.get("returnOnCapitalEmployed", info.get("returnOnCapital", 0)) or 0
     if roce > 0.20: score += 8; reasons.append(f"ROCE {roce*100:.0f}%")
+
+    # ── Gross Margin ────────────────────────────────────────
+    # Strongest single predictor of durable competitive advantage.
+    # >60% = pricing power / platform business (max pts)
+    # >40% = solid margin profile
+    gross_margin = info.get("grossMargins", 0) or 0
+    if gross_margin > 0.60:   score += 10; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+    elif gross_margin > 0.40: score += 5;  reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+
+    # ── Free Cash Flow ──────────────────────────────────────
+    # Positive FCF separates real businesses from burn-rate stories.
+    try:
+        cf = stock.quarterly_cashflow
+        if "Free Cash Flow" in cf.index:
+            ttm_fcf = cf.loc["Free Cash Flow"].iloc[:4].sum()
+        elif "Operating Cash Flow" in cf.index and "Capital Expenditure" in cf.index:
+            ttm_fcf = (cf.loc["Operating Cash Flow"].iloc[:4].sum()
+                       - abs(cf.loc["Capital Expenditure"].iloc[:4].sum()))
+        else:
+            ttm_fcf = info.get("freeCashflow", None)
+    except:
+        ttm_fcf = info.get("freeCashflow", None)
+
+    if ttm_fcf is not None and ttm_fcf > 0:
+        score += 8; reasons.append("FCF positive")
+
     return score, reasons
 
-def _score_momentum(hist):
+def _score_momentum(hist, ticker):
+    """Score: 6mo momentum (10), 50MA (5), 200MA (5), volume spike (10), IWM RS (10) = 40 pts max."""
     score, reasons = 0, []
-    if hist.empty or len(hist) < 50: return score, reasons
-    
-    price_now, price_6mo = hist["Close"].iloc[-1], hist["Close"].iloc[0]
-    ma50 = hist["Close"].rolling(50).mean().iloc[-1]
-    vol_avg, vol_today = hist["Volume"].rolling(30).mean().iloc[-1], hist["Volume"].iloc[-1]
+    if hist.empty or len(hist) < 50:
+        return score, reasons
 
-    if price_now > price_6mo * 1.15: score += 10; reasons.append("6mo Momentum")
-    if price_now > ma50: score += 5; reasons.append("Above 50MA")
-    if vol_today > vol_avg * 2: score += 10; reasons.append("⚡ Volume spike")
+    price_now  = hist["Close"].iloc[-1]
+    price_6mo  = hist["Close"].iloc[0]
+    ma50       = hist["Close"].rolling(50).mean().iloc[-1]
+    vol_avg    = hist["Volume"].rolling(30).mean().iloc[-1]
+    vol_today  = hist["Volume"].iloc[-1]
+
+    # 6-month price momentum
+    if price_now > price_6mo * 1.15:
+        score += 10; reasons.append("6mo Momentum")
+
+    # Price above 50-day MA
+    if price_now > ma50:
+        score += 5; reasons.append("Above 50MA")
+
+    # Price above 200-day MA (trend health check)
+    if len(hist) >= 200:
+        ma200 = hist["Close"].rolling(200).mean().iloc[-1]
+        if price_now > ma200:
+            score += 5; reasons.append("Above 200MA")
+    else:
+        logger.debug(f"{ticker}: fewer than 200 days of history — 200MA check skipped")
+
+    # Unusual volume spike
+    if vol_today > vol_avg * 2:
+        score += 10; reasons.append("⚡ Volume spike")
+
+    # Relative Strength vs IWM (Russell 2000 benchmark)
+    # +10 pts if the stock has outperformed IWM by 20%+ over the last 3 months.
+    try:
+        # Use the last ~63 trading days as a proxy for 3 months
+        if len(hist) >= 63:
+            stock_3mo_return = (price_now / hist["Close"].iloc[-63]) - 1
+
+            iwm_hist = yf.Ticker("IWM").history(period="3mo")
+            if not iwm_hist.empty:
+                iwm_return = (iwm_hist["Close"].iloc[-1] / iwm_hist["Close"].iloc[0]) - 1
+                rs_delta   = stock_3mo_return - iwm_return
+                if rs_delta >= 0.20:
+                    score += 10; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
+    except Exception as e:
+        logger.debug(f"{ticker}: IWM relative strength check failed — {e}")
+
     return score, reasons
 
 def score_stock(ticker, memory_df, config):
     """The central scoring logic used by both Scanner and Streamlit."""
     try:
         stock = yf.Ticker(ticker)
-        info = get_stock_info(ticker)
-        if not info or 'symbol' not in info: return None
+        info  = get_stock_info(ticker)
+        if not info or 'symbol' not in info:
+            return None
 
         red_flags = _check_red_flags(info, stock)
-        if red_flags: return None
+        if red_flags:
+            return None
 
         score, reasons = 0, []
-        
-        # 1. Fundamentals
+
+        # 1. Fundamentals (rev growth + ROCE + gross margin + FCF)
         f_score, f_reasons = _score_fundamentals(info, stock)
         score += f_score; reasons.extend(f_reasons)
 
@@ -126,9 +198,9 @@ def score_stock(ticker, memory_df, config):
         ps = info.get("priceToSalesTrailing12Months", 10)
         if 0 < ps < 4: score += 10; reasons.append(f"P/S {ps:.1f}x")
 
-        # 3. Momentum
-        hist = stock.history(period="6mo")
-        m_score, m_reasons = _score_momentum(hist)
+        # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS)
+        hist = stock.history(period="1y")  # 1y gives enough data for 200MA
+        m_score, m_reasons = _score_momentum(hist, ticker)
         score += m_score; reasons.extend(m_reasons)
 
         # 4. Smart Money & Cap
@@ -137,21 +209,22 @@ def score_stock(ticker, memory_df, config):
         mkt_cap = info.get("marketCap", 0) or 0
         if 50e6 < mkt_cap < 10e9: score += 10; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
 
-        # 5. Persistence Bonus (Applied during scoring)
+        # 5. Persistence Bonus
         prev = memory_df[memory_df["ticker"] == ticker]
         if not prev.empty and int(prev["times_flagged"].values[0]) >= 3:
             score += 5
-            reasons.append("🔁 Persistence bonus")
+            reasons.append("\U0001f501 Persistence bonus")
 
-        if score < config.MIN_SCORE: return None
+        if score < config.MIN_SCORE:
+            return None
 
         return {
-            "ticker": ticker,
-            "sector": info.get("sector", "Unknown"),
-            "score": score,
-            "tier": "🟢 HIGH CONVICTION" if score >= 80 else "🟡 WATCHLIST",
+            "ticker":  ticker,
+            "sector":  info.get("sector", "Unknown"),
+            "score":   score,
+            "tier":    "\U0001f7e2 HIGH CONVICTION" if score >= 80 else "\U0001f7e1 WATCHLIST",
             "reasons": reasons,
-            "price": round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
+            "price":   round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
             "mkt_cap": f"${mkt_cap/1e6:.0f}M"
         }
     except Exception:
