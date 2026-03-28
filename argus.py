@@ -115,7 +115,10 @@ def main():
         if pick:
             results.append(pick)
 
-    from collections import Counter
+    # FIX: sort by score BEFORE applying the sector diversity cap so that
+    # the highest-scoring stock from each sector always wins its slot.
+    results.sort(key=lambda x: x["score"], reverse=True)
+
     sector_picks = {}
     for p in results:
         sector = p.get("sector", "Unknown")
@@ -158,6 +161,8 @@ def main():
     footer    = f"\n{'─'*30}\n_Scanned {len(tickers)} tickers • Top {len(results)} picks shown_"
     send_telegram(header + body + footer)
     
+    # FMP enrichment is intentionally disabled — enrichment runs separately
+    # via fmp_fetch.py to avoid blocking the nightly scan Action.
     # run_fmp_enrichment(results, send_telegram)
 
     # ── Watchlist monitor ──
