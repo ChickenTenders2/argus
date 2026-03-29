@@ -117,22 +117,23 @@ with tabs[1]:
         if filtered.empty:
             st.warning("No rows after filters.")
         else:
+            filtered["scan_day"] = filtered["scan_date"].dt.date
             daily = (
-                filtered.groupby(filtered["scan_date"].dt.date, as_index=False)
+                filtered.groupby("scan_day", as_index=False)
                 .agg(picks=("ticker", "count"), top_score=("score", "max"), avg_score=("score", "mean"))
-                .sort_values("scan_date", ascending=False)
+                .sort_values("scan_day", ascending=False)
             )
             st.dataframe(daily, use_container_width=True)
 
             st.caption("Score trend")
             trend = (
-                filtered.groupby(filtered["scan_date"].dt.date, as_index=False)
+                filtered.groupby("scan_day", as_index=False)
                 .agg(avg_score=("score", "mean"))
-                .sort_values("scan_date")
+                .sort_values("scan_day")
             )
-            st.line_chart(trend.set_index("scan_date")["avg_score"])
+            st.line_chart(trend.set_index("scan_day")["avg_score"])
 
-            date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_date"].dt.date.unique(), reverse=True)]
+            date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_day"].unique(), reverse=True)]
             selected_day = st.selectbox("Day details", date_options)
             day_df = filtered[filtered["scan_date"].dt.strftime("%Y-%m-%d") == selected_day].sort_values("score", ascending=False)
             st.dataframe(day_df, use_container_width=True)
