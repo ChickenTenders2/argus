@@ -12,9 +12,11 @@ CACHE_FILE = "metadata_cache.json"
 
 def get_stock_info(ticker):
     try:
+        today = date.today().isoformat()
         if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, "r") as f:
-                cache = json.load(f)
+                raw = json.load(f)
+            cache = {k: v for k, v in raw.items() if v.get("date") == today}
         else:
             cache = {}
 
@@ -25,8 +27,9 @@ def get_stock_info(ticker):
 
         info = yf.Ticker(ticker).info
         cache[ticker] = {"date": date_str, "data": info}
+        pruned = {k: v for k, v in metadata_cache.items() if v.get("date") == today}
         with open(CACHE_FILE, "w") as f:
-            json.dump(cache, f)
+            json.dump(pruned, f)
         return info
     except Exception as e:
         logger.warning(f"Failed to fetch or cache info for {ticker}: {e}")
