@@ -2,10 +2,9 @@ import yfinance as yf
 import pandas as pd
 import requests
 import logging
-import os
 from datetime import datetime
 from fmp_fetch import run_fmp_enrichment
-from engine import Config, score_stock, load_memory, save_memory, get_universe
+from engine import Config, run_scan, save_results
 
 # ── Setup Logging ───────────────────────────────────────
 logging.basicConfig(
@@ -86,82 +85,49 @@ def main():
         return
 
     logger.info("Argus scan starting...")
-    tickers   = get_universe()
-    memory_df = load_memory(config.MEMORY_FILE)
-    results   = []
-
-    logger.info("Pre-filtering universe...")
-    batch_hist = yf.download(tickers, period="1mo", group_by="ticker", progress=False, threads=True)
-    valid_tickers = []
-    for t in tickers:
-        try:
-            if isinstance(batch_hist.columns, pd.MultiIndex) and t in batch_hist.columns.get_level_values(0):
-                data = batch_hist[t]
-            elif t in batch_hist.columns:
-                data = batch_hist[t]
-            else:
-                continue
-            if (not data['Close'].dropna().empty and
-                data['Close'].iloc[-1] > config.PRICE_FLOOR and
-                data['Volume'].mean() > config.VOL_FLOOR):
-                valid_tickers.append(t)
-        except:
-            continue
-
-    tickers = valid_tickers[:400]
-
-    for ticker in tickers:
-        pick = score_stock(ticker, memory_df, config)
-        if pick:
-            results.append(pick)
-
-    # FIX: sort by score BEFORE applying the sector diversity cap so that
-    # the highest-scoring stock from each sector always wins its slot.
-    results.sort(key=lambda x: x["score"], reverse=True)
-
-    sector_picks = {}
-    for p in results:
-        sector = p.get("sector", "Unknown")
-        if sector not in sector_picks or len(sector_picks[sector]) < 3:
-            sector_picks.setdefault(sector, []).append(p)
-    results = [p for picks in sector_picks.values() for p in picks][:config.TOP_N]
+    scan_payload = run_scan(config=config, scan_limit=400, update_memory=True)
+    results = scan_payload["results"]
+    scan_date = scan_payload["scan_date"]
+    scan_timestamp = scan_payload["scan_timestamp"]
+    scanned_count = scan_payload["scanned_count"]
 
     if not results:
         send_telegram(
             f"👁 *Argus Daily Scan — {datetime.now().strftime('%d %b %Y')}*\n"
             f"No high-conviction picks found today. Market may be choppy."
         )
+        save_results(
+            results=[],
+            scan_date=scan_date,
+            scan_timestamp=scan_timestamp,
+            run_type="scheduled",
+            latest_file=config.RESULTS_FILE,
+            history_file=config.RESULTS_HISTORY_FILE,
+            write_latest=True,
+        )
         run_watchlist_monitor()
         return
 
-    # ── Update memory ──
-    today = datetime.now().strftime("%d %b %Y")
-    for pick in results:
-        t = pick["ticker"]
-        if t in memory_df["ticker"].values:
-            times = int(memory_df.loc[memory_df["ticker"] == t, "times_flagged"].values[0])
-            memory_df.loc[memory_df["ticker"] == t, "times_flagged"] += 1
-            memory_df.loc[memory_df["ticker"] == t, "last_score"] = pick["score"]
-        else:
-            new_row = pd.DataFrame([{
-                "ticker":        t,
-                "first_seen":    today,
-                "times_flagged": 1,
-                "last_score":    pick["score"]
-            }])
-            memory_df = pd.concat([memory_df, new_row], ignore_index=True)
-            
-    # Save using the engine func
-    save_memory(memory_df, config.MEMORY_FILE)
-
-    if results:
-        pd.DataFrame(results).assign(scan_date=datetime.now().strftime("%Y-%m-%d")).to_csv("argus_results.csv", index=False)
+    save_results(
+        results=results,
+        scan_date=scan_date,
+        scan_timestamp=scan_timestamp,
+        run_type="scheduled",
+        latest_file=config.RESULTS_FILE,
+        history_file=config.RESULTS_HISTORY_FILE,
+        write_latest=True,
+    )
 
     # ── Build & send Telegram message ──
     today_str = datetime.now().strftime("%d %b %Y")
-    header    = f"👁 *Argus Daily Scan — {today_str}*\n{'─'*30}\n"
-    body      = "\n".join([format_pick(p, memory_df) for p in results])
-    footer    = f"\n{'─'*30}\n_Scanned {len(tickers)} tickers • Top {len(results)} picks shown_"
+    memory_df = pd.read_csv(config.MEMORY_FILE)
+    highest = [p for p in results if p["score"] >= 80]
+    high = [p for p in results if p["score"] < 80]
+    header = f"👁 *Argus Daily Scan — {today_str}*\n{'─'*30}\n"
+    highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in highest]) if highest else "_None today_")
+    high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
+    footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
+    body = highest_block + high_block
     send_telegram(header + body + footer)
     
     # FMP enrichment is intentionally disabled — enrichment runs separately

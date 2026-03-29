@@ -48,6 +48,8 @@ class Config:
     TOP_N: int = 10
     PRICE_FLOOR: float = 2.0
     VOL_FLOOR: int = 200000
+    RESULTS_FILE: str = "argus_results.csv"
+    RESULTS_HISTORY_FILE: str = "argus_results_history.csv"
 
 def load_memory(filepath):
     try:
@@ -57,6 +59,108 @@ def load_memory(filepath):
 
 def save_memory(df, filepath):
     df.to_csv(filepath, index=False)
+
+def _prefilter_tickers(tickers, config):
+    """Pre-filter tickers by price and volume before deep scoring."""
+    if not tickers:
+        return []
+    batch_hist = yf.download(tickers, period="1mo", group_by="ticker", progress=False, threads=True)
+    valid_tickers = []
+    for t in tickers:
+        try:
+            if isinstance(batch_hist.columns, pd.MultiIndex) and t in batch_hist.columns.get_level_values(0):
+                data = batch_hist[t]
+            elif t in batch_hist.columns:
+                data = batch_hist[t]
+            else:
+                continue
+            if (
+                not data["Close"].dropna().empty
+                and data["Close"].iloc[-1] > config.PRICE_FLOOR
+                and data["Volume"].mean() > config.VOL_FLOOR
+            ):
+                valid_tickers.append(t)
+        except Exception:
+            continue
+    return valid_tickers
+
+def _apply_sector_diversity(results, top_n, max_per_sector=3):
+    sector_picks = {}
+    for pick in results:
+        sector = pick.get("sector", "Unknown")
+        bucket = sector_picks.setdefault(sector, [])
+        if len(bucket) < max_per_sector:
+            bucket.append(pick)
+    return [pick for picks in sector_picks.values() for pick in picks][:top_n]
+
+def run_scan(config, scan_limit=400, update_memory=True):
+    """
+    Execute Argus scan and return standardized payload.
+    This is used by both scheduled runs and Streamlit manual runs.
+    """
+    tickers = get_universe()
+    memory_df = load_memory(config.MEMORY_FILE)
+    scan_date = datetime.now().strftime("%Y-%m-%d")
+    scan_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    valid_tickers = _prefilter_tickers(tickers, config)[:scan_limit]
+    results = []
+    for ticker in valid_tickers:
+        pick = score_stock(ticker, memory_df, config)
+        if pick:
+            results.append(pick)
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    results = _apply_sector_diversity(results, top_n=config.TOP_N, max_per_sector=3)
+
+    if update_memory and results:
+        today = datetime.now().strftime("%d %b %Y")
+        for pick in results:
+            ticker = pick["ticker"]
+            if ticker in memory_df["ticker"].values:
+                memory_df.loc[memory_df["ticker"] == ticker, "times_flagged"] += 1
+                memory_df.loc[memory_df["ticker"] == ticker, "last_score"] = pick["score"]
+            else:
+                new_row = pd.DataFrame([{
+                    "ticker": ticker,
+                    "first_seen": today,
+                    "times_flagged": 1,
+                    "last_score": pick["score"],
+                }])
+                memory_df = pd.concat([memory_df, new_row], ignore_index=True)
+        save_memory(memory_df, config.MEMORY_FILE)
+
+    return {
+        "results": results,
+        "scan_date": scan_date,
+        "scan_timestamp": scan_timestamp,
+        "scanned_count": len(valid_tickers),
+    }
+
+def save_results(results, scan_date, scan_timestamp, run_type, latest_file, history_file, write_latest):
+    """
+    Persist scan outputs:
+    - latest_file: full replacement (for latest scheduled run table)
+    - history_file: append-only full history across runs
+    """
+    base_cols = ["ticker", "sector", "score", "tier", "reasons", "price", "mkt_cap", "scan_date", "scan_timestamp", "run_type"]
+    if results:
+        df = pd.DataFrame(results).assign(
+            scan_date=scan_date,
+            scan_timestamp=scan_timestamp,
+            run_type=run_type,
+        )
+        if write_latest:
+            df.to_csv(latest_file, index=False)
+        if os.path.exists(history_file):
+            hist = pd.read_csv(history_file)
+            df = pd.concat([hist, df], ignore_index=True)
+        df.to_csv(history_file, index=False)
+    else:
+        if write_latest:
+            pd.DataFrame(columns=base_cols).to_csv(latest_file, index=False)
+        if not os.path.exists(history_file):
+            pd.DataFrame(columns=base_cols).to_csv(history_file, index=False)
 
 def _check_red_flags(info, stock):
     flags = []
