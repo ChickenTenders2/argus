@@ -154,6 +154,9 @@ def main():
     # Save using the engine func
     save_memory(memory_df, config.MEMORY_FILE)
 
+    if results:
+        pd.DataFrame(results).assign(scan_date=datetime.now().strftime("%Y-%m-%d")).to_csv("argus_results.csv", index=False)
+
     # ── Build & send Telegram message ──
     today_str = datetime.now().strftime("%d %b %Y")
     header    = f"👁 *Argus Daily Scan — {today_str}*\n{'─'*30}\n"

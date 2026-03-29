@@ -2,9 +2,23 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 from engine import Config, score_stock, load_memory, get_universe
+import os
 
 st.set_page_config(page_title="Argus Dashboard", layout="wide")
 st.title("👁 Argus Investment Workstation")
+
+# ── Auto-display last nightly scan ──────────────────────
+
+RESULTS_FILE = "argus_results.csv"
+st.subheader("📡 Last Nightly Scan")
+if os.path.exists(RESULTS_FILE):
+    nightly = pd.read_csv(RESULTS_FILE)
+    scan_date = nightly["scan_date"].iloc[0] if "scan_date" in nightly.columns else "Unknown"
+    st.caption(f"Scan date: {scan_date}  ·  {len(nightly)} tickers")
+    st.dataframe(nightly.drop(columns=["scan_date"], errors="ignore"), use_container_width=True)
+else:
+    st.info("No nightly scan data yet — results will appear here automatically after the next GitHub Action run.")
+st.divider()
 
 with st.sidebar:
     st.header("Parameters")
