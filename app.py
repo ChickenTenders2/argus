@@ -18,6 +18,22 @@ from datetime import datetime
 st.set_page_config(page_title="Argus Dashboard", layout="wide")
 st.title("👁 Argus Investment Workstation")
 
+def safe_line_chart(data, y_label="value"):
+    """
+    Streamlit line_chart may fail on some Cloud runtimes due to Altair/Python
+    compatibility. Fall back to a table to keep the app usable.
+    """
+    try:
+        st.line_chart(data)
+    except Exception:
+        st.warning("Chart unavailable in current runtime; showing data table instead.")
+        if isinstance(data, pd.Series):
+            fallback = data.reset_index()
+            fallback.columns = ["x", y_label]
+            st.dataframe(fallback, use_container_width=True)
+        else:
+            st.dataframe(data, use_container_width=True)
+
 def send_telegram_message(token, chat_id, message):
     if not token or not chat_id:
         return False
@@ -131,7 +147,7 @@ with tabs[1]:
                 .agg(avg_score=("score", "mean"))
                 .sort_values("scan_day")
             )
-            st.line_chart(trend.set_index("scan_day")["avg_score"])
+            safe_line_chart(trend.set_index("scan_day")["avg_score"], y_label="avg_score")
 
             date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_day"].unique(), reverse=True)]
             selected_day = st.selectbox("Day details", date_options)
@@ -152,12 +168,12 @@ with tabs[2]:
 
         if not tdf.empty:
             st.caption("Argus score history")
-            st.line_chart(tdf.set_index("scan_date")["score"])
+            safe_line_chart(tdf.set_index("scan_date")["score"], y_label="score")
 
             hist = yf.Ticker(ticker).history(period="1y")
             if not hist.empty:
                 st.caption("Price (1 year)")
-                st.line_chart(hist["Close"])
+                safe_line_chart(hist["Close"], y_label="close")
             else:
                 st.info("No market price data available for chart.")
 
@@ -271,7 +287,7 @@ with tabs[4]:
                         st.write(f"**{row['ticker']}** - Score: {row['score']}")
                         hist = yf.Ticker(row["ticker"]).history(period="6mo")
                         if not hist.empty:
-                            st.line_chart(hist["Close"])
+                            safe_line_chart(hist["Close"], y_label="close")
                         else:
                             st.write("No history available")
             else:
