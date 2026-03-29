@@ -4,7 +4,7 @@ import logging
 import os
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, date
 
 logger = logging.getLogger("Argus.Engine")
 
@@ -27,7 +27,7 @@ def get_stock_info(ticker):
 
         info = yf.Ticker(ticker).info
         cache[ticker] = {"date": date_str, "data": info}
-        pruned = {k: v for k, v in metadata_cache.items() if v.get("date") == today}
+        pruned = {k: v for k, v in cache.items() if v.get("date") == today}
         with open(CACHE_FILE, "w") as f:
             json.dump(pruned, f)
         return info

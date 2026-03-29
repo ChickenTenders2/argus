@@ -1,5 +1,3 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
-
 # where is the readme?
 
 Here's the full README — copy everything between the triple backticks below and paste it directly into your `README.md` file in GitHub:
@@ -21,6 +19,7 @@ The core philosophy is that repeated flags carry increasing weight: a stock that
 	- Scores tickers using `yfinance` metadata and price/volume history
 	- Sends a daily Telegram message with the top picks, diversified by sector
 	- Updates `argus_memory.csv` to track repeated flags (with persistence bonus)
+    - Writes `argus_results.csv` after each scan for the Streamlit dashboard to consume
 	- Sends a watchlist "daily change" update from `argus_watchlist.csv`
 - `fmp_fetch.py`
 	- Optional "enrichment" step using Financial Modeling Prep (FMP)
@@ -30,6 +29,14 @@ The core philosophy is that repeated flags carry increasing weight: a stock that
 	- Persistent memory of tickers previously flagged by Argus
 - `argus_watchlist.csv`
 	- Your manual watchlist (tickers you always want a daily update on)
+- `app.py`
+    - Streamlit dashboard for manual scans and viewing nightly results
+    - Auto-displays the last nightly scan results from `argus_results.csv` without any button press
+    - Sidebar controls for minimum score, price floor, volume floor, and universe size
+    - "Run Global Scan" button for on-demand scanning
+- `argus_results.csv`
+    - Written by `argus.py` after each nightly run
+    - Read automatically by `app.py` to display last night's picks on the dashboard
 - `.github/workflows/argus.yml`
 	- GitHub Action to run Argus on a weekday schedule and commit memory updates
 
@@ -177,6 +184,8 @@ It requires these GitHub repository secrets:
 - `FMP_API_KEY` (optional)
 
 After a successful run, it commits and pushes updates to `argus_memory.csv`.
+
+After a successful run, it also commits `argus_results.csv` so the Streamlit dashboard automatically reflects the latest scan results without requiring a manual button press.
 
 ## Argus Analysis Template (research workflow)
 
