@@ -50,6 +50,8 @@ class Config:
     VOL_FLOOR: int = 200000
     RESULTS_FILE: str = "argus_results.csv"
     RESULTS_HISTORY_FILE: str = "argus_results_history.csv"
+    FEATURES_FILE: str = "argus_feature_history.csv"
+    JOURNAL_FILE: str = "argus_journal.csv"
 
 def load_memory(filepath):
     try:
@@ -59,6 +61,41 @@ def load_memory(filepath):
 
 def save_memory(df, filepath):
     df.to_csv(filepath, index=False)
+
+def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_file):
+    cols = [
+        "ticker", "sector", "score", "tier", "price", "mkt_cap_m",
+        "reason_count", "scan_date", "scan_timestamp", "run_type",
+    ]
+    if not results:
+        if not os.path.exists(feature_file):
+            pd.DataFrame(columns=cols).to_csv(feature_file, index=False)
+        return
+
+    rows = []
+    for pick in results:
+        mkt_cap_raw = str(pick.get("mkt_cap", "0")).replace("$", "").replace("M", "")
+        try:
+            mkt_cap_m = float(mkt_cap_raw)
+        except Exception:
+            mkt_cap_m = 0.0
+        rows.append({
+            "ticker": pick.get("ticker", ""),
+            "sector": pick.get("sector", "Unknown"),
+            "score": float(pick.get("score", 0)),
+            "tier": pick.get("tier", ""),
+            "price": float(pick.get("price", 0)),
+            "mkt_cap_m": mkt_cap_m,
+            "reason_count": len(pick.get("reasons", [])),
+            "scan_date": scan_date,
+            "scan_timestamp": scan_timestamp,
+            "run_type": run_type,
+        })
+    df = pd.DataFrame(rows)
+    if os.path.exists(feature_file):
+        existing = pd.read_csv(feature_file)
+        df = pd.concat([existing, df], ignore_index=True)
+    df.to_csv(feature_file, index=False)
 
 def _prefilter_tickers(tickers, config):
     """Pre-filter tickers by price and volume before deep scoring."""
@@ -137,7 +174,7 @@ def run_scan(config, scan_limit=400, update_memory=True):
         "scanned_count": len(valid_tickers),
     }
 
-def save_results(results, scan_date, scan_timestamp, run_type, latest_file, history_file, write_latest):
+def save_results(results, scan_date, scan_timestamp, run_type, latest_file, history_file, write_latest, feature_file=None):
     """
     Persist scan outputs:
     - latest_file: full replacement (for latest scheduled run table)
@@ -161,6 +198,240 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
             pd.DataFrame(columns=base_cols).to_csv(latest_file, index=False)
         if not os.path.exists(history_file):
             pd.DataFrame(columns=base_cols).to_csv(history_file, index=False)
+    target_feature_file = feature_file or Config().FEATURES_FILE
+    _append_feature_rows(results, scan_date, scan_timestamp, run_type, target_feature_file)
+
+def save_journal_entry(journal_file, entry):
+    cols = [
+        "timestamp", "ticker", "action", "scan_date", "entry_price",
+        "position_size_pct", "stop_loss_pct", "take_profit_pct", "notes",
+    ]
+    row = pd.DataFrame([{
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "ticker": entry.get("ticker", ""),
+        "action": entry.get("action", ""),
+        "scan_date": entry.get("scan_date", ""),
+        "entry_price": entry.get("entry_price", ""),
+        "position_size_pct": entry.get("position_size_pct", ""),
+        "stop_loss_pct": entry.get("stop_loss_pct", ""),
+        "take_profit_pct": entry.get("take_profit_pct", ""),
+        "notes": entry.get("notes", ""),
+    }])
+    if os.path.exists(journal_file):
+        existing = pd.read_csv(journal_file)
+        row = pd.concat([existing, row], ignore_index=True)
+    row.to_csv(journal_file, index=False)
+
+def load_journal(journal_file):
+    if os.path.exists(journal_file):
+        return pd.read_csv(journal_file)
+    return pd.DataFrame(columns=[
+        "timestamp", "ticker", "action", "scan_date", "entry_price",
+        "position_size_pct", "stop_loss_pct", "take_profit_pct", "notes",
+    ])
+
+def build_prediction_model(features_file, horizon_days=63, target_return=0.10):
+    """
+    Empirical model:
+    - Uses historical feature snapshots
+    - Computes forward return from first future snapshot >= horizon_days
+    - Learns probability by score decile bucket
+    """
+    if not os.path.exists(features_file):
+        return {"ready": False, "reason": "No feature history yet."}
+    df = pd.read_csv(features_file)
+    if df.empty:
+        return {"ready": False, "reason": "Feature history is empty."}
+
+    df["scan_date"] = pd.to_datetime(df["scan_date"], errors="coerce")
+    df = df.dropna(subset=["scan_date", "ticker", "score", "price"]).copy()
+    if df.empty:
+        return {"ready": False, "reason": "Feature history lacks valid rows."}
+
+    df = df.sort_values(["ticker", "scan_date"]).reset_index(drop=True)
+    fwd_returns = []
+    for ticker, group in df.groupby("ticker"):
+        g = group.sort_values("scan_date").copy()
+        future_dates = g["scan_date"].tolist()
+        future_prices = g["price"].tolist()
+        for idx in range(len(g)):
+            start_date = future_dates[idx]
+            start_price = future_prices[idx]
+            target_date = start_date + pd.Timedelta(days=horizon_days)
+            ret = None
+            for j in range(idx + 1, len(g)):
+                if future_dates[j] >= target_date and start_price and start_price > 0:
+                    ret = (future_prices[j] / start_price) - 1
+                    break
+            fwd_returns.append(ret)
+
+    df["fwd_return"] = fwd_returns
+    train = df.dropna(subset=["fwd_return"]).copy()
+    if len(train) < 30:
+        return {"ready": False, "reason": "Not enough matured samples yet (need ~30+)."}
+
+    train["target_hit"] = (train["fwd_return"] >= target_return).astype(int)
+    try:
+        train["score_bucket"] = pd.qcut(train["score"], q=10, duplicates="drop")
+    except Exception:
+        train["score_bucket"] = pd.cut(train["score"], bins=5)
+
+    bucket_stats = (
+        train.groupby("score_bucket", observed=False)
+        .agg(
+            samples=("target_hit", "count"),
+            prob=("target_hit", "mean"),
+            bear=("fwd_return", lambda s: s.quantile(0.2)),
+            base=("fwd_return", lambda s: s.quantile(0.5)),
+            bull=("fwd_return", lambda s: s.quantile(0.8)),
+        )
+        .reset_index()
+    )
+    bucket_stats = bucket_stats[bucket_stats["samples"] > 0].copy()
+    if bucket_stats.empty:
+        return {"ready": False, "reason": "No valid bucket stats."}
+
+    global_prob = float(train["target_hit"].mean())
+    train["pred_prob"] = train["score_bucket"].map(
+        bucket_stats.set_index("score_bucket")["prob"]
+    ).fillna(global_prob)
+    brier = float(((train["pred_prob"] - train["target_hit"]) ** 2).mean())
+
+    calibration = (
+        train.assign(prob_bin=pd.cut(train["pred_prob"], bins=[0, 0.2, 0.4, 0.6, 0.8, 1.0], include_lowest=True))
+        .groupby("prob_bin", observed=False)
+        .agg(samples=("target_hit", "count"), actual_hit_rate=("target_hit", "mean"))
+        .reset_index()
+    )
+
+    return {
+        "ready": True,
+        "horizon_days": horizon_days,
+        "target_return": target_return,
+        "global_prob": global_prob,
+        "samples": int(len(train)),
+        "brier_score": brier,
+        "bucket_stats": bucket_stats,
+        "calibration": calibration,
+    }
+
+def add_predictions(df_results, model):
+    if df_results.empty:
+        return df_results
+    out = df_results.copy()
+    if not model.get("ready"):
+        out["prob_upside"] = None
+        out["scenario_bear"] = None
+        out["scenario_base"] = None
+        out["scenario_bull"] = None
+        return out
+
+    bucket_stats = model["bucket_stats"].copy().sort_values("score_bucket")
+    global_prob = model["global_prob"]
+    out["score"] = pd.to_numeric(out["score"], errors="coerce")
+    def _lookup(score, col):
+        for _, r in bucket_stats.iterrows():
+            interval = r["score_bucket"]
+            if pd.notna(score) and score in interval:
+                return r[col]
+        if col == "prob":
+            return global_prob
+        return 0.0
+
+    out["prob_upside"] = out["score"].apply(lambda s: _lookup(s, "prob"))
+    out["scenario_bear"] = out["score"].apply(lambda s: _lookup(s, "bear"))
+    out["scenario_base"] = out["score"].apply(lambda s: _lookup(s, "base"))
+    out["scenario_bull"] = out["score"].apply(lambda s: _lookup(s, "bull"))
+    return out
+
+def add_risk_guidance(df_results, model, risk_per_trade_pct=0.75, max_position_pct=8.0):
+    """
+    Add practical execution guidance:
+    - confidence label
+    - stop loss / take profit (%)
+    - suggested position size (% of portfolio)
+    """
+    if df_results.empty:
+        return df_results
+    out = df_results.copy()
+
+    if "prob_upside" not in out.columns:
+        out = add_predictions(out, model)
+
+    def _volatility_proxy(ticker):
+        try:
+            hist = yf.Ticker(ticker).history(period="6mo")
+            if hist.empty or "Close" not in hist.columns:
+                return 8.0
+            rets = hist["Close"].pct_change().dropna()
+            if rets.empty:
+                return 8.0
+            # Approximate 1-month move using 20 trading days.
+            monthly_vol_pct = float(rets.std() * (20 ** 0.5) * 100)
+            return max(4.0, min(16.0, monthly_vol_pct))
+        except Exception:
+            return 8.0
+
+    global_prob = float(model["global_prob"]) if model.get("ready") else 0.5
+
+    rows = []
+    for _, row in out.iterrows():
+        ticker = row.get("ticker", "")
+        score = float(row.get("score", 0) or 0)
+        prob = row.get("prob_upside", global_prob)
+        try:
+            prob = float(prob)
+        except Exception:
+            prob = global_prob
+
+        vol_pct = _volatility_proxy(ticker)
+        stop_loss_pct = max(6.0, min(18.0, vol_pct * 1.25))
+
+        scenario_base = row.get("scenario_base", 0)
+        scenario_bull = row.get("scenario_bull", 0)
+        try:
+            scenario_base_pct = float(scenario_base) * 100
+        except Exception:
+            scenario_base_pct = 0.0
+        try:
+            scenario_bull_pct = float(scenario_bull) * 100
+        except Exception:
+            scenario_bull_pct = 0.0
+        take_profit_pct = max(stop_loss_pct * 2.0, scenario_base_pct, scenario_bull_pct * 0.8, 12.0)
+
+        # Risk-based sizing + conviction adjustment.
+        base_position_pct = (risk_per_trade_pct / stop_loss_pct) * 100.0
+        conviction_boost = 1.0
+        if prob >= global_prob + 0.10 and score >= 80:
+            conviction_boost = 1.25
+            confidence = "High"
+        elif prob >= global_prob and score >= 70:
+            conviction_boost = 1.0
+            confidence = "Medium"
+        else:
+            conviction_boost = 0.75
+            confidence = "Low"
+
+        suggested_position_pct = max(0.5, min(max_position_pct, base_position_pct * conviction_boost))
+
+        if confidence == "High":
+            entry_style = "Scale-in on breakout or first pullback to 20EMA"
+        elif confidence == "Medium":
+            entry_style = "Starter size only, add if trend confirms"
+        else:
+            entry_style = "Watchlist-first; wait for stronger confirmation"
+
+        rows.append({
+            "confidence": confidence,
+            "stop_loss_pct": round(stop_loss_pct, 1),
+            "take_profit_pct": round(take_profit_pct, 1),
+            "suggested_position_pct": round(suggested_position_pct, 1),
+            "entry_style": entry_style,
+        })
+
+    guidance_df = pd.DataFrame(rows)
+    out = pd.concat([out.reset_index(drop=True), guidance_df], axis=1)
+    return out
 
 def _check_red_flags(info, stock):
     flags = []

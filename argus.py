@@ -104,6 +104,7 @@ def main():
             latest_file=config.RESULTS_FILE,
             history_file=config.RESULTS_HISTORY_FILE,
             write_latest=True,
+            feature_file=config.FEATURES_FILE,
         )
         run_watchlist_monitor()
         return
@@ -116,6 +117,7 @@ def main():
         latest_file=config.RESULTS_FILE,
         history_file=config.RESULTS_HISTORY_FILE,
         write_latest=True,
+        feature_file=config.FEATURES_FILE,
     )
 
     # ── Build & send Telegram message ──
