@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit_shadcn_ui as ui
 import pandas as pd
 import yfinance as yf
 from engine import (
@@ -10,6 +11,7 @@ from engine import (
     add_risk_guidance,
     save_journal_entry,
     load_journal,
+    get_market_regime,
 )
 import os
 import requests
@@ -18,15 +20,80 @@ from datetime import datetime
 st.set_page_config(page_title="Argus Dashboard", layout="wide")
 st.title("👁 Argus Investment Workstation")
 
+@st.cache_data(ttl=3600)
+def fetch_ticker_history(ticker, period="1y"):
+    """Fetch historical price data with 1-hour caching to save API calls."""
+    try:
+        return yf.Ticker(ticker).history(period=period)
+    except Exception:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=86400)
+def fetch_financial_snapshot(ticker):
+    """Fetch key financial metrics."""
+    try:
+        info = yf.Ticker(ticker).info
+        return {
+            "P/E Ratio": info.get("trailingPE", "N/A"),
+            "Market Cap": f"${info.get('marketCap', 0):,}" if info.get("marketCap") else "N/A",
+            "52-Wk High": f"${info.get('fiftyTwoWeekHigh', 0):.2f}" if info.get("fiftyTwoWeekHigh") else "N/A",
+            "52-Wk Low": f"${info.get('fiftyTwoWeekLow', 0):.2f}" if info.get("fiftyTwoWeekLow") else "N/A",
+            "Div Yield": f"{(info.get('dividendYield', 0) * 100):.2f}%" if info.get("dividendYield") else "N/A"
+        }
+    except Exception:
+        return {}
+
+@st.cache_data(ttl=3600)
+def fetch_current_prices(tickers):
+    """Bulk fetch current prices to calculate historical return."""
+    if not tickers: return {}
+    try:
+        import yfinance as yf
+        data = yf.download(list(tickers), period="5d", progress=False)
+        prices = {}
+        # Handle yf.download multiindex response based on number of tickers
+        if len(tickers) == 1:
+            t = tickers[0]
+            if "Close" in data.columns:
+                prices[t] = float(data["Close"].dropna().iloc[-1])
+        else:
+            if "Close" in data.columns:
+                close_df = data["Close"]
+                for t in tickers:
+                    if t in close_df.columns:
+                        prices[t] = float(close_df[t].dropna().iloc[-1])
+        return prices
+    except Exception as e:
+        return {}
+
 def safe_line_chart(data, y_label="value"):
     """
-    Streamlit line_chart may fail on some Cloud runtimes due to Altair/Python
-    compatibility. Fall back to a table to keep the app usable.
+    Renders an interactive line chart using Plotly Express for smooth zooming
+    and a reliable 'Autoscale' / 'Reset Axes' button.
     """
     try:
-        st.line_chart(data)
-    except Exception:
-        st.warning("Chart unavailable in current runtime; showing data table instead.")
+        import plotly.express as px
+        if isinstance(data, pd.Series):
+            df = data.reset_index()
+            x_col = df.columns[0]
+            y_col = df.columns[1]
+        else:
+            df = data.copy()
+            if df.index.name or not isinstance(df.index, pd.RangeIndex):
+                df = df.reset_index()
+            x_col = df.columns[0]
+            y_col = df.columns[1]
+
+        fig = px.line(df, x=x_col, y=y_col)
+        fig.update_layout(
+            xaxis_title="",
+            yaxis_title=y_label.capitalize(),
+            margin=dict(l=0, r=0, t=10, b=0),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.warning("Interactive chart unavailable; showing data table instead.")
         if isinstance(data, pd.Series):
             fallback = data.reset_index()
             fallback.columns = ["x", y_label]
@@ -44,6 +111,13 @@ def format_pct_columns(df, cols):
     return out
 
 def send_telegram_message(token, chat_id, message):
+    from datetime import datetime
+    try:
+        with open("argus_alerts_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"--- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n{message}\n\n")
+    except Exception:
+        pass
+
     if not token or not chat_id:
         return False
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -54,19 +128,145 @@ def send_telegram_message(token, chat_id, message):
     except Exception:
         return False
 
+def apply_preset():
+    preset = st.session_state.preset_selector
+    if preset == "High Conviction":
+        st.session_state.preset_desc = "The opposite of wide scanning — ultra-strict score filter to surface only the absolute best setups."
+        st.session_state.min_score = 90
+        st.session_state.horizon_days = 63
+        st.session_state.target_return = 15
+        st.session_state.risk_per_trade_pct = 1.50
+        st.session_state.max_position_pct = 15.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+    elif preset == "Liquidity Focus":
+        st.session_state.preset_desc = "Raises the volume floor dramatically to only trade highly liquid, large-cap names."
+        st.session_state.min_score = 65
+        st.session_state.horizon_days = 63
+        st.session_state.target_return = 10
+        st.session_state.risk_per_trade_pct = 0.75
+        st.session_state.max_position_pct = 10.00
+        st.session_state.vol_floor = 2000000
+        st.session_state.price_floor = 10.00
+    elif preset == "Momentum Sprint":
+        st.session_state.preset_desc = "Very short horizon, high target return — designed to catch explosive breakouts."
+        st.session_state.min_score = 72
+        st.session_state.horizon_days = 21
+        st.session_state.target_return = 30
+        st.session_state.risk_per_trade_pct = 1.25
+        st.session_state.max_position_pct = 8.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+    elif preset == "Capital Preservation":
+        st.session_state.preset_desc = "Designed for deep bear markets or extreme uncertainty. Minimal risk, long timeframe."
+        st.session_state.min_score = 85
+        st.session_state.horizon_days = 126
+        st.session_state.target_return = 3
+        st.session_state.risk_per_trade_pct = 0.15
+        st.session_state.max_position_pct = 5.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+    elif preset == "Small Cap Hunter":
+        st.session_state.preset_desc = "Lowers price and volume floors to scan micro/small-caps. Higher risk tolerance."
+        st.session_state.min_score = 68
+        st.session_state.horizon_days = 84
+        st.session_state.target_return = 40
+        st.session_state.risk_per_trade_pct = 0.50
+        st.session_state.max_position_pct = 5.00
+        st.session_state.vol_floor = 100000
+        st.session_state.price_floor = 0.50
+    elif preset == "Earnings Season":
+        st.session_state.preset_desc = "Tightened around the 21-day horizon to capture pre/post earnings momentum."
+        st.session_state.min_score = 65
+        st.session_state.horizon_days = 21
+        st.session_state.target_return = 12
+        st.session_state.risk_per_trade_pct = 0.75
+        st.session_state.max_position_pct = 6.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+    elif preset == "Swing Recovery":
+        st.session_state.preset_desc = "Targets beaten-down tickers with strong fundamentals. Medium horizon, moderate score."
+        st.session_state.min_score = 70
+        st.session_state.horizon_days = 42
+        st.session_state.target_return = 15
+        st.session_state.risk_per_trade_pct = 0.60
+        st.session_state.max_position_pct = 7.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+    elif preset == "Aggressive Growth":
+        st.session_state.preset_desc = "Standard aggressive growth."
+        st.session_state.min_score = 70
+        st.session_state.horizon_days = 42
+        st.session_state.target_return = 20
+        st.session_state.risk_per_trade_pct = 1.0
+        st.session_state.max_position_pct = 8.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+    elif preset == "Bear Market Defense":
+        st.session_state.preset_desc = "Standard bear market defense."
+        st.session_state.min_score = 80
+        st.session_state.horizon_days = 84
+        st.session_state.target_return = 5
+        st.session_state.risk_per_trade_pct = 0.25
+        st.session_state.max_position_pct = 5.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+    elif preset == "Default":
+        st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
+        st.session_state.min_score = 65
+        st.session_state.horizon_days = 63
+        st.session_state.target_return = 10
+        st.session_state.risk_per_trade_pct = 0.75
+        st.session_state.max_position_pct = 8.00
+        st.session_state.vol_floor = 500000
+        st.session_state.price_floor = 2.0
+
+if "min_score" not in st.session_state:
+    st.session_state.min_score = 65
+if "horizon_days" not in st.session_state:
+    st.session_state.horizon_days = 63
+if "target_return" not in st.session_state:
+    st.session_state.target_return = 10
+if "risk_per_trade_pct" not in st.session_state:
+    st.session_state.risk_per_trade_pct = 0.75
+if "max_position_pct" not in st.session_state:
+    st.session_state.max_position_pct = 8.00
+if "vol_floor" not in st.session_state:
+    st.session_state.vol_floor = 500000
+if "price_floor" not in st.session_state:
+    st.session_state.price_floor = 2.00
+if "preset_desc" not in st.session_state:
+    st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
+
 with st.sidebar:
-    st.header("Parameters")
-    min_score = st.slider("Minimum Score", 50, 95, 65)
-    price_floor = st.number_input("Price Floor ($)", 0.0, 100.0, 2.0)
-    vol_floor = st.number_input("Volume Floor (avg daily)", 0, 2_000_000, 500_000, step=100_000)
+    st.header("Global Presets")
+    
+    preset_options = [
+        "Default", "High Conviction", "Liquidity Focus", 
+        "Momentum Sprint", "Capital Preservation", 
+        "Small Cap Hunter", "Earnings Season", 
+        "Swing Recovery", "Aggressive Growth", "Bear Market Defense"
+    ]
+    st.selectbox("Select Preset", preset_options, key="preset_selector", on_change=apply_preset)
+    
+    st.info(st.session_state.preset_desc)
+
+    st.header("Quick Scan Settings")
+    min_score = st.slider("Minimum Score", 50, 95, key="min_score")
     scan_limit = st.slider("Universe size (tickers to scan)", 50, 400, 200, step=50)
-    st.divider()
-    st.subheader("Prediction Model")
-    horizon_days = st.selectbox("Horizon days", [42, 63, 84], index=1)
-    target_return = st.slider("Target return (%)", 5, 40, 10) / 100.0
-    st.subheader("Risk Rules")
-    risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.25, 2.0, 0.75, 0.25)
-    max_position_pct = st.slider("Max position size (%)", 2.0, 20.0, 8.0, 0.5)
+
+    with st.expander("Advanced Filters & Constraints"):
+        price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor")
+        vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor")
+
+    with st.expander("ML Prediction Horizons"):
+        horizon_days = st.selectbox("Horizon days", [21, 42, 63, 84, 126], key="horizon_days")
+        target_return = st.slider("Target return (%)", 1, 100, key="target_return") / 100.0
+
+    with st.expander("Advanced Risk Rules"):
+        risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct")
+        max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct")
+
     st.divider()
     send_to_telegram = st.checkbox("Send manual run to Telegram", value=False)
 
@@ -88,10 +288,27 @@ if os.path.exists(config.RESULTS_HISTORY_FILE):
 else:
     history_df = pd.DataFrame()
 
-tabs = st.tabs(["Overview", "History", "Ticker Detail", "Journal", "Manual Run", "Prediction Model", "Help", "Prompts"])
+# To restore Portfolio Optimizer, add "Portfolio Optimizer" back to this array
+tab_options = ["Overview", "Ticker Detail", "Manual Run", "History", "Journal", "Prediction Model", "Alerts Log", "Help", "Prompts"]
+active_tab = ui.tabs(options=tab_options, default_value="Overview", key="main_tabs")
+st.markdown("<br>", unsafe_allow_html=True)
 
-with tabs[0]:
+if active_tab == "Overview":
     st.subheader("📡 Latest Scheduled Scan")
+    
+    # Check Macro Market Regime
+    regime = get_market_regime()
+    # Apply a color mapping to the regime text
+    regime_color_map = {
+        "Bull": "green",
+        "Neutral": "blue",
+        "Bear": "orange",
+        "Extreme Fear": "red"
+    }
+    r_color = regime_color_map.get(regime["regime"], "white")
+    st.markdown(f"**Current Market Regime:** :{r_color}[**{regime['regime']}**] *(Multiplier: {regime['multiplier']}x - {regime['reason']})*")
+    st.markdown("---")
+
     if latest_df.empty:
         st.info("No latest scheduled results yet.")
     else:
@@ -107,13 +324,13 @@ with tabs[0]:
         st.caption(f"Scan date: {scan_date} · {len(latest_view)} picks")
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Picks", len(latest_view))
-        c2.metric("High Conviction", int((latest_view["tier"] == "🟢 HIGH CONVICTION").sum()))
-        c3.metric("Avg Score", f"{latest_view['score'].mean():.1f}")
+        with c1: ui.metric_card(title="Picks", content=str(len(latest_view)), description="Total Passed", key="m1")
+        with c2: ui.metric_card(title="High Conviction", content=str(int((latest_view["tier"] == "🟢 HIGH CONVICTION").sum())), description="Score >= 80", key="m2")
+        with c3: ui.metric_card(title="Avg Score", content=f"{latest_view['score'].mean():.1f}", description="Argus Rating", key="m3")
         if "prob_upside" in latest_view.columns and latest_view["prob_upside"].notna().any():
-            c4.metric("Avg Upside Prob", f"{latest_view['prob_upside'].mean() * 100:.1f}%")
+            with c4: ui.metric_card(title="Avg Upside Prob", content=f"{latest_view['prob_upside'].mean() * 100:.1f}%", description="ML Projected", key="m4")
         else:
-            c4.metric("Avg Upside Prob", "N/A")
+            with c4: ui.metric_card(title="Avg Upside Prob", content="N/A", description="ML Projected", key="m5")
 
         display_cols = [
             "ticker", "sector", "score", "tier", "price", "mkt_cap",
@@ -124,9 +341,28 @@ with tabs[0]:
             latest_view,
             ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"],
         )
-        st.dataframe(latest_view[[c for c in display_cols if c in latest_view.columns]], use_container_width=True)
+        
+        subset_view = latest_view[[c for c in display_cols if c in latest_view.columns]].copy()
+        
+        style = subset_view.style
+        if "score" in subset_view.columns:
+            style = style.background_gradient(subset=["score"], cmap="Greens")
+        if "prob_upside" in subset_view.columns:
+            style = style.background_gradient(subset=["prob_upside"], cmap="Blues")
+            
+        st.dataframe(style, use_container_width=True)
 
-with tabs[1]:
+        st.markdown("### 🔍 Stock Deep Dive")
+        c1, c2 = st.columns([1, 10])
+        with c1:
+            diveticker = st.selectbox("Select Ticker", subset_view["ticker"].tolist(), key="deep_dive_selectbox", label_visibility="collapsed")
+        with c2:
+            if ui.button("Analyze", key="btn_deep_dive_analyze"):
+                st.session_state["selected_ticker"] = diveticker
+                st.session_state["main_tabs"] = "Ticker Detail"
+                st.rerun()
+
+if active_tab == "History":
     st.subheader("🗂 History")
     if history_df.empty:
         st.info("No history file yet.")
@@ -161,33 +397,39 @@ with tabs[1]:
 
             date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_day"].unique(), reverse=True)]
             selected_day = st.selectbox("Day details", date_options)
-            day_df = filtered[filtered["scan_date"].dt.strftime("%Y-%m-%d") == selected_day].sort_values("score", ascending=False)
-            st.dataframe(day_df, use_container_width=True)
+            day_df = filtered[filtered["scan_date"].dt.strftime("%Y-%m-%d") == selected_day].sort_values("score", ascending=False).copy()
+            
+            with st.spinner("Fetching current prices to calculate return..."):
+                current_prices = fetch_current_prices(day_df["ticker"].dropna().unique().tolist())
+                if current_prices and "price" in day_df.columns:
+                    day_df["Current Price"] = day_df["ticker"].map(current_prices).round(2)
+                    day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
+                    
+            style = day_df.style
+            if "Return (%)" in day_df.columns:
+                style = style.background_gradient(subset=["Return (%)"], cmap="RdYlGn")
+            st.dataframe(style, use_container_width=True)
 
-with tabs[2]:
+if active_tab == "Ticker Detail":
     st.subheader("🔎 Ticker Detail")
     if history_df.empty:
         st.info("No history available yet.")
     else:
         ticker_options = sorted(history_df["ticker"].dropna().unique().tolist())
-        ticker = st.selectbox("Select ticker", ticker_options)
+        # Try to use selected_ticker from session_state
+        idx = 0
+        if "selected_ticker" in st.session_state and st.session_state["selected_ticker"] in ticker_options:
+            idx = ticker_options.index(st.session_state["selected_ticker"])
+            
+        ticker = st.selectbox("Select ticker", ticker_options, index=idx)
+        st.session_state["selected_ticker"] = ticker
+        
+        # Load up the ticker history
         tdf = history_df[history_df["ticker"] == ticker].copy()
         tdf["scan_date"] = pd.to_datetime(tdf["scan_date"], errors="coerce")
         tdf = tdf.sort_values("scan_date", ascending=False)
-        st.dataframe(tdf, use_container_width=True)
-
+        
         if not tdf.empty:
-            st.caption("Argus score history")
-            safe_line_chart(tdf.set_index("scan_date")["score"], y_label="score")
-
-            hist = yf.Ticker(ticker).history(period="1y")
-            if not hist.empty:
-                st.caption("Price (1 year)")
-                safe_line_chart(hist["Close"], y_label="close")
-                st.dataframe(hist.sort_index(ascending=False), use_container_width=True)
-            else:
-                st.info("No market price data available for chart.")
-
             latest_ticker_row = tdf.sort_values("scan_date", ascending=False).head(1).copy()
             latest_ticker_row = add_predictions(latest_ticker_row, model)
             latest_ticker_row = add_risk_guidance(
@@ -196,38 +438,117 @@ with tabs[2]:
                 risk_per_trade_pct=risk_per_trade_pct,
                 max_position_pct=max_position_pct,
             )
-            st.markdown("**Execution Guidance (latest signal)**")
-            st.dataframe(
-                latest_ticker_row[
-                    [
-                        "ticker",
-                        "score",
-                        "prob_upside",
-                        "confidence",
-                        "suggested_position_pct",
-                        "stop_loss_pct",
-                        "take_profit_pct",
-                        "entry_style",
-                    ]
-                ],
-                use_container_width=True,
-            )
-
-            st.markdown("### Buy & Sell Strategy")
-            score_val = latest_ticker_row["score"].iloc[0]
-            upside_prob = latest_ticker_row.get("prob_upside", pd.Series([0])).iloc[0]
-            entry = latest_ticker_row.get("entry_style", pd.Series([""])).iloc[0]
-            sl_pct = latest_ticker_row.get("stop_loss_pct", pd.Series([0])).iloc[0]
-            tp_pct = latest_ticker_row.get("take_profit_pct", pd.Series([0])).iloc[0]
             
-            # Formulate the strategy
-            st.markdown(f"**Buy Strategy**: With a score of **{score_val}** and an upside probability of **{upside_prob*100:.1f}%**, the recommended entry style is **{entry}**. "
-                        "Scale in gently if it is a breakout, or buy at support if it's a pullback.")
-            st.markdown(f"**Sell Strategy**: Set a strict stop loss at **-{sl_pct*100:.1f}%** from your entry price to protect capital. "
-                        f"Consider taking profits around **+{tp_pct*100:.1f}%** or trailing your stop loss as the price rises to lock in gains. "
-                        "Re-evaluate your position if the company's fundamentals change or if broader market conditions deteriorate.")
+            # --- TOP SECTION: Score History & Strategy ---
+            colA, colB = st.columns([2, 1])
+            with colA:
+                st.markdown("#### Argus Score History")
+                safe_line_chart(tdf.set_index("scan_date")["score"], y_label="score")
+                
+            with colB:
+                st.markdown("#### Buy & Sell Strategy")
+                st.info("Actionable execution plan based on the latest signal.")
+                score_val = latest_ticker_row["score"].iloc[0]
+                upside_prob = latest_ticker_row.get("prob_upside", pd.Series([0])).iloc[0]
+                entry = latest_ticker_row.get("entry_style", pd.Series([""])).iloc[0]
+                sl_pct = latest_ticker_row.get("stop_loss_pct", pd.Series([0])).iloc[0]
+                tp_pct = latest_ticker_row.get("take_profit_pct", pd.Series([0])).iloc[0]
+                
+                prob_str = f"{upside_prob*100:.1f}%" if upside_prob is not None else "N/A"
+                st.markdown(f"**Buy:** Score of **{score_val}** & Upside Prob **{prob_str}**. "
+                            f"Entry style is **{entry}**.")
+                st.markdown(f"**Sell:** Stop loss at **-{sl_pct:.1f}%**. "
+                            f"Target taking profits around **+{tp_pct:.1f}%**.")
+            
+            st.markdown("---")
+            
+            # --- MIDDLE SECTION: Price History & Detailed Snapshot ---
+            colC, colD = st.columns([2, 1])
+            with colC:
+                st.markdown("#### Price & Score History (1 Year)")
+                hist = fetch_ticker_history(ticker, period="1y")
+                
+                try:
+                    import plotly.graph_objects as go
+                    from plotly.subplots import make_subplots
+                    
+                    fig = make_subplots(specs=[[{"secondary_y": True}]])
+                    if not hist.empty:
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist["Close"], name="Price", line=dict(color='blue')), secondary_y=False)
+                        
+                    tdf_scores = tdf.dropna(subset=["scan_date", "score"]).sort_values("scan_date")
+                    if not tdf_scores.empty:
+                        fig.add_trace(go.Scatter(x=tdf_scores["scan_date"], y=tdf_scores["score"], name="Argus Score", mode="lines+markers", line=dict(dash='dot', color='orange')), secondary_y=True)
+                        
+                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
+                    fig.update_yaxes(title_text="Close Price", secondary_y=False)
+                    fig.update_yaxes(title_text="Argus Score", secondary_y=True)
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.warning("Could not render dual-axis chart.")
+                    if not hist.empty:
+                        safe_line_chart(hist["Close"], y_label="close price")
+                    else:
+                        st.info("No market price data available for chart.")
+                    
+            with colD:
+                st.markdown("#### Execution Guidance")
+                st.dataframe(
+                    latest_ticker_row[
+                        [
+                            "ticker",
+                            "score",
+                            "prob_upside",
+                            "suggested_position_pct",
+                            "stop_loss_pct",
+                            "take_profit_pct",
+                        ]
+                    ].T,
+                    use_container_width=True,
+                )
+                
+                st.markdown("#### Financial Snapshot")
+                snap = fetch_financial_snapshot(ticker)
+                if snap:
+                    snap_df = pd.DataFrame(list(snap.items()), columns=["Metric", "Value"]).set_index("Metric")
+                    st.dataframe(snap_df, use_container_width=True)
+                else:
+                    st.info("Snapshot data unavailable.")
+            
+            st.markdown("---")
+            
+            # --- BOTTOM SECTION: Data view & AI ---
+            with st.expander("View Raw Scan History Table"):
+                st.dataframe(tdf, use_container_width=True)
+            
+            st.subheader("🤖 AI Investment Thesis (Phase 2)")
+            if st.button("Generate Qualitative Analysis (Groq)", key=f"btn_ai_{ticker}"):
+                with st.spinner(f"Analyzing {ticker} news and factors with Llama 3..."):
+                    import os
+                    from engine import Config
+                    try:
+                        from llm import generate_ai_thesis
+                        
+                        cfg = Config()
+                        api_key = cfg.GROQ_API_KEY
+                        if not api_key:
+                            st.error("GROQ_API_KEY is not set in your environment variables. Please set it to use the AI analysis feature.")
+                        else:
+                            reasons = latest_ticker_row["reasons"].iloc[0]
+                            if isinstance(reasons, str):
+                                reasons = eval(reasons) if reasons.startswith("[") else [reasons]
+                            elif not isinstance(reasons, list):
+                                reasons = []
+                            
+                            thesis = generate_ai_thesis(ticker, score_val, reasons, api_key)
+                            st.success("Analysis Complete!")
+                            st.info(thesis)
+                    except ImportError:
+                        st.error("llm module not found. Make sure llm.py is properly set up.")
+                    except Exception as e:
+                        st.error(f"Error generating thesis: {e}")
 
-with tabs[3]:
+if active_tab == "Journal":
     st.subheader("📝 Decision Journal")
     with st.form("journal_form"):
         col1, col2, col3 = st.columns(3)
@@ -265,13 +586,52 @@ with tabs[3]:
         st.info("No journal entries yet.")
     else:
         st.dataframe(journal_df.sort_values("timestamp", ascending=False), use_container_width=True)
+        
+        st.markdown("### 📊 Basic P&L Status")
+        trades = []
+        j_sorted = journal_df.sort_values("timestamp")
+        for t in j_sorted["ticker"].unique():
+            t_df = j_sorted[j_sorted["ticker"] == t]
+            # using 'entry_price' as the action price
+            buys = t_df[t_df["action"].isin(["BUY", "SCALE_IN"])]
+            sells = t_df[t_df["action"].isin(["SELL", "TRIM"])]
+            
+            if not buys.empty and not sells.empty:
+                avg_buy = buys["entry_price"].mean()
+                avg_sell = sells["entry_price"].mean()
+                if avg_buy > 0:
+                    ret_pct = ((avg_sell - avg_buy) / avg_buy) * 100
+                    trades.append({"Ticker": t, "Avg Buy": avg_buy, "Avg Sell": avg_sell, "Return (%)": ret_pct})
+        
+        if trades:
+            pnl_df = pd.DataFrame(trades).round(2)
+            wins = len(pnl_df[pnl_df["Return (%)"] > 0])
+            total_closed = len(pnl_df)
+            win_rate = (wins / total_closed) * 100
+            
+            mc1, mc2 = st.columns(2)
+            mc1.metric("Closed Trades", total_closed, help="Trades with both BUY and SELL logs.")
+            mc2.metric("Win Rate", f"{win_rate:.1f}%")
+            
+            st.dataframe(pnl_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
+        else:
+            st.info("No closed trades (both BUY and SELL logs for same ticker) found.")
 
-with tabs[4]:
+if active_tab == "Manual Run":
     st.subheader("⚙️ Manual Scan")
     st.caption("Use this for weekend/on-demand runs. Results are written to history + feature store.")
-    if st.button("Run Global Scan"):
+    if ui.button("🚀 Run Global Scan", key="btn_run_scan"):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        def scan_progress_cb(ticker, idx, total):
+            progress = (idx + 1) / total
+            progress_bar.progress(progress)
+            status_text.text(f"Scanning {ticker}... ({idx + 1}/{total})")
+
         with st.spinner("Scanning tickers..."):
-            payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True)
+            payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, progress_callback=scan_progress_cb)
+            status_text.text("Scan complete!")
             results = payload["results"]
             scan_date = payload["scan_date"]
             scan_timestamp = payload["scan_timestamp"]
@@ -290,6 +650,8 @@ with tabs[4]:
 
         st.caption(f"Scanned {scanned_count} tickers")
         if results:
+            regime = get_market_regime()
+            st.success(f"{len(results)} picks met requirements in {regime['regime']} regime.")
             df_res = pd.DataFrame(results).sort_values("score", ascending=False)
             df_res = add_predictions(df_res, model)
             df_res = add_risk_guidance(
@@ -311,7 +673,7 @@ with tabs[4]:
                 for idx, row in high_conviction.reset_index(drop=True).iterrows():
                     with cols[idx % 3]:
                         st.write(f"**{row['ticker']}** - Score: {row['score']}")
-                        hist = yf.Ticker(row["ticker"]).history(period="6mo")
+                        hist = fetch_ticker_history(row["ticker"], period="6mo")
                         if not hist.empty:
                             safe_line_chart(hist["Close"], y_label="close")
                         else:
@@ -334,11 +696,11 @@ with tabs[4]:
             else:
                 st.error("Could not send to Telegram. Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.")
 
-with tabs[5]:
-    st.subheader("📈 Prediction Model Quality")
+if active_tab == "Prediction Model":
+    st.subheader("📈 ML Prediction Model Quality")
     if not model.get("ready"):
         st.info(model.get("reason", "Model is not ready yet."))
-        st.caption("Keep running scans to accumulate matured samples.")
+        st.caption("Keep running scans to accumulate matured samples (need ~50+).")
     else:
         col1, col2, col3 = st.columns(3)
         col1.metric("Matured Samples", model["samples"])
@@ -346,72 +708,205 @@ with tabs[5]:
         col3.metric("Brier Score", f"{model['brier_score']:.3f}")
         st.caption(f"Target: +{target_return * 100:.0f}% in {horizon_days} days")
 
+        if model.get("clf") is not None:
+            st.success("🤖 XGBoost Model Active")
+            
+            cmat, cshap = st.columns([1, 1])
+            with cmat:
+                if "confusion_matrix" in model and model["confusion_matrix"]:
+                    st.markdown("**Confusion Matrix (Default Threshold 0.5)**")
+                    import plotly.figure_factory as ff
+                    cm_data = model["confusion_matrix"]
+                    fig = ff.create_annotated_heatmap(
+                        z=cm_data,
+                        x=['Predicted Negative', 'Predicted Positive'],
+                        y=['Actual Negative', 'Actual Positive'],
+                        colorscale='Blues'
+                    )
+                    fig.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            with cshap:
+                if "feature_importance" in model and model["feature_importance"]:
+                    st.markdown("**Feature Importance (XGB)**")
+                    imp_dt = pd.DataFrame(list(model["feature_importance"].items()), columns=["Feature", "Importance"]).sort_values("Importance", ascending=False)
+                    st.dataframe(imp_dt.head(10).style.background_gradient(subset=["Importance"], cmap="Oranges"), use_container_width=True)
+            
+            st.markdown("---")
+            st.markdown("**SHAP Global Feature Impact**")
+            try:
+                import shap
+                import matplotlib.pyplot as plt
+                X_sample = model["X_sample"]
+                explainer = shap.TreeExplainer(model["clf"])
+                shap_values = explainer.shap_values(X_sample)
+                fig_shap, ax_shap = plt.subplots(figsize=(8, 5))
+                shap.summary_plot(shap_values, X_sample, plot_type="dot", show=False, max_display=12)
+                st.pyplot(fig_shap, bbox_inches='tight')
+            except Exception as e:
+                st.warning(f"Could not generate SHAP plot: {e}")
+        else:
+            st.warning("📊 Falling back to empirical baseline model (add more granular history to activate ML).")
+
         bucket_stats = model["bucket_stats"].copy()
         for c in ["prob", "bear", "base", "bull"]:
             bucket_stats[c] = pd.to_numeric(bucket_stats[c], errors="coerce")
             bucket_stats[c] = (bucket_stats[c] * 100).round(1)
         st.markdown("**Score bucket outcomes**")
-        st.dataframe(bucket_stats, use_container_width=True)
+        ui.table(data=bucket_stats)
 
         calibration = model["calibration"].copy()
         calibration["actual_hit_rate"] = pd.to_numeric(calibration["actual_hit_rate"], errors="coerce")
         calibration["actual_hit_rate"] = (calibration["actual_hit_rate"] * 100).round(1)
         st.markdown("**Calibration table**")
-        st.dataframe(calibration, use_container_width=True)
+        ui.table(data=calibration)
 
-with tabs[6]:
+if active_tab == "Portfolio Optimizer":
+    st.subheader("⚖️ Portfolio Optimizer & Dynamic Sizing")
+    st.markdown("Phase 4: Uses efficient frontier logic to dynamically calculate the best weightings.")
+    
+    st.write("Select tickers to include in the optimization:")
+    
+    if not latest_df.empty:
+        default_tickers = latest_df.head(5)['ticker'].tolist()
+    else:
+        default_tickers = ["AAPL", "MSFT", "GOOG", "AMZN"]
+        
+    opt_tickers = st.multiselect("Optimization Tickers", latest_df["ticker"].tolist() if not latest_df.empty else default_tickers, default=default_tickers)
+    
+    if ui.button("⚡ Optimize Portfolio", key="btn_opt"):
+        if len(opt_tickers) < 2:
+            st.error("Please select at least 2 tickers.")
+        else:
+            with st.spinner("Downloading 1-year history and optimizing..."):
+                from engine import optimize_portfolio
+                opt_result = optimize_portfolio(opt_tickers)
+                
+                if "error" in opt_result:
+                    st.error(opt_result["error"])
+                else:
+                    ms = opt_result["max_sharpe"]
+                    mv = opt_result["min_volatility"]
+                    
+                    st.success("Optimization Complete!")
+                    
+                    st.markdown("### Max Sharpe Ratio Portfolio")
+                    col1, col2, col3 = st.columns(3)
+                    with col1: ui.metric_card(title="Annual Return", content=f"{ms['return']*100:.1f}%", description="Expected Yield", key="p1")
+                    with col2: ui.metric_card(title="Volatility", content=f"{ms['volatility']*100:.1f}%", description="Annual Risk", key="p2")
+                    with col3: ui.metric_card(title="Sharpe Ratio", content=f"{ms['sharpe']:.2f}", description="Risk Adjusted Return", key="p3")
+                    
+                    st.markdown("#### Optimal Position Sizing (Max Sharpe)")
+                    weights_df = pd.DataFrame(list(ms['weights'].items()), columns=['Ticker', 'Weight'])
+                    weights_df['Weight'] = weights_df['Weight'].apply(lambda x: f"{x*100:.1f}%")
+                    ui.table(data=weights_df)
+                    
+                    st.divider()
+                    
+                    st.markdown("### Minimum Volatility Portfolio")
+                    col4, col5, col6 = st.columns(3)
+                    with col4: ui.metric_card(title="Annual Return", content=f"{mv['return']*100:.1f}%", description="Expected Yield", key="p4")
+                    with col5: ui.metric_card(title="Volatility", content=f"{mv['volatility']*100:.1f}%", description="Annual Risk", key="p5")
+                    with col6: ui.metric_card(title="Sharpe Ratio", content=f"{mv['sharpe']:.2f}", description="Risk Adjusted Return", key="p6")
+                    
+                    st.markdown("#### Optimal Position Sizing (Min Volatility)")
+                    weights_df2 = pd.DataFrame(list(mv['weights'].items()), columns=['Ticker', 'Weight'])
+                    weights_df2['Weight'] = weights_df2['Weight'].apply(lambda x: f"{x*100:.1f}%")
+                    ui.table(data=weights_df2)
+
+if active_tab == "Alerts Log":
+    st.subheader("🔔 Alerts Log")
+    st.caption("A historical record of all Telegram push notifications generated by Argus.")
+    try:
+        with open("argus_alerts_log.txt", "r", encoding="utf-8") as f:
+            logs = f.read()
+            if logs.strip():
+                # Display newest first
+                blocks = [block.strip() for block in logs.split("---") if block.strip()]
+                # Reconstruct and reverse
+                reversed_logs = ""
+                for block in reversed(blocks):
+                    # check if the block starts with date (e.g. 2026-04-11)
+                    if len(block) >= 19 and block[4] == '-' and block[7] == '-':
+                        date_str = block[:19]
+                        msg = block[19:].strip()
+                        st.markdown(f"**{date_str}**")
+                        st.info(msg)
+                    else:
+                        st.info(block)
+            else:
+                st.info("No alerts logged yet.")
+    except FileNotFoundError:
+        st.info("No alerts logged yet.")
+
+if active_tab == "Help":
     st.subheader("❓ Help & Documentation")
     st.markdown('''
+    ### Phase & Capabilities Overview
+    * **Phase 1: ML Prediction Model:** Uses XGBoost to evaluate hit probabilities based on the accumulation of historical features.
+    * **Phase 2: LLM Qualitative Analysis:** Connects to the Groq API (Llama 3.1) to cross-reference quantitative screening scores with the latest financial news for an actionable AI thesis.
+    * **Phase 3: Macro Market Regime Filter:** Dynamically adjusts stock scores based on SPY moving averages and the VIX (e.g., boosting scores in Bull markets, penalizing in Bear markets).
+    * **Phase 4: Portfolio Optimizer:** Uses 1-year historical correlations for the highest conviction tickers to compute Max Sharpe and Minimum Volatility weightings.
+    
+    ---
     ### Pages Overview
-    * **Overview:** Displays the results of the latest scheduled scan, highlighting top picks, their financial metrics, and execution guidance.
-    * **History:** Browse past scans to track how Argus scores and market conditions have trended over time.
-    * **Ticker Detail:** Deep dive into a specific stock. Shows historic price charts, Argus score trends, and actionable buy/sell strategies.
-    * **Journal:** A customized logbook to track your trading decisions, entry points, and rationales for future review.
-    * **Manual Run:** Perform an immediate, on-demand scan of the market using your current sidebar parameters.
-    * **Prediction Model:** Reviews the performance, hit rate, and calibration of the Argus AI prediction model to gauge its accuracy.
+    * **Overview:** Snapshot of the latest scan results, showing the current macro Market Regime and top stock picks.
+    * **Ticker Detail:** Deep dive into specific tickers. Evaluate Plotly interactive price charts, quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq).
+    * **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate the statistically optimal portfolio sizing using the efficient frontier.
+    * **Manual Run:** Instantly run a new global scan based on your sidebar settings. Includes Telegram notification support.
+    * **History:** Browse historical database scans to see how scores and market conditions have trended over time.
+    * **Journal:** Personal logbook to keep track of buying decisions, entry prices, and position sizing.
+    * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, and calibration accuracy across different market conditions.
+    * **Alerts Log:** Record of all automated signals pushed via Telegram.
+    * **Prompts:** Curated LLM prompts to assist with deeper external research.
 
     ---
     ### Sidebar Settings Explained
 
-    **Parameters**
-    * **Minimum Score:** The minimum Argus score required for a stock to pass the screen. 
-        * *Default:* 65 (Filters out weaker stocks while providing enough choices).
-        * *Alternative:* 80 for stricter quality, 50 for a broader, exploratory search.
-    * **Price Floor ($):** The lowest acceptable stock price. 
-        * *Default:* $2.00 (Avoids highly illiquid or volatile penny stocks).
-        * *Alternative:* $10.00 to focus purely on established companies.
-    * **Volume Floor:** Minimum average daily trading volume.
-        * *Default:* 500,000 (Ensures you can easily enter and exit positions without price slippage).
-        * *Alternative:* 1,000,000+ for large caps, 100,000 for discovering niche small caps.
-    * **Universe Size:** How many top market cap tickers to scan.
-        * *Default:* 200 (Balances comprehensive coverage with fast scan times).
+    **Quick Scan Settings**
+    * **Minimum Score:** The minimum Argus score required to pass (Default: 65).
+    * **Universe Size:** How many top market cap tickers to scan (Default: 200).
     
-    **Prediction Model Focus**
-    * **Horizon Days:** The timeframe over which the model predicts price movement. 
-        * *Default:* 63 days (Roughly 1 quarter, a sweet spot for swing trading trends).
-    * **Target Return (%):** The profit percentage the model evaluates against.
-        * *Default:* 10% (A realistic expectation for a strong quarter).
+    **Advanced Filters & Constraints**
+    * **Price Floor ($):** Lowest acceptable stock price, filtering out highly volatile penny stocks.
+    * **Volume Floor:** Minimum average daily trading volume to ensure liquidity (Default: 500,000).
     
-    **Risk Rules**
-    * **Risk per Trade:** The maximum percentage of your total portfolio you are willing to lose if the stock drops to your stop loss.
-        * *Default:* 0.75% (A standard, safe capital preservation rule).
-        * *Alternative:* 0.25% for conservative trading, up to 2.0% for aggressive scaling.
-    * **Max Position Size:** The maximum allocation of your portfolio that can be tied up in a single stock.
-        * *Default:* 8.0% (Forces diversification across at least 12-15 stocks).
+    **ML Prediction Horizons**
+    * **Horizon Days:** The timeframe over which the ML model predicts price movement (Default: 63 days, ~1 quarter).
+    * **Target Return (%):** The target profit percentage the ML model evaluates the stock against (Default: 10%).
+    
+    **Advanced Risk Rules**
+    * **Risk per Trade:** The % of your total portfolio you're willing to lose if stopped out (Default: 0.75%).
+    * **Max Position Size:** Maximum portfolio allocation allowed in a single stock, forcing diversification (Default: 8.0%).
     ''')
 
-with tabs[7]:
+if active_tab == "Prompts":
     st.subheader("🤖 AI Prompts for Research")
     st.caption("Copy these templates and paste them into AI tools (like Perplexity, ChatGPT, or Claude) to deeper analyze tickers.")
 
     st.markdown("#### 1. Fundamental & Deep Research")
-    st.code("I am researching the stock [TICKER]. Please provide a comprehensive overview of its business model, primary revenue streams, recent financial performance (last two earnings reports), and any significant regulatory or macroeconomic headwinds it is currently facing.", language="text")
+    st.code("""I am researching the stock [TICKER]. Please provide a comprehensive 
+overview of its business model, primary revenue streams, recent 
+financial performance (last two earnings reports), and any 
+significant regulatory or macroeconomic headwinds it is 
+currently facing.""", language="text")
 
     st.markdown("#### 2. Buy & Sell Strategy Validation")
-    st.code("I am considering taking a position in [TICKER]. Given the current macroeconomic climate and the stock's recent price action, what are the most critical support and resistance levels to watch? Suggest a logical stop-loss percentage and a realistic price target for a 3-month hold.", language="text")
+    st.code("""I am considering taking a position in [TICKER]. Given the current 
+macroeconomic climate and the stock's recent price action, what 
+are the most critical support and resistance levels to watch? 
+Suggest a logical stop-loss percentage and a realistic price 
+target for a 3-month hold.""", language="text")
 
     st.markdown("#### 3. Upcoming Catalysts & Speculations")
-    st.code("What are the major upcoming catalysts, product launches, clinical trials, or earnings reports for [TICKER] in the next 3 to 6 months? How might these events impact the stock price, and what are the current market speculations or analyst sentiments surrounding them?", language="text")
+    st.code("""What are the major upcoming catalysts, product launches, clinical 
+trials, or earnings reports for [TICKER] in the next 3 to 6 months? 
+How might these events impact the stock price, and what are 
+the current market speculations or analyst sentiments 
+surrounding them?""", language="text")
 
     st.markdown("#### 4. Competitive Moat Analysis")
-    st.code("Analyze the competitive landscape for [TICKER]. Who are its top 3 direct competitors? Compare [TICKER]'s market share, unique competitive advantages (moat), and profit margins against these competitors. Is [TICKER] gaining or losing ground?", language="text")
+    st.code("""Analyze the competitive landscape for [TICKER]. Who are its top 3 
+direct competitors? Compare [TICKER]'s market share, unique 
+competitive advantages (moat), and profit margins against these 
+competitors. Is [TICKER] gaining or losing ground?""", language="text")

@@ -6,6 +6,11 @@ from datetime import datetime
 from fmp_fetch import run_fmp_enrichment
 from engine import Config, run_scan, save_results
 
+try:
+    from llm import generate_ai_thesis
+except ImportError:
+    generate_ai_thesis = None
+
 # ── Setup Logging ───────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -18,6 +23,12 @@ config = Config()
 
 # ── Telegram ─────────────────────────────────────────────
 def send_telegram(message):
+    try:
+        with open("argus_alerts_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"--- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n{message}\n\n")
+    except Exception as e:
+        logger.error(f"Failed to write to alerts log: {e}")
+
     if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
         logger.error("Telegram credentials missing. Cannot send message.")
         return
@@ -33,7 +44,7 @@ def send_telegram(message):
         logger.error(f"Failed to send Telegram message: {e}")
 
 # ── Format Telegram Message ──────────────────────────────
-def format_pick(pick, memory_df):
+def format_pick(pick, memory_df, ai_thesis=None):
     ticker     = pick["ticker"]
     prev       = memory_df[memory_df["ticker"] == ticker]
     memory_note = ""
@@ -43,11 +54,13 @@ def format_pick(pick, memory_df):
         memory_note = f"\n⚡ _Previously flagged {times}x since {first} — signals strengthening_"
 
     reasons_str = " | ".join(pick["reasons"])
+    thesis_str = f"\n💡 *AI Note:* _{ai_thesis}_" if ai_thesis else ""
+    
     return (
         f"{pick['tier']}\n"
         f"*{ticker}* — Score: *{pick['score']}/100*{memory_note}\n"
         f"💰 Price: ${pick['price']} | Cap: {pick['mkt_cap']}\n"
-        f"📊 {reasons_str}\n"
+        f"📊 {reasons_str}{thesis_str}\n"
     )
 
 # ── Watchlist Monitor ────────────────────────────────────
@@ -125,8 +138,22 @@ def main():
     memory_df = pd.read_csv(config.MEMORY_FILE)
     highest = [p for p in results if p["score"] >= 80]
     high = [p for p in results if p["score"] < 80]
+    
+    # Optional LLM qualitative analysis for highest conviction picks
+    formatted_highest = []
+    for p in highest:
+        ai_note = None
+        if config.GROQ_API_KEY and generate_ai_thesis:
+            ai_note = generate_ai_thesis(p["ticker"], p["score"], p["reasons"], config.GROQ_API_KEY)
+            
+            # Prevent markdown formatting issues in telegram if AI uses asterisks
+            if ai_note:
+                ai_note = ai_note.replace('*', '').replace('_', '')
+                
+        formatted_highest.append(format_pick(p, memory_df, ai_note))
+
     header = f"👁 *Argus Daily Scan — {today_str}*\n{'─'*30}\n"
-    highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in highest]) if highest else "_None today_")
+    highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
     high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
     footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
     body = highest_block + high_block

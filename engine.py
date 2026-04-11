@@ -3,6 +3,12 @@ import pandas as pd
 import logging
 import os
 import json
+import numpy as np
+try:
+    import xgboost as xgb
+    HAS_XGB = True
+except ImportError:
+    HAS_XGB = False
 from dataclasses import dataclass
 from datetime import datetime, date
 
@@ -42,6 +48,7 @@ def get_stock_info(ticker):
 class Config:
     TELEGRAM_TOKEN: str = os.environ.get("TELEGRAM_TOKEN", "")
     TELEGRAM_CHAT_ID: str = os.environ.get("TELEGRAM_CHAT_ID", "")
+    GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
     MEMORY_FILE: str = "argus_memory.csv"
     WATCHLIST_FILE: str = "argus_watchlist.csv"
     MIN_SCORE: int = 65
@@ -64,7 +71,8 @@ def save_memory(df, filepath):
 
 def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_file):
     cols = [
-        "ticker", "sector", "score", "tier", "price", "mkt_cap_m",
+        "ticker", "sector", "score", "f_score", "v_score", "m_score", "s_score", "p_score",
+        "tier", "price", "mkt_cap_m",
         "reason_count", "scan_date", "scan_timestamp", "run_type",
     ]
     if not results:
@@ -83,6 +91,11 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
             "ticker": pick.get("ticker", ""),
             "sector": pick.get("sector", "Unknown"),
             "score": float(pick.get("score", 0)),
+            "f_score": float(pick.get("f_score", 0)),
+            "v_score": float(pick.get("v_score", 0)),
+            "m_score": float(pick.get("m_score", 0)),
+            "s_score": float(pick.get("s_score", 0)),
+            "p_score": float(pick.get("p_score", 0)),
             "tier": pick.get("tier", ""),
             "price": float(pick.get("price", 0)),
             "mkt_cap_m": mkt_cap_m,
@@ -130,7 +143,33 @@ def _apply_sector_diversity(results, top_n, max_per_sector=3):
             bucket.append(pick)
     return [pick for picks in sector_picks.values() for pick in picks][:top_n]
 
-def run_scan(config, scan_limit=400, update_memory=True):
+def get_market_regime():
+    """Phase 3: Macroeconomic & Market Regime Filter"""
+    try:
+        spy = yf.Ticker("SPY").history(period="1y")
+        vix = yf.Ticker("^VIX").history(period="1mo")
+        
+        if spy.empty or vix.empty or len(spy) < 200:
+            return {"regime": "Neutral", "multiplier": 1.0, "reason": "Insufficient data"}
+            
+        spy_price = spy["Close"].iloc[-1]
+        spy_ma50 = spy["Close"].rolling(50).mean().iloc[-1]
+        spy_ma200 = spy["Close"].rolling(200).mean().iloc[-1]
+        vix_price = vix["Close"].iloc[-1]
+        
+        if vix_price > 30:
+            return {"regime": "Extreme Fear", "multiplier": 0.7, "reason": f"VIX elevated at {vix_price:.1f}"}
+        elif spy_price < spy_ma200:
+            return {"regime": "Bear", "multiplier": 0.8, "reason": "SPY below 200-day MA"}
+        elif spy_price > spy_ma50 and spy_price > spy_ma200:
+            return {"regime": "Bull", "multiplier": 1.1, "reason": "SPY above 50-day and 200-day MA"}
+        else:
+            return {"regime": "Neutral", "multiplier": 1.0, "reason": "SPY consolidating between moving averages"}
+    except Exception as e:
+        logger.warning(f"Market regime check failed: {e}")
+        return {"regime": "Neutral", "multiplier": 1.0, "reason": "Data fetch error"}
+
+def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None):
     """
     Execute Argus scan and return standardized payload.
     This is used by both scheduled runs and Streamlit manual runs.
@@ -140,10 +179,16 @@ def run_scan(config, scan_limit=400, update_memory=True):
     scan_date = datetime.now().strftime("%Y-%m-%d")
     scan_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    regime_info = get_market_regime()
+    logger.info(f"Market Regime: {regime_info['regime']} ({regime_info['reason']})")
+
     valid_tickers = _prefilter_tickers(tickers, config)[:scan_limit]
     results = []
-    for ticker in valid_tickers:
-        pick = score_stock(ticker, memory_df, config)
+    total = len(valid_tickers)
+    for idx, ticker in enumerate(valid_tickers):
+        if progress_callback:
+            progress_callback(ticker, idx, total)
+        pick = score_stock(ticker, memory_df, config, regime_info)
         if pick:
             results.append(pick)
 
@@ -180,7 +225,7 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
     - latest_file: full replacement (for latest scheduled run table)
     - history_file: append-only full history across runs
     """
-    base_cols = ["ticker", "sector", "score", "tier", "reasons", "price", "mkt_cap", "scan_date", "scan_timestamp", "run_type"]
+    base_cols = ["ticker", "sector", "score", "f_score", "v_score", "m_score", "s_score", "p_score", "tier", "reasons", "price", "mkt_cap", "scan_date", "scan_timestamp", "run_type"]
     if results:
         df = pd.DataFrame(results).assign(
             scan_date=scan_date,
@@ -232,10 +277,10 @@ def load_journal(journal_file):
 
 def build_prediction_model(features_file, horizon_days=63, target_return=0.10):
     """
-    Empirical model:
+    ML model:
     - Uses historical feature snapshots
     - Computes forward return from first future snapshot >= horizon_days
-    - Learns probability by score decile bucket
+    - Trains XGBoost classifier if available to predict hit probability
     """
     if not os.path.exists(features_file):
         return {"ready": False, "reason": "No feature history yet."}
@@ -250,6 +295,8 @@ def build_prediction_model(features_file, horizon_days=63, target_return=0.10):
 
     df = df.sort_values(["ticker", "scan_date"]).reset_index(drop=True)
     fwd_returns = []
+    
+    # Target creation
     for ticker, group in df.groupby("ticker"):
         g = group.sort_values("scan_date").copy()
         future_dates = g["scan_date"].tolist()
@@ -271,30 +318,46 @@ def build_prediction_model(features_file, horizon_days=63, target_return=0.10):
         return {"ready": False, "reason": "Not enough matured samples yet (need ~30+)."}
 
     train["target_hit"] = (train["fwd_return"] >= target_return).astype(int)
-    try:
-        train["score_bucket"] = pd.qcut(train["score"], q=10, duplicates="drop")
-    except Exception:
-        train["score_bucket"] = pd.cut(train["score"], bins=5)
-
-    bucket_stats = (
-        train.groupby("score_bucket", observed=False)
-        .agg(
-            samples=("target_hit", "count"),
-            prob=("target_hit", "mean"),
-            bear=("fwd_return", lambda s: s.quantile(0.2)),
-            base=("fwd_return", lambda s: s.quantile(0.5)),
-            bull=("fwd_return", lambda s: s.quantile(0.8)),
-        )
-        .reset_index()
-    )
-    bucket_stats = bucket_stats[bucket_stats["samples"] > 0].copy()
-    if bucket_stats.empty:
-        return {"ready": False, "reason": "No valid bucket stats."}
-
-    global_prob = float(train["target_hit"].mean())
-    train["pred_prob"] = train["score_bucket"].map(
-        bucket_stats.set_index("score_bucket")["prob"]
-    ).fillna(global_prob)
+    
+    # Feature selection
+    possible_features = ["score", "f_score", "v_score", "m_score", "s_score", "p_score", "reason_count", "mkt_cap_m"]
+    features = [f for f in possible_features if f in train.columns]
+    
+    X = train[features].fillna(0)
+    y = train["target_hit"]
+    global_prob = float(y.mean())
+    
+    clf = None
+    feature_importance = {}
+    
+    if HAS_XGB and len(train) > 50:
+        try:
+            clf = xgb.XGBClassifier(
+                n_estimators=50, 
+                max_depth=3, 
+                learning_rate=0.1, 
+                eval_metric="logloss", 
+                use_label_encoder=False
+            )
+            clf.fit(X, y)
+            train["pred_prob"] = clf.predict_proba(X)[:, 1]
+            imp = clf.feature_importances_
+            feature_importance = {features[i]: float(imp[i]) for i in range(len(features))}
+        except Exception as e:
+            logger.error(f"XGBoost training failed: {e}")
+            clf = None
+    
+    if clf is None:
+        # Fallback to empirical deciles
+        logger.info("Falling back to empirical decile model.")
+        try:
+            train["score_bucket"] = pd.qcut(train["score"], q=10, duplicates="drop")
+        except Exception:
+            train["score_bucket"] = pd.cut(train["score"], bins=5)
+            
+        bucket_stats_fallback = train.groupby("score_bucket", observed=False)["target_hit"].mean()
+        train["pred_prob"] = train["score_bucket"].map(bucket_stats_fallback).fillna(global_prob)
+        
     brier = float(((train["pred_prob"] - train["target_hit"]) ** 2).mean())
 
     calibration = (
@@ -303,6 +366,33 @@ def build_prediction_model(features_file, horizon_days=63, target_return=0.10):
         .agg(samples=("target_hit", "count"), actual_hit_rate=("target_hit", "mean"))
         .reset_index()
     )
+    
+    # Compute scenario metrics across standard bins for UI backward compatibility
+    train_for_scenarios = train.copy()
+    try:
+        train_for_scenarios["mock_score_bucket"] = pd.qcut(train_for_scenarios["score"], q=10, duplicates="drop")
+    except:
+        train_for_scenarios["mock_score_bucket"] = pd.cut(train_for_scenarios["score"], bins=5)
+    
+    bucket_stats = (
+        train_for_scenarios.groupby("mock_score_bucket", observed=False)
+        .agg(
+            samples=("target_hit", "count"),
+            prob=("pred_prob", "mean"),
+            bear=("fwd_return", lambda s: s.quantile(0.2)),
+            base=("fwd_return", lambda s: s.quantile(0.5)),
+            bull=("fwd_return", lambda s: s.quantile(0.8)),
+        )
+        .reset_index()
+    )
+    bucket_stats = bucket_stats.rename(columns={"mock_score_bucket": "score_bucket"})
+
+    cm = None
+    if clf is not None:
+        import numpy as np
+        from sklearn.metrics import confusion_matrix
+        y_pred = (train["pred_prob"] >= 0.5).astype(int)
+        cm = confusion_matrix(train["target_hit"], y_pred).tolist()
 
     return {
         "ready": True,
@@ -313,6 +403,11 @@ def build_prediction_model(features_file, horizon_days=63, target_return=0.10):
         "brier_score": brier,
         "bucket_stats": bucket_stats,
         "calibration": calibration,
+        "clf": clf,
+        "features": features,
+        "feature_importance": feature_importance,
+        "confusion_matrix": cm,
+        "X_sample": train[features]
     }
 
 def add_predictions(df_results, model):
@@ -326,22 +421,37 @@ def add_predictions(df_results, model):
         out["scenario_bull"] = None
         return out
 
-    bucket_stats = model["bucket_stats"].copy().sort_values("score_bucket")
     global_prob = model["global_prob"]
-    out["score"] = pd.to_numeric(out["score"], errors="coerce")
-    def _lookup(score, col):
-        for _, r in bucket_stats.iterrows():
-            interval = r["score_bucket"]
-            if pd.notna(score) and score in interval:
-                return r[col]
-        if col == "prob":
+    
+    if model.get("clf") is not None:
+        clf = model["clf"]
+        features = model["features"]
+        X_pred = out.reindex(columns=features, fill_value=0).fillna(0)
+        try:
+            out["prob_upside"] = clf.predict_proba(X_pred)[:, 1]
+        except Exception:
+            out["prob_upside"] = global_prob
+    else:
+        bucket_stats = model["bucket_stats"].copy().sort_values("score_bucket")
+        out["score"] = pd.to_numeric(out["score"], errors="coerce")
+        def _lookup_prob(score):
+            for _, r in bucket_stats.iterrows():
+                if pd.notna(score) and score in r["score_bucket"]:
+                    return r["prob"]
             return global_prob
+        out["prob_upside"] = out["score"].apply(_lookup_prob)
+
+    # Retain the empirical scenarios for risk guidance sizing
+    bucket_stats = model["bucket_stats"].copy().sort_values("score_bucket")
+    def _lookup_scenario(score, col):
+        for _, r in bucket_stats.iterrows():
+            if pd.notna(score) and score in r["score_bucket"]:
+                return r[col]
         return 0.0
 
-    out["prob_upside"] = out["score"].apply(lambda s: _lookup(s, "prob"))
-    out["scenario_bear"] = out["score"].apply(lambda s: _lookup(s, "bear"))
-    out["scenario_base"] = out["score"].apply(lambda s: _lookup(s, "base"))
-    out["scenario_bull"] = out["score"].apply(lambda s: _lookup(s, "bull"))
+    out["scenario_bear"] = out["score"].apply(lambda s: _lookup_scenario(s, "bear"))
+    out["scenario_base"] = out["score"].apply(lambda s: _lookup_scenario(s, "base"))
+    out["scenario_bull"] = out["score"].apply(lambda s: _lookup_scenario(s, "bull"))
     return out
 
 def add_risk_guidance(df_results, model, risk_per_trade_pct=0.75, max_position_pct=8.0):
@@ -552,7 +662,7 @@ def _score_momentum(hist, ticker):
 
     return score, reasons
 
-def score_stock(ticker, memory_df, config):
+def score_stock(ticker, memory_df, config, regime_info=None):
     """The central scoring logic used by both Scanner and Streamlit."""
     try:
         stock = yf.Ticker(ticker)
@@ -571,10 +681,12 @@ def score_stock(ticker, memory_df, config):
         score += f_score; reasons.extend(f_reasons)
 
         # 2. Valuation
+        v_score = 0
         peg = info.get("pegRatio", 2)
-        if 0 < peg < 1: score += 15; reasons.append(f"PEG {peg:.1f}")
+        if 0 < peg < 1: v_score += 15; reasons.append(f"PEG {peg:.1f}")
         ps = info.get("priceToSalesTrailing12Months", 10)
-        if 0 < ps < 4: score += 10; reasons.append(f"P/S {ps:.1f}x")
+        if 0 < ps < 4: v_score += 10; reasons.append(f"P/S {ps:.1f}x")
+        score += v_score
 
         # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS)
         hist = stock.history(period="1y")  # 1y gives enough data for 200MA
@@ -582,16 +694,27 @@ def score_stock(ticker, memory_df, config):
         score += m_score; reasons.extend(m_reasons)
 
         # 4. Smart Money & Cap
+        s_score = 0
         inst_own = info.get("heldPercentInstitutions", 1) or 1
-        if inst_own < 0.40: score += 20; reasons.append(f"Inst. {inst_own*100:.0f}%")
+        if inst_own < 0.40: s_score += 20; reasons.append(f"Inst. {inst_own*100:.0f}%")
         mkt_cap = info.get("marketCap", 0) or 0
-        if 50e6 < mkt_cap < 10e9: score += 10; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
+        if 50e6 < mkt_cap < 10e9: s_score += 10; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
+        score += s_score
 
         # 5. Persistence Bonus
+        p_score = 0
         prev = memory_df[memory_df["ticker"] == ticker]
         if not prev.empty and int(prev["times_flagged"].values[0]) >= 3:
-            score += 5
+            p_score += 5
             reasons.append("\U0001f501 Persistence bonus")
+        score += p_score
+
+        # 6. Market Regime Modification (Phase 3)
+        if regime_info and regime_info.get("multiplier", 1.0) != 1.0:
+            score *= regime_info["multiplier"]
+            reasons.append(f"{regime_info['regime']} Regime Adj")
+            
+        score = int(round(score))
 
         if score < config.MIN_SCORE:
             return None
@@ -600,6 +723,11 @@ def score_stock(ticker, memory_df, config):
             "ticker":  ticker,
             "sector":  info.get("sector", "Unknown"),
             "score":   score,
+            "f_score": f_score,
+            "v_score": v_score,
+            "m_score": m_score,
+            "s_score": s_score,
+            "p_score": p_score,
             "tier":    "\U0001f7e2 HIGH CONVICTION" if score >= 80 else "\U0001f7e1 WATCHLIST",
             "reasons": reasons,
             "price":   round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
@@ -668,3 +796,81 @@ def get_universe():
         "SERV", "LIDR", "OUST", "AEVA", "MVIS", "KOPN", "XPOF",
         "CELH", "VNCE", "VSCO", "LOVE", "CURV", "BURL"
     ]
+
+def optimize_portfolio(tickers: list, risk_free_rate: float = 0.04) -> dict:
+    """Phase 4: Run mean-variance portfolio optimization to find Max Sharpe allocation."""
+    import logging
+    logger = logging.getLogger(__name__)
+    if not tickers:
+        return {"error": "No tickers provided."}
+    
+    logger.info(f"Optimizing portfolio for: {tickers}")
+    try:
+        # Download 1y history
+        data = yf.download(tickers, period="1y", interval="1d")["Adj Close"]
+        
+        # If single ticker was passed accidentally
+        if isinstance(data, pd.Series):
+            data = data.to_frame()
+            
+        returns = data.pct_change().dropna()
+        if len(returns) < 50:
+            return {"error": "Not enough trading days to optimize reliably."}
+            
+        # Compute mean and covariance
+        mean_returns = returns.mean() * 252
+        cov_matrix = returns.cov() * 252
+        
+        num_assets = len(tickers)
+        num_portfolios = 5000
+        
+        results = np.zeros((3, num_portfolios))
+        weights_record = []
+        
+        for i in range(num_portfolios):
+            weights = np.random.random(num_assets)
+            weights /= np.sum(weights)
+            
+            weights_record.append(weights)
+            
+            p_ret = np.sum(weights * mean_returns)
+            p_std = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+            p_sharpe = (p_ret - risk_free_rate) / p_std
+            
+            results[0, i] = p_ret
+            results[1, i] = p_std
+            results[2, i] = p_sharpe
+            
+        # Max Sharpe
+        max_sharpe_idx = np.argmax(results[2])
+        max_sharpe_ret = results[0, max_sharpe_idx]
+        max_sharpe_std = results[1, max_sharpe_idx]
+        max_sharpe_ratio = results[2, max_sharpe_idx]
+        max_sharpe_weights = weights_record[max_sharpe_idx]
+        
+        # Min Volatility
+        min_vol_idx = np.argmin(results[1])
+        min_vol_ret = results[0, min_vol_idx]
+        min_vol_std = results[1, min_vol_idx]
+        min_vol_sharpe = results[2, min_vol_idx]
+        min_vol_weights = weights_record[min_vol_idx]
+        
+        metrics = {
+            "max_sharpe": {
+                "return": max_sharpe_ret,
+                "volatility": max_sharpe_std,
+                "sharpe": max_sharpe_ratio,
+                "weights": {ticker: float(weight) for ticker, weight in zip(tickers, max_sharpe_weights)}
+            },
+            "min_volatility": {
+                "return": min_vol_ret,
+                "volatility": min_vol_std,
+                "sharpe": min_vol_sharpe,
+                "weights": {ticker: float(weight) for ticker, weight in zip(tickers, min_vol_weights)}
+            }
+        }
+        
+        return metrics
+    except Exception as e:
+        logger.error(f"Portfolio optimization failed: {e}")
+        return {"error": str(e)}
