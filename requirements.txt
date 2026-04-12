@@ -3,3 +3,9 @@ altair>=5.0.0,<6.0.0
 pandas
 yfinance
 requests
+xgboost
+scikit-learn
+groq
+plotly
+streamlit-shadcn-ui
+shap

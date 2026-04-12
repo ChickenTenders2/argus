@@ -1,0 +1,15 @@
+--- 2026-04-11 16:51:03 ---
+👁 *Argus Manual Scan — 11 Apr 2026 16:51*
+Scanned 200 tickers
+
+GSAT (103)
+SM (98)
+MUR (98)
+BGC (93)
+NE (88)
+VSAT (88)
+PIPR (83)
+LUMN (78)
+MC (78)
+TDS (68)
+
