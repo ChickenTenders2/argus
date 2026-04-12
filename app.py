@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit_shadcn_ui as ui
 import pandas as pd
 import yfinance as yf
 from engine import (
@@ -12,6 +11,7 @@ from engine import (
     save_journal_entry,
     load_journal,
     get_market_regime,
+    get_db_connection
 )
 import os
 import requests
@@ -278,20 +278,24 @@ model = build_prediction_model(
     target_return=target_return,
 )
 
+# Load data from SQLite
+conn = get_db_connection()
+try:
+    history_df = pd.read_sql("SELECT * FROM results", conn)
+except Exception:
+    history_df = pd.DataFrame()
+conn.close()
+
 if os.path.exists(config.RESULTS_FILE):
     latest_df = pd.read_csv(config.RESULTS_FILE)
 else:
     latest_df = pd.DataFrame()
 
-if os.path.exists(config.RESULTS_HISTORY_FILE):
-    history_df = pd.read_csv(config.RESULTS_HISTORY_FILE)
-else:
-    history_df = pd.DataFrame()
-
 # To restore Portfolio Optimizer, add "Portfolio Optimizer" back to this array
 tab_options = ["Overview", "Ticker Detail", "Manual Run", "History", "Journal", "Prediction Model", "Alerts Log", "Help", "Prompts"]
-active_tab = ui.tabs(options=tab_options, default_value="Overview", key="main_tabs")
+active_tab = st.radio("Navigation", tab_options, key="main_tabs", horizontal=True, label_visibility="collapsed")
 st.markdown("<br>", unsafe_allow_html=True)
+
 
 if active_tab == "Overview":
     st.subheader("📡 Latest Scheduled Scan")
@@ -324,13 +328,21 @@ if active_tab == "Overview":
         st.caption(f"Scan date: {scan_date} · {len(latest_view)} picks")
 
         c1, c2, c3, c4 = st.columns(4)
-        with c1: ui.metric_card(title="Picks", content=str(len(latest_view)), description="Total Passed", key="m1")
-        with c2: ui.metric_card(title="High Conviction", content=str(int((latest_view["tier"] == "🟢 HIGH CONVICTION").sum())), description="Score >= 80", key="m2")
-        with c3: ui.metric_card(title="Avg Score", content=f"{latest_view['score'].mean():.1f}", description="Argus Rating", key="m3")
-        if "prob_upside" in latest_view.columns and latest_view["prob_upside"].notna().any():
-            with c4: ui.metric_card(title="Avg Upside Prob", content=f"{latest_view['prob_upside'].mean() * 100:.1f}%", description="ML Projected", key="m4")
-        else:
-            with c4: ui.metric_card(title="Avg Upside Prob", content="N/A", description="ML Projected", key="m5")
+        with c1:
+            with st.container(border=True):
+                st.metric("Picks", str(len(latest_view)), help="Total Passed")
+        with c2:
+            with st.container(border=True):
+                st.metric("High Conviction", str(int((latest_view["tier"] == "🟢 HIGH CONVICTION").sum())), help="Score >= 80")
+        with c3:
+            with st.container(border=True):
+                st.metric("Avg Score", f"{latest_view['score'].mean():.1f}", help="Argus Rating")
+        with c4:
+            with st.container(border=True):
+                if "prob_upside" in latest_view.columns and latest_view["prob_upside"].notna().any():
+                    st.metric("Avg Upside Prob", f"{latest_view['prob_upside'].mean() * 100:.1f}%", help="ML Projected")
+                else:
+                    st.metric("Avg Upside Prob", "N/A", help="ML Projected")
 
         display_cols = [
             "ticker", "sector", "score", "tier", "price", "mkt_cap",
@@ -344,21 +356,34 @@ if active_tab == "Overview":
         
         subset_view = latest_view[[c for c in display_cols if c in latest_view.columns]].copy()
         
-        style = subset_view.style
-        if "score" in subset_view.columns:
-            style = style.background_gradient(subset=["score"], cmap="Greens")
-        if "prob_upside" in subset_view.columns:
-            style = style.background_gradient(subset=["prob_upside"], cmap="Blues")
-            
-        st.dataframe(style, use_container_width=True)
+        st.dataframe(
+            subset_view, 
+            use_container_width=True,
+            column_config={
+                "score": st.column_config.ProgressColumn(
+                    "Score",
+                    help="Argus Score Rating",
+                    format="%d",
+                    min_value=0,
+                    max_value=100,
+                ),
+                "prob_upside": st.column_config.ProgressColumn(
+                    "Upside Prob (%)",
+                    help="ML Upside Probability",
+                    format="%.1f%%",
+                    min_value=0,
+                    max_value=100,
+                )
+            }
+        )
 
         st.markdown("### 🔍 Stock Deep Dive")
         c1, c2 = st.columns([1, 10])
         with c1:
             diveticker = st.selectbox("Select Ticker", subset_view["ticker"].tolist(), key="deep_dive_selectbox", label_visibility="collapsed")
         with c2:
-            if ui.button("Analyze", key="btn_deep_dive_analyze"):
-                st.session_state["selected_ticker"] = diveticker
+            if st.button("Analyze", key="btn_deep_dive_analyze"):
+                st.session_state["selected_ticker"] = st.session_state["deep_dive_selectbox"]
                 st.session_state["main_tabs"] = "Ticker Detail"
                 st.rerun()
 
@@ -396,7 +421,24 @@ if active_tab == "History":
             safe_line_chart(trend.set_index("scan_day")["avg_score"], y_label="avg_score")
 
             date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_day"].unique(), reverse=True)]
-            selected_day = st.selectbox("Day details", date_options)
+            
+            hc1, hc2 = st.columns([5, 1], vertical_alignment="bottom")
+            with hc1:
+                selected_day = st.selectbox("Day details", date_options)
+            with hc2:
+                if st.button("🗑️ Delete Day", help="Delete all scan history for the selected day", use_container_width=True):
+                    try:
+                        conn = get_db_connection()
+                        # delete from results and features tables for that specific scan_date starting with selected_day
+                        conn.execute("DELETE FROM results WHERE scan_date LIKE ?", (selected_day + "%",))
+                        conn.execute("DELETE FROM features WHERE scan_date LIKE ?", (selected_day + "%",))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Deleted history for {selected_day}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error deleting: {e}")
+
             day_df = filtered[filtered["scan_date"].dt.strftime("%Y-%m-%d") == selected_day].sort_values("score", ascending=False).copy()
             
             with st.spinner("Fetching current prices to calculate return..."):
@@ -460,7 +502,34 @@ if active_tab == "Ticker Detail":
                 st.markdown(f"**Sell:** Stop loss at **-{sl_pct:.1f}%**. "
                             f"Target taking profits around **+{tp_pct:.1f}%**.")
             
-            st.markdown("---")
+                st.markdown("#### Groq Investment Thesis")
+                if st.button("Generate Qualitative Analysis", key=f"btn_ai_{ticker}"):
+                    with st.spinner(f"Analyzing {ticker} news and factors with Llama 3..."):
+                        import os
+                        from engine import Config
+                        try:
+                            from llm import generate_ai_thesis
+                            
+                            cfg = Config()
+                            api_key = cfg.GROQ_API_KEY
+                            if not api_key:
+                                st.error("GROQ_API_KEY is not set in your environment variables. Please set it to use the AI analysis feature.")
+                            else:
+                                reasons = latest_ticker_row["reasons"].iloc[0]
+                                if isinstance(reasons, str):
+                                    reasons = eval(reasons) if reasons.startswith("[") else [reasons]
+                                elif not isinstance(reasons, list):
+                                    reasons = []
+                                
+                                thesis = generate_ai_thesis(ticker, score_val, reasons, api_key)
+                                st.success("Analysis Complete!")
+                                st.info(thesis)
+                        except ImportError:
+                            st.error("llm module not found. Make sure llm.py is properly set up.")
+                        except Exception as e:
+                            st.error(f"Error generating thesis: {e}")
+
+            st.markdown("#### Execution Guidance")
             
             # --- MIDDLE SECTION: Price History & Detailed Snapshot ---
             colC, colD = st.columns([2, 1])
@@ -491,7 +560,7 @@ if active_tab == "Ticker Detail":
                     else:
                         st.info("No market price data available for chart.")
                     
-            with colD:
+            with colD:                            
                 st.markdown("#### Execution Guidance")
                 st.dataframe(
                     latest_ticker_row[
@@ -520,46 +589,27 @@ if active_tab == "Ticker Detail":
             # --- BOTTOM SECTION: Data view & AI ---
             with st.expander("View Raw Scan History Table"):
                 st.dataframe(tdf, use_container_width=True)
-            
-            st.subheader("🤖 AI Investment Thesis (Phase 2)")
-            if st.button("Generate Qualitative Analysis (Groq)", key=f"btn_ai_{ticker}"):
-                with st.spinner(f"Analyzing {ticker} news and factors with Llama 3..."):
-                    import os
-                    from engine import Config
-                    try:
-                        from llm import generate_ai_thesis
-                        
-                        cfg = Config()
-                        api_key = cfg.GROQ_API_KEY
-                        if not api_key:
-                            st.error("GROQ_API_KEY is not set in your environment variables. Please set it to use the AI analysis feature.")
-                        else:
-                            reasons = latest_ticker_row["reasons"].iloc[0]
-                            if isinstance(reasons, str):
-                                reasons = eval(reasons) if reasons.startswith("[") else [reasons]
-                            elif not isinstance(reasons, list):
-                                reasons = []
-                            
-                            thesis = generate_ai_thesis(ticker, score_val, reasons, api_key)
-                            st.success("Analysis Complete!")
-                            st.info(thesis)
-                    except ImportError:
-                        st.error("llm module not found. Make sure llm.py is properly set up.")
-                    except Exception as e:
-                        st.error(f"Error generating thesis: {e}")
 
-if active_tab == "Journal":
-    st.subheader("📝 Decision Journal")
+@st.dialog("Add Journal Entry")
+def add_journal_entry_dialog(cfg):
     with st.form("journal_form"):
         col1, col2, col3 = st.columns(3)
         journal_ticker = col1.text_input("Ticker").upper().strip()
         journal_action = col2.selectbox("Action", ["BUY", "PASS", "SELL", "SCALE_IN", "TRIM"])
-        journal_scan_date = col3.text_input("Related scan date (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d"))
+        journal_scan_date = col3.date_input("Bought Date", value=datetime.now())
+        
         col4, col5, col6 = st.columns(3)
         entry_price = col4.number_input("Entry price", min_value=0.0, value=0.0)
-        position_size_pct = col5.number_input("Position size %", min_value=0.0, max_value=100.0, value=2.0)
-        stop_loss_pct = col6.number_input("Stop loss %", min_value=0.0, max_value=100.0, value=8.0)
-        take_profit_pct = st.number_input("Take profit %", min_value=0.0, max_value=300.0, value=25.0)
+        stop_loss_pct = col5.number_input("Stop loss %", min_value=0.0, max_value=100.0, value=8.0)
+        take_profit_pct = col6.number_input("Take profit %", min_value=0.0, max_value=300.0, value=25.0)
+        
+        position_size_pct = None
+        if st.session_state.get("enable_journal_advanced"):
+            st.markdown("**Advanced Tracking**")
+            ac1, ac2 = st.columns(2)
+            position_size_pct = ac1.number_input("Position size %", min_value=0.0, max_value=100.0, value=2.0)
+            st.info("Tracking iterative entries and scale-outs is supported by selecting 'SCALE_IN' or 'TRIM' under actions.")
+            
         notes = st.text_area("Notes")
         submitted = st.form_submit_button("Save Journal Entry")
         if submitted:
@@ -567,60 +617,120 @@ if active_tab == "Journal":
                 st.error("Ticker is required.")
             else:
                 save_journal_entry(
-                    config.JOURNAL_FILE,
+                    cfg.JOURNAL_FILE,
                     {
                         "ticker": journal_ticker,
                         "action": journal_action,
-                        "scan_date": journal_scan_date,
+                        "scan_date": str(journal_scan_date),
                         "entry_price": entry_price,
-                        "position_size_pct": position_size_pct,
+                        "position_size_pct": position_size_pct if position_size_pct is not None else 0.0,
                         "stop_loss_pct": stop_loss_pct,
                         "take_profit_pct": take_profit_pct,
                         "notes": notes,
                     },
                 )
                 st.success("Journal entry saved.")
+                st.rerun()
+
+if active_tab == "Journal":
+    st.subheader("📝 Decision Journal")
+    
+    st.checkbox("Enable Advanced Tracking (Position sizing & Scan History)", key="enable_journal_advanced")
+    
+    if st.button("➕ Add New Entry"):
+        add_journal_entry_dialog(config)
 
     journal_df = load_journal(config.JOURNAL_FILE)
     if journal_df.empty:
         st.info("No journal entries yet.")
     else:
-        st.dataframe(journal_df.sort_values("timestamp", ascending=False), use_container_width=True)
+        st.markdown("### 📋 Logged Entries")
         
-        st.markdown("### 📊 Basic P&L Status")
+        # Add deletion capability via data_editor
+        edited_df = st.data_editor(
+            journal_df.sort_values("timestamp", ascending=False),
+            num_rows="dynamic",
+            use_container_width=True,
+            key="journal_editor"
+        )
+        
+        if not edited_df.equals(journal_df.sort_values("timestamp", ascending=False)):
+            if st.button("💾 Save Edited Log"):
+                conn = get_db_connection()
+                edited_df.to_sql("journal", conn, if_exists="replace", index=False)
+                conn.close()
+                st.success("Log updated successfully!")
+                st.rerun()
+        
+        st.markdown("### 📊 Portfolio P&L Status")
+        
+        # Calculate Realized and Unrealized P&L
         trades = []
+        open_positions = []
         j_sorted = journal_df.sort_values("timestamp")
+        
         for t in j_sorted["ticker"].unique():
             t_df = j_sorted[j_sorted["ticker"] == t]
-            # using 'entry_price' as the action price
             buys = t_df[t_df["action"].isin(["BUY", "SCALE_IN"])]
             sells = t_df[t_df["action"].isin(["SELL", "TRIM"])]
             
-            if not buys.empty and not sells.empty:
+            total_buy_value = buys["entry_price"].sum()
+            total_sell_value = sells["entry_price"].sum()
+            
+            buy_count = len(buys)
+            sell_count = len(sells)
+            
+            if buy_count > 0:
                 avg_buy = buys["entry_price"].mean()
-                avg_sell = sells["entry_price"].mean()
-                if avg_buy > 0:
+                
+                # Check if position is open
+                if buy_count > sell_count:
+                    # Approximation: net 1 position open
+                    open_positions.append({"Ticker": t, "Avg Buy": avg_buy})
+                
+                # Track realized trades if any sells exist
+                if sell_count > 0:
+                    avg_sell = sells["entry_price"].mean()
                     ret_pct = ((avg_sell - avg_buy) / avg_buy) * 100
                     trades.append({"Ticker": t, "Avg Buy": avg_buy, "Avg Sell": avg_sell, "Return (%)": ret_pct})
+
+        realized_tab, unrealized_tab = st.tabs(["Realized P&L", "Open Positions (Live)"])
         
-        if trades:
-            pnl_df = pd.DataFrame(trades).round(2)
-            wins = len(pnl_df[pnl_df["Return (%)"] > 0])
-            total_closed = len(pnl_df)
-            win_rate = (wins / total_closed) * 100
-            
-            mc1, mc2 = st.columns(2)
-            mc1.metric("Closed Trades", total_closed, help="Trades with both BUY and SELL logs.")
-            mc2.metric("Win Rate", f"{win_rate:.1f}%")
-            
-            st.dataframe(pnl_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
-        else:
-            st.info("No closed trades (both BUY and SELL logs for same ticker) found.")
+        with realized_tab:
+            if trades:
+                pnl_df = pd.DataFrame(trades).round(2)
+                wins = len(pnl_df[pnl_df["Return (%)"] > 0])
+                total_closed = len(pnl_df)
+                win_rate = (wins / total_closed) * 100
+                
+                mc1, mc2 = st.columns(2)
+                mc1.metric("Closed Trades", total_closed, help="Trades with both BUY and SELL logs.")
+                mc2.metric("Win Rate", f"{win_rate:.1f}%")
+                
+                st.dataframe(pnl_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
+            else:
+                st.info("No closed trades found.")
+                
+        with unrealized_tab:
+            if open_positions:
+                open_df = pd.DataFrame(open_positions).round(2)
+                with st.spinner("Fetching live prices for open positions..."):
+                    current_prices = fetch_current_prices(open_df["Ticker"].tolist())
+                
+                open_df["Current Price"] = open_df["Ticker"].map(current_prices).round(2)
+                open_df["Unrealized (%)"] = (((open_df["Current Price"] - open_df["Avg Buy"]) / open_df["Avg Buy"]) * 100).round(2)
+                
+                st.dataframe(open_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True)
+            else:
+                st.info("No open positions found.")
 
 if active_tab == "Manual Run":
     st.subheader("⚙️ Manual Scan")
     st.caption("Use this for weekend/on-demand runs. Results are written to history + feature store.")
-    if ui.button("🚀 Run Global Scan", key="btn_run_scan"):
+    if st.button("🚀 Run Global Scan", key="btn_run_scan"):
+        
+        st.info(f"Scan executing using preset: **{st.session_state.preset_selector}**")
+        
         progress_bar = st.progress(0)
         status_text = st.empty()
         
@@ -753,13 +863,13 @@ if active_tab == "Prediction Model":
             bucket_stats[c] = pd.to_numeric(bucket_stats[c], errors="coerce")
             bucket_stats[c] = (bucket_stats[c] * 100).round(1)
         st.markdown("**Score bucket outcomes**")
-        ui.table(data=bucket_stats)
+        st.dataframe(bucket_stats, use_container_width=True)
 
         calibration = model["calibration"].copy()
         calibration["actual_hit_rate"] = pd.to_numeric(calibration["actual_hit_rate"], errors="coerce")
         calibration["actual_hit_rate"] = (calibration["actual_hit_rate"] * 100).round(1)
         st.markdown("**Calibration table**")
-        ui.table(data=calibration)
+        st.dataframe(calibration, use_container_width=True)
 
 if active_tab == "Portfolio Optimizer":
     st.subheader("⚖️ Portfolio Optimizer & Dynamic Sizing")
@@ -774,7 +884,7 @@ if active_tab == "Portfolio Optimizer":
         
     opt_tickers = st.multiselect("Optimization Tickers", latest_df["ticker"].tolist() if not latest_df.empty else default_tickers, default=default_tickers)
     
-    if ui.button("⚡ Optimize Portfolio", key="btn_opt"):
+    if st.button("⚡ Optimize Portfolio", key="btn_opt"):
         if len(opt_tickers) < 2:
             st.error("Please select at least 2 tickers.")
         else:
@@ -792,27 +902,33 @@ if active_tab == "Portfolio Optimizer":
                     
                     st.markdown("### Max Sharpe Ratio Portfolio")
                     col1, col2, col3 = st.columns(3)
-                    with col1: ui.metric_card(title="Annual Return", content=f"{ms['return']*100:.1f}%", description="Expected Yield", key="p1")
-                    with col2: ui.metric_card(title="Volatility", content=f"{ms['volatility']*100:.1f}%", description="Annual Risk", key="p2")
-                    with col3: ui.metric_card(title="Sharpe Ratio", content=f"{ms['sharpe']:.2f}", description="Risk Adjusted Return", key="p3")
+                    with col1:
+                        with st.container(border=True): st.metric("Annual Return", f"{ms['return']*100:.1f}%", help="Expected Yield")
+                    with col2:
+                        with st.container(border=True): st.metric("Volatility", f"{ms['volatility']*100:.1f}%", help="Annual Risk")
+                    with col3:
+                        with st.container(border=True): st.metric("Sharpe Ratio", f"{ms['sharpe']:.2f}", help="Risk Adjusted Return")
                     
                     st.markdown("#### Optimal Position Sizing (Max Sharpe)")
                     weights_df = pd.DataFrame(list(ms['weights'].items()), columns=['Ticker', 'Weight'])
                     weights_df['Weight'] = weights_df['Weight'].apply(lambda x: f"{x*100:.1f}%")
-                    ui.table(data=weights_df)
+                    st.dataframe(weights_df, use_container_width=True)
                     
                     st.divider()
                     
                     st.markdown("### Minimum Volatility Portfolio")
                     col4, col5, col6 = st.columns(3)
-                    with col4: ui.metric_card(title="Annual Return", content=f"{mv['return']*100:.1f}%", description="Expected Yield", key="p4")
-                    with col5: ui.metric_card(title="Volatility", content=f"{mv['volatility']*100:.1f}%", description="Annual Risk", key="p5")
-                    with col6: ui.metric_card(title="Sharpe Ratio", content=f"{mv['sharpe']:.2f}", description="Risk Adjusted Return", key="p6")
+                    with col4:
+                        with st.container(border=True): st.metric("Annual Return", f"{mv['return']*100:.1f}%", help="Expected Yield")
+                    with col5:
+                        with st.container(border=True): st.metric("Volatility", f"{mv['volatility']*100:.1f}%", help="Annual Risk")
+                    with col6:
+                        with st.container(border=True): st.metric("Sharpe Ratio", f"{mv['sharpe']:.2f}", help="Risk Adjusted Return")
                     
                     st.markdown("#### Optimal Position Sizing (Min Volatility)")
                     weights_df2 = pd.DataFrame(list(mv['weights'].items()), columns=['Ticker', 'Weight'])
                     weights_df2['Weight'] = weights_df2['Weight'].apply(lambda x: f"{x*100:.1f}%")
-                    ui.table(data=weights_df2)
+                    st.dataframe(weights_df2, use_container_width=True)
 
 if active_tab == "Alerts Log":
     st.subheader("🔔 Alerts Log")

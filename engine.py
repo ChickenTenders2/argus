@@ -1,3 +1,4 @@
+import sqlite3
 import yfinance as yf
 import pandas as pd
 import logging
@@ -15,6 +16,78 @@ from datetime import datetime, date
 logger = logging.getLogger("Argus.Engine")
 
 CACHE_FILE = "metadata_cache.json"
+DB_FILE = "argus.db"
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_FILE)
+    # Ensure tables exist
+    conn.execute('''CREATE TABLE IF NOT EXISTS memory (
+                        ticker TEXT PRIMARY KEY,
+                        first_seen TEXT,
+                        times_flagged INTEGER,
+                        last_score REAL
+                    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS journal (
+                        timestamp TEXT,
+                        ticker TEXT,
+                        action TEXT,
+                        scan_date TEXT,
+                        entry_price REAL,
+                        position_size_pct REAL,
+                        stop_loss_pct REAL,
+                        take_profit_pct REAL,
+                        notes TEXT
+                    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS features (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                        v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                        tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
+                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS results (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                        v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                        tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
+                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                    )''')
+    conn.commit()
+    return conn
+
+def migrate_csv_to_sqlite():
+    """One-time migration script. Safe to call multiple times."""
+    conn = get_db_connection()
+    c = Config()
+    
+    try:
+        # Check if we've already migrated memory to avoid duplicate inserts
+        db_mem_count = pd.read_sql("SELECT COUNT(*) FROM memory", conn).iloc[0,0]
+        if db_mem_count == 0 and os.path.exists(c.MEMORY_FILE):
+            df = pd.read_csv(c.MEMORY_FILE)
+            df.to_sql("memory", conn, if_exists="append", index=False)
+
+        # Append to journal if journal table is completely empty
+        db_jrnl_count = pd.read_sql("SELECT COUNT(*) FROM journal", conn).iloc[0,0]
+        if db_jrnl_count == 0 and os.path.exists(c.JOURNAL_FILE):
+            df = pd.read_csv(c.JOURNAL_FILE)
+            df.to_sql("journal", conn, if_exists="append", index=False)
+
+        db_feat_count = pd.read_sql("SELECT COUNT(*) FROM features", conn).iloc[0,0]
+        if db_feat_count == 0 and os.path.exists(c.FEATURES_FILE):
+            df = pd.read_csv(c.FEATURES_FILE)
+            df.to_sql("features", conn, if_exists="append", index=False)
+
+        db_res_count = pd.read_sql("SELECT COUNT(*) FROM results", conn).iloc[0,0]
+        if db_res_count == 0 and os.path.exists(c.RESULTS_HISTORY_FILE):
+            df = pd.read_csv(c.RESULTS_HISTORY_FILE)
+            df.to_sql("results", conn, if_exists="append", index=False)
+            
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Migration error: {e}")
+    finally:
+        conn.close()
 
 def get_stock_info(ticker):
     try:
@@ -60,24 +133,32 @@ class Config:
     FEATURES_FILE: str = "argus_feature_history.csv"
     JOURNAL_FILE: str = "argus_journal.csv"
 
-def load_memory(filepath):
+# Always ensure migration happens when engine starts (now safely below Config definition)
+migrate_csv_to_sqlite()
+
+def load_memory(filepath=None):
     try:
-        return pd.read_csv(filepath)
+        conn = get_db_connection()
+        df = pd.read_sql("SELECT * FROM memory", conn)
+        conn.close()
+        if not df.empty:
+            return df
     except:
-        return pd.DataFrame(columns=["ticker", "first_seen", "times_flagged", "last_score"])
+        pass
+    return pd.DataFrame(columns=["ticker", "first_seen", "times_flagged", "last_score"])
 
-def save_memory(df, filepath):
-    df.to_csv(filepath, index=False)
+def save_memory(df, filepath=None):
+    conn = get_db_connection()
+    df.to_sql("memory", conn, if_exists="replace", index=False)
+    conn.close()
 
-def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_file):
+def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_file=None):
     cols = [
         "ticker", "sector", "score", "f_score", "v_score", "m_score", "s_score", "p_score",
         "tier", "price", "mkt_cap_m",
         "reason_count", "scan_date", "scan_timestamp", "run_type",
     ]
     if not results:
-        if not os.path.exists(feature_file):
-            pd.DataFrame(columns=cols).to_csv(feature_file, index=False)
         return
 
     rows = []
@@ -105,33 +186,48 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
             "run_type": run_type,
         })
     df = pd.DataFrame(rows)
-    if os.path.exists(feature_file):
-        existing = pd.read_csv(feature_file)
-        df = pd.concat([existing, df], ignore_index=True)
-    df.to_csv(feature_file, index=False)
+    conn = get_db_connection()
+    df.to_sql("features", conn, if_exists="append", index=False)
+    conn.close()
 
 def _prefilter_tickers(tickers, config):
     """Pre-filter tickers by price and volume before deep scoring."""
+    import concurrent.futures
+
     if not tickers:
         return []
-    batch_hist = yf.download(tickers, period="1mo", group_by="ticker", progress=False, threads=True)
+
+    # Process in batches to avoid overwhelming YF with massively wide requests
+    def _download_batch(batch):
+        return yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=True)
+
+    batch_size = 50
+    batches = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
+    
     valid_tickers = []
-    for t in tickers:
-        try:
-            if isinstance(batch_hist.columns, pd.MultiIndex) and t in batch_hist.columns.get_level_values(0):
-                data = batch_hist[t]
-            elif t in batch_hist.columns:
-                data = batch_hist[t]
-            else:
-                continue
-            if (
-                not data["Close"].dropna().empty
-                and data["Close"].iloc[-1] > config.PRICE_FLOOR
-                and data["Volume"].mean() > config.VOL_FLOOR
-            ):
-                valid_tickers.append(t)
-        except Exception:
-            continue
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(_download_batch, b): b for b in batches}
+        
+        for future in concurrent.futures.as_completed(futures):
+            batch_hist = future.result()
+            for t in futures[future]:
+                try:
+                    if isinstance(batch_hist.columns, pd.MultiIndex) and t in batch_hist.columns.get_level_values(0):
+                        data = batch_hist[t]
+                    elif t in batch_hist.columns:
+                        data = batch_hist[t]
+                    else:
+                        continue
+                    if (
+                        not data["Close"].dropna().empty
+                        and data["Close"].iloc[-1] > config.PRICE_FLOOR
+                        and data["Volume"].mean() > config.VOL_FLOOR
+                    ):
+                        valid_tickers.append(t)
+                except Exception:
+                    continue
+
     return valid_tickers
 
 def _apply_sector_diversity(results, top_n, max_per_sector=3):
@@ -174,6 +270,8 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None)
     Execute Argus scan and return standardized payload.
     This is used by both scheduled runs and Streamlit manual runs.
     """
+    import concurrent.futures
+
     tickers = get_universe()
     memory_df = load_memory(config.MEMORY_FILE)
     scan_date = datetime.now().strftime("%Y-%m-%d")
@@ -185,12 +283,25 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None)
     valid_tickers = _prefilter_tickers(tickers, config)[:scan_limit]
     results = []
     total = len(valid_tickers)
-    for idx, ticker in enumerate(valid_tickers):
-        if progress_callback:
-            progress_callback(ticker, idx, total)
-        pick = score_stock(ticker, memory_df, config, regime_info)
-        if pick:
-            results.append(pick)
+
+    def scan_worker(ticker):
+        try:
+            return score_stock(ticker, memory_df, config, regime_info)
+        except Exception:
+            return None
+
+    # Limit workers to 10 to avoid too many simultaneous requests to Yahoo Finance
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        # submit all tasks
+        future_to_ticker = {executor.submit(scan_worker, t): t for t in valid_tickers}
+        
+        for idx, future in enumerate(concurrent.futures.as_completed(future_to_ticker)):
+            ticker = future_to_ticker[future]
+            if progress_callback:
+                progress_callback(ticker, idx, total)
+            pick = future.result()
+            if pick:
+                results.append(pick)
 
     results.sort(key=lambda x: x["score"], reverse=True)
     results = _apply_sector_diversity(results, top_n=config.TOP_N, max_per_sector=3)
@@ -221,36 +332,31 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None)
 
 def save_results(results, scan_date, scan_timestamp, run_type, latest_file, history_file, write_latest, feature_file=None):
     """
-    Persist scan outputs:
-    - latest_file: full replacement (for latest scheduled run table)
-    - history_file: append-only full history across runs
+    Persist scan outputs
     """
-    base_cols = ["ticker", "sector", "score", "f_score", "v_score", "m_score", "s_score", "p_score", "tier", "reasons", "price", "mkt_cap", "scan_date", "scan_timestamp", "run_type"]
+    conn = get_db_connection()
     if results:
         df = pd.DataFrame(results).assign(
             scan_date=scan_date,
             scan_timestamp=scan_timestamp,
             run_type=run_type,
         )
+        # Handle "reasons" list conversion to string for sqlite
+        if "reasons" in df.columns:
+            df["reasons"] = df["reasons"].apply(lambda x: str(x) if isinstance(x, list) else x)
+        
+        df.to_sql("results", conn, if_exists="append", index=False)
+        
         if write_latest:
+            # To emulate latest_file logic in app.py, we can leave this part writing to CSV 
+            # OR we just rely on latest rows inside sqlite. We will write to latest_file 
+            # to not break app.py immediately, although we will update app.py too.
             df.to_csv(latest_file, index=False)
-        if os.path.exists(history_file):
-            hist = pd.read_csv(history_file)
-            df = pd.concat([hist, df], ignore_index=True)
-        df.to_csv(history_file, index=False)
-    else:
-        if write_latest:
-            pd.DataFrame(columns=base_cols).to_csv(latest_file, index=False)
-        if not os.path.exists(history_file):
-            pd.DataFrame(columns=base_cols).to_csv(history_file, index=False)
-    target_feature_file = feature_file or Config().FEATURES_FILE
-    _append_feature_rows(results, scan_date, scan_timestamp, run_type, target_feature_file)
+    conn.close()
+
+    _append_feature_rows(results, scan_date, scan_timestamp, run_type)
 
 def save_journal_entry(journal_file, entry):
-    cols = [
-        "timestamp", "ticker", "action", "scan_date", "entry_price",
-        "position_size_pct", "stop_loss_pct", "take_profit_pct", "notes",
-    ]
     row = pd.DataFrame([{
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "ticker": entry.get("ticker", ""),
@@ -262,29 +368,36 @@ def save_journal_entry(journal_file, entry):
         "take_profit_pct": entry.get("take_profit_pct", ""),
         "notes": entry.get("notes", ""),
     }])
-    if os.path.exists(journal_file):
-        existing = pd.read_csv(journal_file)
-        row = pd.concat([existing, row], ignore_index=True)
-    row.to_csv(journal_file, index=False)
+    conn = get_db_connection()
+    row.to_sql("journal", conn, if_exists="append", index=False)
+    conn.close()
 
-def load_journal(journal_file):
-    if os.path.exists(journal_file):
-        return pd.read_csv(journal_file)
-    return pd.DataFrame(columns=[
-        "timestamp", "ticker", "action", "scan_date", "entry_price",
-        "position_size_pct", "stop_loss_pct", "take_profit_pct", "notes",
-    ])
+def load_journal(journal_file=None):
+    try:
+        conn = get_db_connection()
+        df = pd.read_sql("SELECT * FROM journal", conn)
+        conn.close()
+        return df
+    except:
+        return pd.DataFrame(columns=[
+            "timestamp", "ticker", "action", "scan_date", "entry_price",
+            "position_size_pct", "stop_loss_pct", "take_profit_pct", "notes",
+        ])
 
-def build_prediction_model(features_file, horizon_days=63, target_return=0.10):
+def build_prediction_model(features_file=None, horizon_days=63, target_return=0.10):
     """
     ML model:
     - Uses historical feature snapshots
     - Computes forward return from first future snapshot >= horizon_days
     - Trains XGBoost classifier if available to predict hit probability
     """
-    if not os.path.exists(features_file):
-        return {"ready": False, "reason": "No feature history yet."}
-    df = pd.read_csv(features_file)
+    try:
+        conn = get_db_connection()
+        df = pd.read_sql("SELECT * FROM features", conn)
+        conn.close()
+    except Exception as e:
+        return {"ready": False, "reason": "No feature history yet or failed to connect."}
+        
     if df.empty:
         return {"ready": False, "reason": "Feature history is empty."}
 
