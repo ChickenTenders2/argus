@@ -28,3 +28,18 @@ ASB (80)
 TCBI (80)
 CNR (75)
 
+--- 2026-04-12 18:00:51 ---
+🤖 *Argus Auto-Scan — 12 Apr 2026*
+Scanned 47 tickers
+
+SM (108)
+DOCN (97)
+VIAV (91)
+AIR (91)
+SLAB (86)
+AGX (86)
+ARWR (86)
+GTLS (80)
+INDV (77)
+KRYS (75)
+
