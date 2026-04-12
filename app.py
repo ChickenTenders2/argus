@@ -11,7 +11,8 @@ from engine import (
     save_journal_entry,
     load_journal,
     get_market_regime,
-    get_db_connection
+    get_db_connection,
+    generate_telegram_message
 )
 import os
 import requests
@@ -223,6 +224,87 @@ def apply_preset():
 
 if "min_score" not in st.session_state:
     st.session_state.min_score = 65
+def nav_to_ticker(t):
+    st.session_state["selected_ticker"] = t
+    st.session_state["main_tabs"] = "Ticker Detail"
+
+def display_cards(df):
+    """Render a DataFrame of picks as visual cards instead of a wide table."""
+    if df.empty:
+        st.info("No picks to display.")
+        return
+        
+    cols = st.columns(3)
+    for i, (_, row) in enumerate(df.iterrows()):
+        with cols[i % 3]:
+            # Instead of a static container, use an expander collapsed by default
+            tier_str = row.get("tier", "")
+            tier_icon = "🟢" if "HIGH CONVICTION" in str(tier_str) else "🟡" if tier_str else ""
+            label = f"{tier_icon} {row['ticker']} · Score: {row['score']}/100"
+            with st.expander(label, expanded=False):
+                if "tier" in row and pd.notna(row["tier"]):
+                    # Highlight 'High Conviction' with a different color if needed
+                    color = "green" if "HIGH CONVICTION" in row["tier"] else "orange"
+                    st.markdown(f"**:{color}[{row['tier']}]**")
+                
+                # Core Financials
+                m1, m2 = st.columns(2)
+                price = row.get("price", 0)
+                mkt_cap = row.get("mkt_cap", "N/A")
+                m1.metric("Price", f"${price:.2f}" if pd.notna(price) else "N/A")
+                m2.metric("Mkt Cap", mkt_cap if pd.notna(mkt_cap) else "N/A")
+                
+                # ML Prob / Returns if available
+                if "prob_upside" in row and pd.notna(row["prob_upside"]):
+                    m3, m4 = st.columns(2)
+                    m3.metric("ML Upside", f"{row['prob_upside']*100:.1f}%" if isinstance(row['prob_upside'], float) else row['prob_upside'])
+                    if "scenario_bull" in row and pd.notna(row["scenario_bull"]):
+                        bull_val = f"+{row['scenario_bull']*100:.1f}%" if isinstance(row['scenario_bull'], float) else row['scenario_bull']
+                        m4.metric("Bull Target", bull_val)
+                        
+                if "Return (%)" in row and pd.notna(row["Return (%)"]):
+                    ret_val = row["Return (%)"]
+                    st.metric("Performance Since Scan", f"{ret_val:+.2f}%", delta=ret_val)
+
+                # Metrics/Reasons display (bullet points or badges)
+                if "reasons" in row and row["reasons"]:
+                    st.markdown("##### Key Metrics")
+                    reasons = row["reasons"]
+                    if isinstance(reasons, str):
+                        if reasons.startswith("["):
+                            try:
+                                reasons = eval(reasons)
+                            except:
+                                reasons = [reasons]
+                        elif " • " in reasons:
+                            reasons = reasons.split(" • ")
+                        else:
+                            reasons = [reasons]
+                    
+                    if isinstance(reasons, list):
+                        # Construct a mini bulletd list
+                        bullets = ""
+                        for r in reasons:
+                            # Try to separate metric name from value for bolding
+                            parts = r.split(" ")
+                            if len(parts) > 1 and parts[-1].replace('%', '').replace('.', '').replace('x', '').isdigit():
+                                name = " ".join(parts[:-1])
+                                val = parts[-1]
+                                bullets += f"• {name} **{val}**  \n"
+                            else:
+                                bullets += f"• {r}  \n"
+                        st.markdown(bullets)
+                    else:
+                        st.markdown(f"• {reasons}")
+                
+                st.button(
+                    "Deep Dive", 
+                    key=f"dd_{row['ticker']}_{i}_{row.get('scan_date', 'temp')}", 
+                    use_container_width=True,
+                    on_click=nav_to_ticker,
+                    args=(row["ticker"],)
+                )
+
 if "horizon_days" not in st.session_state:
     st.session_state.horizon_days = 63
 if "target_return" not in st.session_state:
@@ -345,7 +427,7 @@ if active_tab == "Overview":
                     st.metric("Avg Upside Prob", "N/A", help="ML Projected")
 
         display_cols = [
-            "ticker", "sector", "score", "tier", "price", "mkt_cap",
+            "ticker", "sector", "score", "tier", "reasons", "price", "mkt_cap",
             "prob_upside", "scenario_bear", "scenario_base", "scenario_bull",
             "confidence", "suggested_position_pct", "stop_loss_pct", "take_profit_pct", "entry_style",
         ]
@@ -356,36 +438,61 @@ if active_tab == "Overview":
         
         subset_view = latest_view[[c for c in display_cols if c in latest_view.columns]].copy()
         
-        st.dataframe(
-            subset_view, 
-            use_container_width=True,
-            column_config={
-                "score": st.column_config.ProgressColumn(
-                    "Score",
-                    help="Argus Score Rating",
-                    format="%d",
-                    min_value=0,
-                    max_value=100,
-                ),
-                "prob_upside": st.column_config.ProgressColumn(
-                    "Upside Prob (%)",
-                    help="ML Upside Probability",
-                    format="%.1f%%",
-                    min_value=0,
-                    max_value=100,
-                )
-            }
-        )
+        # Display the visual card grid instead of a flat table
+        display_cards(subset_view)
+        
+        with st.expander("Show Raw Data Table"):
+            # Clean up the reasons column for the table
+            if "reasons" in subset_view.columns:
+                def format_reasons(r):
+                    if isinstance(r, str) and r.startswith("["):
+                        try:
+                            r_list = eval(r)
+                            return " • ".join(r_list)
+                        except:
+                            return r
+                    elif isinstance(r, list):
+                        return " • ".join(r)
+                    return r
+                subset_view["reasons"] = subset_view["reasons"].apply(format_reasons)
+            
+            st.dataframe(
+                subset_view, 
+                use_container_width=True,
+                column_config={
+                    "score": st.column_config.ProgressColumn(
+                        "Score",
+                        help="Argus Score Rating",
+                        format="%d",
+                        min_value=0,
+                        max_value=100,
+                    ),
+                    "prob_upside": st.column_config.ProgressColumn(
+                        "Upside Prob (%)",
+                        help="ML Upside Probability",
+                        format="%.1f%%",
+                        min_value=0,
+                        max_value=100,
+                    ),
+                    "reasons": st.column_config.TextColumn(
+                        "Metrics & Reasons",
+                        help="Fundamental and Technical Drivers",
+                        width="large"
+                    )
+                }
+            )
 
         st.markdown("### 🔍 Stock Deep Dive")
         c1, c2 = st.columns([1, 10])
         with c1:
             diveticker = st.selectbox("Select Ticker", subset_view["ticker"].tolist(), key="deep_dive_selectbox", label_visibility="collapsed")
         with c2:
-            if st.button("Analyze", key="btn_deep_dive_analyze"):
-                st.session_state["selected_ticker"] = st.session_state["deep_dive_selectbox"]
-                st.session_state["main_tabs"] = "Ticker Detail"
-                st.rerun()
+            st.button(
+                "Analyze", 
+                key="btn_deep_dive_analyze",
+                on_click=nav_to_ticker,
+                args=(st.session_state.get("deep_dive_selectbox", ""),)
+            )
 
 if active_tab == "History":
     st.subheader("🗂 History")
@@ -447,10 +554,26 @@ if active_tab == "History":
                     day_df["Current Price"] = day_df["ticker"].map(current_prices).round(2)
                     day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
                     
-            style = day_df.style
-            if "Return (%)" in day_df.columns:
-                style = style.background_gradient(subset=["Return (%)"], cmap="RdYlGn")
-            st.dataframe(style, use_container_width=True)
+            if "reasons" in day_df.columns:
+                def format_reasons(r):
+                    if isinstance(r, str) and r.startswith("["):
+                        try:
+                            return " • ".join(eval(r))
+                        except:
+                            return r
+                    elif isinstance(r, list):
+                        return " • ".join(r)
+                    return r
+                day_df["reasons"] = day_df["reasons"].apply(format_reasons)
+            
+            # Show cards for better readability
+            display_cards(day_df)
+            
+            with st.expander("Show History Table"):
+                style = day_df.style
+                if "Return (%)" in day_df.columns:
+                    style = style.background_gradient(subset=["Return (%)"], cmap="RdYlGn")
+                st.dataframe(style, use_container_width=True)
 
 if active_tab == "Ticker Detail":
     st.subheader("🔎 Ticker Detail")
@@ -588,7 +711,34 @@ if active_tab == "Ticker Detail":
             
             # --- BOTTOM SECTION: Data view & AI ---
             with st.expander("View Raw Scan History Table"):
-                st.dataframe(tdf, use_container_width=True)
+                if "reasons" in tdf.columns:
+                    def format_reasons(r):
+                        if isinstance(r, str) and r.startswith("["):
+                            try:
+                                return " • ".join(eval(r))
+                            except:
+                                return r
+                        elif isinstance(r, list):
+                            return " • ".join(r)
+                        return r
+                    tdf["reasons"] = tdf["reasons"].apply(format_reasons)
+                
+                try:
+                    # Streamlit 1.35+ supports selection events
+                    selection_event = st.dataframe(
+                        tdf, 
+                        use_container_width=True, 
+                        on_select="rerun", 
+                        selection_mode="single-row"
+                    )
+                    if selection_event and hasattr(selection_event, "selection") and selection_event.selection.rows:
+                        selected_idx = selection_event.selection.rows[0]
+                        selected_row = tdf.iloc[[selected_idx]].copy()
+                        st.markdown("##### 📝 Details for Selected Scan")
+                        display_cards(selected_row)
+                except TypeError:
+                    # Fallback for older Streamlit versions
+                    st.dataframe(tdf, use_container_width=True)
 
 @st.dialog("Add Journal Entry")
 def add_journal_entry_dialog(cfg):
@@ -774,7 +924,23 @@ if active_tab == "Manual Run":
                 df_res,
                 ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"],
             )
-            st.dataframe(df_res, use_container_width=True)
+            
+            if "reasons" in df_res.columns:
+                def format_reasons(r):
+                    if isinstance(r, str) and r.startswith("["):
+                        try:
+                            return " • ".join(eval(r))
+                        except:
+                            return r
+                    elif isinstance(r, list):
+                        return " • ".join(r)
+                    return r
+                df_res["reasons"] = df_res["reasons"].apply(format_reasons)
+                
+            display_cards(df_res)
+            
+            with st.expander("Show Raw Discovery Table"):
+                st.dataframe(df_res, use_container_width=True)
 
             st.subheader("High Conviction Charts (Score >= 80)")
             high_conviction = df_res[df_res["tier"] == "🟢 HIGH CONVICTION"]
@@ -794,11 +960,11 @@ if active_tab == "Manual Run":
             st.warning("No tickers met the current criteria.")
 
         if send_to_telegram:
-            top_lines = [f"{r['ticker']} ({r['score']})" for r in sorted(results, key=lambda x: x["score"], reverse=True)]
-            top_text = "\n".join(top_lines) if top_lines else "No qualifying picks."
-            message = (
-                f"👁 *Argus Manual Scan — {datetime.now().strftime('%d %b %Y %H:%M')}*\n"
-                f"Scanned {scanned_count} tickers\n\n{top_text}"
+            message = generate_telegram_message(
+                results, 
+                scanned_count, 
+                title="Argus Manual Scan", 
+                date_str=datetime.now().strftime('%d %b %Y %H:%M')
             )
             delivered = send_telegram_message(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID, message)
             if delivered:

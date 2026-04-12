@@ -265,6 +265,42 @@ def get_market_regime():
         logger.warning(f"Market regime check failed: {e}")
         return {"regime": "Neutral", "multiplier": 1.0, "reason": "Data fetch error"}
 
+def format_pick(pick, memory_df):
+    ticker = pick["ticker"]
+    prev = memory_df[memory_df["ticker"] == ticker]
+    memory_note = ""
+    if not prev.empty:
+        times = int(prev["times_flagged"].values[0])
+        first = prev["first_seen"].values[0]
+        memory_note = f"\n⚡ _Previously flagged {times}x since {first} — signals strengthening_"
+
+    reasons_str = " | ".join(pick["reasons"])
+    
+    return (
+        f"{pick['tier']}\n"
+        f"*{ticker}* — Score: *{pick['score']}/100*{memory_note}\n"
+        f"💰 Price: ${pick['price']} | Cap: {pick['mkt_cap']}\n"
+        f"📊 {reasons_str}\n"
+    )
+
+def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", date_str=None):
+    if not date_str:
+        date_str = datetime.now().strftime("%d %b %Y")
+        
+    memory_df = load_memory()
+    
+    highest = [p for p in results if p["score"] >= 80]
+    high = [p for p in results if p["score"] < 80]
+    
+    formatted_highest = [format_pick(p, memory_df) for p in highest]
+    
+    header = f"👁 *{title} — {date_str}*\n{'─'*30}\n"
+    highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
+    high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
+    footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
+    
+    return header + highest_block + high_block + footer
+
 def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None):
     """
     Execute Argus scan and return standardized payload.

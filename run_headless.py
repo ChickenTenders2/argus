@@ -2,7 +2,7 @@ import sys
 import os
 from datetime import datetime
 import pandas as pd
-from engine import Config, run_scan, save_results
+from engine import Config, run_scan, save_results, generate_telegram_message
 
 def send_telegram_message(token, chat_id, message):
     import requests
@@ -51,11 +51,11 @@ def main():
     print(f"Scan complete. {len(results)} picks found.")
     
     # Construct Message
-    top_lines = [f"{r['ticker']} ({r['score']})" for r in sorted(results, key=lambda x: x["score"], reverse=True)]
-    top_text = "\n".join(top_lines) if top_lines else "No qualifying picks."
-    message = (
-        f"🤖 *Argus Auto-Scan — {datetime.now().strftime('%d %b %Y')}*\n"
-        f"Scanned {scanned_count} tickers\n\n{top_text}"
+    message = generate_telegram_message(
+        results, 
+        scanned_count, 
+        title="Argus Auto-Scan", 
+        date_str=datetime.now().strftime('%d %b %Y')
     )
     
     # Fetch tokens from environment (GitHub Actions) or fallback to config
