@@ -43,3 +43,82 @@ GTLS (80)
 INDV (77)
 KRYS (75)
 
+--- 2026-04-13 12:32:55 ---
+👁 *Argus Auto-Scan — 13 Apr 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+🟢 HIGH CONVICTION
+*MUR* — Score: *108/100*
+⚡ _Previously flagged 10x since 28 Mar 2026 — signals strengthening_
+💰 Price: $38.79 | Cap: $5560M
+📊 Rev growth 302% | Gross margin 76% | FCF positive | P/S 2.1x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +20% | Cap $5560M | 🔁 Persistence bonus | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*KGS* — Score: *97/100*
+⚡ _Previously flagged 5x since 28 Mar 2026 — signals strengthening_
+💰 Price: $60.77 | Cap: $5366M
+📊 Rev growth 323% | Gross margin 63% | FCF positive | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +68% | Cap $5366M | 🔁 Persistence bonus | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*CRC* — Score: *97/100*
+⚡ _Previously flagged 2x since 12 Apr 2026 — signals strengthening_
+💰 Price: $66.55 | Cap: $5905M
+📊 Rev growth 267% | Gross margin 54% | FCF positive | P/S 1.7x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +47% | Cap $5905M | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*MATX* — Score: *97/100*
+⚡ _Previously flagged 4x since 25 Mar 2026 — signals strengthening_
+💰 Price: $171.27 | Cap: $5340M
+📊 Rev growth 276% | FCF positive | P/S 1.6x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +30% | Cap $5340M | 🔁 Persistence bonus | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*AIR* — Score: *97/100*
+⚡ _Previously flagged 4x since 23 Mar 2026 — signals strengthening_
+💰 Price: $120.83 | Cap: $4805M
+📊 Rev growth 362% | FCF positive | P/S 1.5x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +24% | Cap $4805M | 🔁 Persistence bonus | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*MYRG* — Score: *91/100*
+⚡ _Previously flagged 1x since 13 Apr 2026 — signals strengthening_
+💰 Price: $318.26 | Cap: $4946M
+📊 Rev growth 341% | FCF positive | P/S 1.4x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +43% | Cap $4946M | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*ALKS* — Score: *91/100*
+⚡ _Previously flagged 1x since 13 Apr 2026 — signals strengthening_
+💰 Price: $33.36 | Cap: $5559M
+📊 Rev growth 243% | Gross margin 87% | FCF positive | P/S 3.8x | 6mo Momentum | Above 50MA | Above 200MA | Cap $5559M | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*LNTH* — Score: *80/100*
+⚡ _Previously flagged 2x since 12 Apr 2026 — signals strengthening_
+💰 Price: $80.59 | Cap: $5247M
+📊 Rev growth 294% | Gross margin 61% | FCF positive | P/S 3.4x | Above 50MA | Above 200MA | Cap $5247M | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*KRG* — Score: *80/100*
+⚡ _Previously flagged 1x since 13 Apr 2026 — signals strengthening_
+💰 Price: $25.5 | Cap: $5397M
+📊 Rev growth 293% | Gross margin 74% | FCF positive | 6mo Momentum | Above 50MA | Above 200MA | Cap $5397M | Bull Regime Adj
+
+🟢 HIGH CONVICTION
+*SBRA* — Score: *80/100*
+⚡ _Previously flagged 1x since 13 Apr 2026 — signals strengthening_
+💰 Price: $20.46 | Cap: $5159M
+📊 Rev growth 325% | Gross margin 65% | FCF positive | 6mo Momentum | Above 50MA | Above 200MA | Cap $5159M | Bull Regime Adj
+
+*📌 High scoring picks*
+_None today_
+──────────────────────────────
+_Scanned 200 tickers • Top 10 picks shown_
+
+--- 2026-04-13 12:38:17 ---
+👁 *Argus Auto-Scan — 13 Apr 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+_None today_
+──────────────────────────────
+_Scanned 200 tickers • Top 0 picks shown_
+

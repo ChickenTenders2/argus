@@ -194,33 +194,28 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
 
 def _prefilter_tickers(tickers, config, scan_limit=None):
     """Pre-filter tickers by price and volume before deep scoring."""
-    import concurrent.futures
-
     if not tickers:
         return []
 
-    # Process in batches to avoid overwhelming YF with massively wide requests
-    def _download_batch(batch):
-        return yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=False)
-
-    batch_size = 50
-    batches = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
-    
+    batch_size = 100
     valid_tickers = []
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(_download_batch, b): b for b in batches}
-        
-        for future in concurrent.futures.as_completed(futures):
-            batch_hist = future.result()
-            for t in futures[future]:
+    for i in range(0, len(tickers), batch_size):
+        batch = tickers[i:i + batch_size]
+        try:
+            # Let yfinance elegantly handle internal threads safely per batch
+            batch_hist = yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=True)
+            
+            for t in batch:
                 try:
+                    # Parse depending on single vs multi-index return shapes from yfinance
                     if isinstance(batch_hist.columns, pd.MultiIndex) and t in batch_hist.columns.get_level_values(0):
                         data = batch_hist[t]
                     elif t in batch_hist.columns:
                         data = batch_hist[t]
                     else:
                         continue
+                    
                     if (
                         not data["Close"].dropna().empty
                         and data["Close"].iloc[-1] > config.PRICE_FLOOR
@@ -228,11 +223,12 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
                     ):
                         valid_tickers.append(t)
                         if scan_limit and len(valid_tickers) >= scan_limit:
-                            for f in futures:
-                                f.cancel()
                             return valid_tickers
                 except Exception:
                     continue
+        except Exception as e:
+            logger.warning(f"Batch fail during prefilter: {e}")
+            continue
 
     return valid_tickers
 
