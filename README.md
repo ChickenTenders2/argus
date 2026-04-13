@@ -28,7 +28,7 @@ The project is designed to run automatically via local chron or GitHub Actions, 
 *   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI and interactive history tables for professional-grade navigation, metric drill-downs, and scalable data consumption.
 *   **Quantitative Scoring:** Ranks tickers (0-100) using a multi-factor `get_score()` algorithm focusing on revenue growth, margins, technical momentum (50MA, 200MA), and relative strength vs IWM/SPY.
 *   **Deep Dive Integrations:** Seamlessly navigate to a specific ticker via table clicks and interactive callbacks to review technical setups.
-*   **Journal & History:** Built-in logging to write down entry prices, powered by the new Auto-Pilot monitor to protect long-term holds.
+*   **Portfolio Analytics Journal:** Built-in quantitative logbook tracking Total Invested, Net Returns, SPY Benchmark Comparisons, and Sector Exposure Pie Charts. Powered by an Auto-Pilot monitor to protect long-term holds and push SL/TP alerts.
 *   **Telegram Alerts:** Opt-in automated push notifications sending the top tier 'High Conviction' tickers straight to your phone.
 
 ---

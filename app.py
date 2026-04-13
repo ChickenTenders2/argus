@@ -19,8 +19,42 @@ import os
 import requests
 import json
 from datetime import datetime
+import plotly.express as px
 
 PREFS_FILE = "argus_prefs.json"
+
+def get_cached_sector(ticker):
+    try:
+        conn = get_db_connection()
+        sector_df = pd.read_sql("SELECT sector FROM features WHERE ticker = ? ORDER BY id DESC LIMIT 1", conn, params=(ticker,))
+        conn.close()
+        if not sector_df.empty:
+            return sector_df.iloc[0]["sector"]
+    except:
+        pass
+    # Basic fallback to yahoo finance info if totally unwatched
+    try:
+        tkr = yf.Ticker(ticker)
+        return tkr.info.get("sector", "Unknown")
+    except:
+        return "Unknown"
+
+def get_spy_return(start_date_str, end_date_str=None):
+    try:
+        spy = yf.Ticker("SPY")
+        if end_date_str:
+            hist = spy.history(start=start_date_str, end=end_date_str)
+        else:
+            hist = spy.history(start=start_date_str)
+            
+        if hist.empty:
+            return 0.0
+            
+        start_price = hist["Close"].iloc[0]
+        current_price = hist["Close"].iloc[-1]
+        return ((current_price - start_price) / start_price) * 100
+    except:
+        return 0.0
 
 def load_prefs():
     try:
@@ -866,7 +900,10 @@ if active_tab == "Journal":
                 if buy_count > sell_count:
                     # Approximation: net 1 position open
                     net_shares = buys.get("shares", pd.Series([0])).sum() - sells.get("shares", pd.Series([0])).sum()
-                    open_positions.append({"Ticker": t, "Avg Buy": avg_buy, "Shares": net_shares})
+                    first_buy_date = buys["timestamp"].min()
+                    # Ensure first_buy_date is a valid date string
+                    first_buy_date_str = str(first_buy_date)[:10] if pd.notnull(first_buy_date) else datetime.now().strftime("%Y-%m-%d")
+                    open_positions.append({"Ticker": t, "Avg Buy": avg_buy, "Shares": net_shares, "First Date": first_buy_date_str})
                 
                 # Track realized trades if any sells exist
                 if sell_count > 0:
@@ -898,9 +935,52 @@ if active_tab == "Journal":
                     current_prices = fetch_current_prices(open_df["Ticker"].tolist())
                 
                 open_df["Current Price"] = open_df["Ticker"].map(current_prices).round(2)
+                
+                # Portfolio Math
+                open_df["Cost Basis ($)"] = (open_df["Shares"] * open_df["Avg Buy"]).round(2)
+                open_df["Current Value ($)"] = (open_df["Shares"] * open_df["Current Price"]).round(2)
                 open_df["Unrealized (%)"] = (((open_df["Current Price"] - open_df["Avg Buy"]) / open_df["Avg Buy"]) * 100).round(2)
                 
-                st.dataframe(open_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True)
+                # Top Level Analytics
+                total_invested = open_df["Cost Basis ($)"].sum()
+                total_current = open_df["Current Value ($)"].sum()
+                net_return_pct = ((total_current - total_invested) / total_invested * 100) if total_invested > 0 else 0
+                
+                # SPY Benchmark
+                first_entry_date = open_df["First Date"].min()
+                spy_return = get_spy_return(first_entry_date)
+                
+                # Scoreboard UI
+                st.markdown("### 📊 Portfolio Analytics")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total Invested", f"${total_invested:,.2f}")
+                m2.metric("Current Value", f"${total_current:,.2f}")
+                m3.metric("Net Return", f"{net_return_pct:+.2f}%")
+                m4.metric("SPY Benchmark", f"{spy_return:+.2f}%", help=f"S&P 500 Return since earliest active entry ({first_entry_date})")
+                
+                st.divider()
+                
+                # Sector mapping and visualization
+                if total_invested > 0:
+                    with st.spinner("Mapping sectors..."):
+                        open_df["Sector"] = open_df["Ticker"].apply(get_cached_sector)
+                    
+                    sector_totals = open_df.groupby("Sector")["Current Value ($)"].sum().reset_index()
+                    fig = px.pie(sector_totals, values='Current Value ($)', names='Sector', title="Sector Exposure by Dollar Value", hole=0.3)
+                    
+                    ui_col1, ui_col2 = st.columns([1, 1])
+                    with ui_col1:
+                        st.plotly_chart(fig, use_container_width=True)
+                    with ui_col2:
+                        st.markdown("<br><br>", unsafe_allow_html=True) # padding
+                        st.markdown("#### Open Positions")
+                        # Drop some internal cols for cleaner table
+                        display_df = open_df.drop(columns=["First Date", "Sector"])
+                        st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True, hide_index=True)
+                else:
+                    display_df = open_df.drop(columns=["First Date"])
+                    st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True, hide_index=True)
+
             else:
                 st.info("No open positions found.")
                 
@@ -1190,7 +1270,7 @@ if active_tab == "Help":
     * **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate the statistically optimal portfolio sizing using the efficient frontier.
     * **Manual Run:** Instantly run a new global scan based on your sidebar settings. Includes Telegram notification support and Auto-Pilot portfolio monitoring.
     * **History:** Browse historical database scans with interactive tables. Select any row to view a visual card grid of its scoring reasons.
-    * **Journal:** Personal logbook to keep track of buying decisions, entry prices, and position sizing. Powered by the Auto-Pilot monitor for live SL/TP tracking.
+    * **Journal:** Personal logbook featuring a **Live Portfolio Analytics Dashboard**. Track Total Invested, Current Value, Net Return %, and visualize Sector Diversification via interactive pie charts. Benchmarks portfolio performance against the S&P 500 (SPY). Powered by the Auto-Pilot monitor for live SL/TP tracking.
     * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, and calibration accuracy across different market conditions.
     * **Alerts Log:** Record of all automated signals pushed via Telegram.
     * **Prompts:** Curated LLM prompts to assist with deeper external research.
