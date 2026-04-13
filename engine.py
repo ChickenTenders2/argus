@@ -501,8 +501,18 @@ def monitor_portfolio():
         if entry <= 0:
             continue
         
-        sl_price = entry * (1 - (pos["step_loss_pct"] / 100))
-        tp_price = entry * (1 + (pos["take_profit_pct"] / 100))
+        try:
+            step_loss = float(pos.get("step_loss_pct", 0) or 0)
+        except (ValueError, TypeError):
+            step_loss = 0.0
+            
+        try:
+            take_profit = float(pos.get("take_profit_pct", 0) or 0)
+        except (ValueError, TypeError):
+            take_profit = 0.0
+            
+        sl_price = entry * (1 - (step_loss / 100))
+        tp_price = entry * (1 + (take_profit / 100))
         
         pct_move = ((curr_price - entry) / entry) * 100
         
