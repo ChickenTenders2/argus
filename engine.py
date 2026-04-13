@@ -13,6 +13,8 @@ except ImportError:
 from dataclasses import dataclass
 from datetime import datetime, date
 
+from llm import get_sentiment_score
+
 logger = logging.getLogger("Argus.Engine")
 
 CACHE_FILE = "metadata_cache.json"
@@ -283,7 +285,7 @@ def format_pick(pick, memory_df):
         f"📊 {reasons_str}\n"
     )
 
-def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", date_str=None):
+def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", date_str=None, alerts=None):
     if not date_str:
         date_str = datetime.now().strftime("%d %b %Y")
         
@@ -295,11 +297,16 @@ def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", 
     formatted_highest = [format_pick(p, memory_df) for p in highest]
     
     header = f"👁 *{title} — {date_str}*\n{'─'*30}\n"
+    
+    alerts_block = ""
+    if alerts:
+        alerts_block = "*🚨 PORTFOLIO ALERTS*\n" + "\n".join(alerts) + f"\n\n{'─'*30}\n"
+        
     highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
     high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
     footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
     
-    return header + highest_block + high_block + footer
+    return header + alerts_block + highest_block + high_block + footer
 
 def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None):
     """
@@ -419,6 +426,89 @@ def load_journal(journal_file=None):
             "timestamp", "ticker", "action", "scan_date", "entry_price",
             "position_size_pct", "stop_loss_pct", "take_profit_pct", "notes",
         ])
+
+def monitor_portfolio():
+    """
+    Auto-Pilot Monitor:
+    Reads the journal table (active positions), fetches current prices,
+    and checks against Stop-Loss and Take-Profit levels.
+    """
+    alerts = []
+    
+    try:
+        conn = get_db_connection()
+        journal_df = pd.read_sql("SELECT * FROM journal", conn)
+        conn.close()
+    except Exception as e:
+        logger.error(f"Failed to load journal: {e}")
+        return alerts
+    
+    if journal_df.empty:
+        return alerts
+        
+    journal_df["timestamp"] = pd.to_datetime(journal_df["timestamp"], errors="coerce")
+    
+    open_positions = {}
+    for ticker, t_df in journal_df.groupby("ticker"):
+        t_df = t_df.sort_values("timestamp")
+        buys = t_df[t_df["action"].isin(["BUY", "SCALE_IN"])]
+        sells = t_df[t_df["action"].isin(["SELL", "TRIM"])]
+        
+        # If position is completely closed, skip
+        if len(buys) <= len(sells):
+            continue
+            
+        avg_buy = buys["entry_price"].mean()
+        # Take SL/TP from the latest buy logic
+        latest_buy = buys.iloc[-1]
+        sl_pct = float(latest_buy.get("stop_loss_pct", 0) or 5.0)  # Default 5% SL
+        tp_pct = float(latest_buy.get("take_profit_pct", 0) or 20.0) # Default 20% TP
+        
+        open_positions[ticker] = {
+            "avg_buy": avg_buy,
+            "step_loss_pct": sl_pct,
+            "take_profit_pct": tp_pct
+        }
+
+    tickers = list(open_positions.keys())
+    if not tickers:
+        return alerts
+        
+    # Get current prices safely
+    try:
+        if len(tickers) == 1:
+            price_data = yf.download(tickers[0], period="1d", progress=False)
+            current_prices = {tickers[0]: float(price_data["Close"].iloc[-1])}
+        else:
+            price_data = yf.download(tickers, period="1d", group_by="ticker", progress=False)
+            current_prices = {}
+            for t in tickers:
+                if t in price_data.columns.get_level_values(0):
+                    current_prices[t] = float(price_data[t]["Close"].iloc[-1])
+                elif t in price_data.columns:
+                    current_prices[t] = float(price_data["Close"].iloc[-1])
+    except Exception as e:
+        logger.warning(f"Failed to fetch current prices for monitor: {e}")
+        return alerts
+
+    for ticker, pos in open_positions.items():
+        if ticker not in current_prices:
+            continue
+            
+        curr_price = float(current_prices[ticker])
+        entry = float(pos["avg_buy"])
+        
+        sl_price = entry * (1 - (pos["step_loss_pct"] / 100))
+        tp_price = entry * (1 + (pos["take_profit_pct"] / 100))
+        
+        pct_move = ((curr_price - entry) / entry) * 100
+        
+        if curr_price <= sl_price:
+            alerts.append(f"🔴 *STOP LOSS BROKEN:* {ticker} hit ${curr_price:.2f} (Entry: ${entry:.2f}, {pct_move:.1f}%)")
+        elif curr_price >= tp_price:
+            alerts.append(f"✅ *TAKE PROFIT REACHED:* {ticker} hit ${curr_price:.2f} (Entry: ${entry:.2f}, +{pct_move:.1f}%)")
+
+    return alerts
 
 def build_prediction_model(features_file=None, horizon_days=63, target_return=0.10):
     """
@@ -864,6 +954,13 @@ def score_stock(ticker, memory_df, config, regime_info=None):
             reasons.append(f"{regime_info['regime']} Regime Adj")
             
         score = int(round(score))
+
+        # 7. AI News Sentiment Score (Only if preliminary math score is decent to save API)
+        if score >= 60 and config.GROQ_API_KEY:
+            sentiment = get_sentiment_score(ticker, config.GROQ_API_KEY)
+            if sentiment != 0:
+                score += sentiment
+                reasons.append(f"AI Sentiment {sentiment:+d}")
 
         if score < config.MIN_SCORE:
             return None

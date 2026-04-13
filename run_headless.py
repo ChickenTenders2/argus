@@ -2,7 +2,7 @@ import sys
 import os
 from datetime import datetime
 import pandas as pd
-from engine import Config, run_scan, save_results, generate_telegram_message
+from engine import Config, run_scan, save_results, generate_telegram_message, monitor_portfolio
 
 def send_telegram_message(token, chat_id, message):
     import requests
@@ -50,12 +50,17 @@ def main():
     
     print(f"Scan complete. {len(results)} picks found.")
     
+    # Run Portfolio Auto-Pilot Monitor
+    print("Running portfolio auto-monitor...")
+    alerts = monitor_portfolio()
+    
     # Construct Message
     message = generate_telegram_message(
         results, 
         scanned_count, 
         title="Argus Auto-Scan", 
-        date_str=datetime.now().strftime('%d %b %Y')
+        date_str=datetime.now().strftime('%d %b %Y'),
+        alerts=alerts
     )
     
     # Fetch tokens from environment (GitHub Actions) or fallback to config

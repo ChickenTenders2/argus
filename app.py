@@ -12,11 +12,33 @@ from engine import (
     load_journal,
     get_market_regime,
     get_db_connection,
-    generate_telegram_message
+    generate_telegram_message,
+    monitor_portfolio
 )
 import os
 import requests
+import json
 from datetime import datetime
+
+PREFS_FILE = "argus_prefs.json"
+
+def load_prefs():
+    try:
+        with open(PREFS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {"send_to_telegram": False}
+
+def save_prefs(prefs):
+    with open(PREFS_FILE, "w") as f:
+        json.dump(prefs, f)
+
+if "prefs" not in st.session_state:
+    st.session_state.prefs = load_prefs()
+
+def update_telegram_pref():
+    st.session_state.prefs["send_to_telegram"] = st.session_state.send_to_telegram_cb
+    save_prefs(st.session_state.prefs)
 
 st.set_page_config(page_title="Argus Dashboard", layout="wide")
 st.title("👁 Argus Investment Workstation")
@@ -350,7 +372,12 @@ with st.sidebar:
         max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct")
 
     st.divider()
-    send_to_telegram = st.checkbox("Send manual run to Telegram", value=False)
+    send_to_telegram = st.checkbox(
+        "Send manual run to Telegram", 
+        value=st.session_state.prefs.get("send_to_telegram", False), 
+        key="send_to_telegram_cb", 
+        on_change=update_telegram_pref
+    )
 
     config = Config(MIN_SCORE=min_score, PRICE_FLOOR=price_floor, VOL_FLOOR=vol_floor)
 
@@ -960,11 +987,13 @@ if active_tab == "Manual Run":
             st.warning("No tickers met the current criteria.")
 
         if send_to_telegram:
+            alerts = monitor_portfolio()
             message = generate_telegram_message(
                 results, 
                 scanned_count, 
                 title="Argus Manual Scan", 
-                date_str=datetime.now().strftime('%d %b %Y %H:%M')
+                date_str=datetime.now().strftime('%d %b %Y %H:%M'),
+                alerts=alerts
             )
             delivered = send_telegram_message(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID, message)
             if delivered:
