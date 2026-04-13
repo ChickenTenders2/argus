@@ -11,25 +11,24 @@ The project is designed to run automatically via local chron or GitHub Actions, 
 1. **Phase 1: ML Prediction Model (XGBoost)**
    - Learns from accumulating scheduled scans (feature snapshots).
    - Generates forward predictions (e.g., probability of hitting +10% in 63 days) based on Brier scoring and historical hit rates.
-2. **Phase 2: LLM Qualitative Analysis (Groq Llama 3.1)**
+2. **Phase 2: Live AI News Sentiment Scoring (Groq Llama 3.1)**
    - Generates qualitative, actionable AI investment theses.
-   - Cross-references the quantitative Argus score and fundamental reasons with the latest `yfinance` company news.
+   - Cross-references the quantitative Argus score and fundamentals with live `yfinance` news headlines to dynamically boost or penalize final scores (up to +/- 15 points) based on current sentiment.
 3. **Phase 3: Macro Market Regime Filter**
    - Dynamically categorizes the broader market into Bull, Bear, Neutral, or Extreme Fear regimes based on the S&P 500 (SPY) moving averages and the ^VIX.
    - Multiplies and adjusts individual stock scores to protect capital in bear markets and press advantages in bull markets.
-4. **Phase 4: Portfolio Optimizer & Sizing**
-   - Uses 1-year historical correlations for the highest conviction tickers to compute Mean-Variance optimizations.
-   - Outputs dynamic position sizing percentages for Max Sharpe Ratio and Minimum Volatility portfolios.
-   - Auto-calculates strict Take-Profit and Stop-Loss limits per trade.
+4. **Phase 4: Portfolio Optimizer & Auto-Pilot Monitor**
+   - Uses 1-year historical correlations for highest conviction tickers to compute Mean-Variance optimizations.
+   - **Auto-Pilot Monitor:** Tracks logged `Journal` entries against real-time market prices, raising alerts and generating Telegram notifications instantly if strict Take-Profit or Stop-Loss limits are hit.
 
 ---
 
 ## 🚀 Features
 
-*   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit with `streamlit-shadcn-ui` components and `plotly` interactive charts for professional-grade navigation, metric cards, and scalable data tables.
+*   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI and interactive history tables for professional-grade navigation, metric drill-downs, and scalable data consumption.
 *   **Quantitative Scoring:** Ranks tickers (0-100) using a multi-factor `get_score()` algorithm focusing on revenue growth, margins, technical momentum (50MA, 200MA), and relative strength vs IWM/SPY.
-*   **Execution Strategy:** Clear "Buy/Sell" text generation with precise stop loss/take profit recommendations based on recent price volatility.
-*   **Journal & History:** Built-in logging to write down entry prices and review past performances.
+*   **Deep Dive Integrations:** Seamlessly navigate to a specific ticker via table clicks and interactive callbacks to review technical setups.
+*   **Journal & History:** Built-in logging to write down entry prices, powered by the new Auto-Pilot monitor to protect long-term holds.
 *   **Telegram Alerts:** Opt-in automated push notifications sending the top tier 'High Conviction' tickers straight to your phone.
 
 ---
@@ -79,11 +78,11 @@ The workstation will launch in your browser at `http://localhost:8502`.
 
 ## 📚 Dashboard Navigation
 
-1. **Overview:** Daily snapshot of your most recent scan outputs and current Macro Market Regime.
-2. **Ticker Detail:** Deep dive into Plotly charts, quantitative execution guidance, and generate qualitative AI investment thesis reports.
+1. **Overview:** Daily snapshot of your most recent scan outputs and current Macro Market Regime, using interactive visual metric cards.
+2. **Ticker Detail:** Deep dive into Plotly charts, quantitative execution guidance, and generate qualitative AI investment thesis reports via dynamic `nav_to_ticker` callbacks.
 3. **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate Max Sharpe allocations using Markowitz efficient frontier logic.
-4. **Manual Run:** Instantly trigger a new global algorithmic scan across the market using your sidebar settings.
-5. **History & Journal:** Review historic databases to see how the engine's ratings mature over time, and log your personal swing trades.
+4. **Manual Run:** Instantly trigger a new global algorithmic scan across the market using your sidebar settings, and evaluate **Auto-Pilot** alerts.
+5. **History & Journal:** Review historic databases with robust on-click UI rendering, and log your personal swing trades tightly monitored against live trigger constraints.
 6. **Prediction Model:** ML diagnostics reviewing XGBoost hit rates across thousands of accumulated past predictions.
 
 ---

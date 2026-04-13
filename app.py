@@ -1155,18 +1155,20 @@ if active_tab == "Help":
     st.markdown('''
     ### Phase & Capabilities Overview
     * **Phase 1: ML Prediction Model:** Uses XGBoost to evaluate hit probabilities based on the accumulation of historical features.
-    * **Phase 2: LLM Qualitative Analysis:** Connects to the Groq API (Llama 3.1) to cross-reference quantitative screening scores with the latest financial news for an actionable AI thesis.
+    * **Phase 2: Live AI News Sentiment Scoring:** Connects to the Groq API (Llama 3.1) to dynamically read live news headlines and adjust the quantitative score (up to +/- 15 points) based on real-time sentiment.
     * **Phase 3: Macro Market Regime Filter:** Dynamically adjusts stock scores based on SPY moving averages and the VIX (e.g., boosting scores in Bull markets, penalizing in Bear markets).
-    * **Phase 4: Portfolio Optimizer:** Uses 1-year historical correlations for the highest conviction tickers to compute Max Sharpe and Minimum Volatility weightings.
+    * **Phase 4: Portfolio Optimizer & Auto-Pilot Monitor:** 
+        * Uses 1-year historical correlations to compute optimal portfolio weightings.
+        * Features an **Active Portfolio Monitor** that tracks your logged `Journal` entries against live market prices, automatically triggering alerts when Stop-Loss (SL) or Take-Profit (TP) levels are breached.
     
     ---
     ### Pages Overview
-    * **Overview:** Snapshot of the latest scan results, showing the current macro Market Regime and top stock picks.
+    * **Overview:** Snapshot of the latest scan results with interactive visual metric cards. View the current macro Market Regime and top stock picks.
     * **Ticker Detail:** Deep dive into specific tickers. Evaluate Plotly interactive price charts, quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq).
     * **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate the statistically optimal portfolio sizing using the efficient frontier.
-    * **Manual Run:** Instantly run a new global scan based on your sidebar settings. Includes Telegram notification support.
-    * **History:** Browse historical database scans to see how scores and market conditions have trended over time.
-    * **Journal:** Personal logbook to keep track of buying decisions, entry prices, and position sizing.
+    * **Manual Run:** Instantly run a new global scan based on your sidebar settings. Includes Telegram notification support and Auto-Pilot portfolio monitoring.
+    * **History:** Browse historical database scans with interactive tables. Select any row to view a visual card grid of its scoring reasons.
+    * **Journal:** Personal logbook to keep track of buying decisions, entry prices, and position sizing. Powered by the Auto-Pilot monitor for live SL/TP tracking.
     * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, and calibration accuracy across different market conditions.
     * **Alerts Log:** Record of all automated signals pushed via Telegram.
     * **Prompts:** Curated LLM prompts to assist with deeper external research.
