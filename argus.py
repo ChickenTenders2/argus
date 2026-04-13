@@ -4,7 +4,7 @@ import requests
 import logging
 from datetime import datetime
 from fmp_fetch import run_fmp_enrichment
-from engine import Config, run_scan, save_results
+from engine import Config, run_scan, save_results, load_memory, monitor_portfolio
 
 try:
     from llm import generate_ai_thesis
@@ -135,7 +135,12 @@ def main():
 
     # ── Build & send Telegram message ──
     today_str = datetime.now().strftime("%d %b %Y")
-    memory_df = pd.read_csv(config.MEMORY_FILE)
+    
+    try:
+        memory_df = load_memory(config.MEMORY_FILE)
+    except Exception:
+        memory_df = pd.DataFrame(columns=["ticker"])
+        
     highest = [p for p in results if p["score"] >= 80]
     high = [p for p in results if p["score"] < 80]
     
@@ -153,11 +158,17 @@ def main():
         formatted_highest.append(format_pick(p, memory_df, ai_note))
 
     header = f"👁 *Argus Daily Scan — {today_str}*\n{'─'*30}\n"
+    
+    alerts = monitor_portfolio()
+    alerts_block = ""
+    if alerts:
+        alerts_block = "*🚨 PORTFOLIO ALERTS*\n" + "\n".join(alerts) + f"\n\n{'─'*30}\n"
+        
     highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
     high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
     footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
     body = highest_block + high_block
-    send_telegram(header + body + footer)
+    send_telegram(header + alerts_block + body + footer)
     
     # FMP enrichment is intentionally disabled — enrichment runs separately
     # via fmp_fetch.py to avoid blocking the nightly scan Action.
