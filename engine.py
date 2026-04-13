@@ -192,7 +192,7 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
     df.to_sql("features", conn, if_exists="append", index=False)
     conn.close()
 
-def _prefilter_tickers(tickers, config):
+def _prefilter_tickers(tickers, config, scan_limit=None):
     """Pre-filter tickers by price and volume before deep scoring."""
     import concurrent.futures
 
@@ -227,6 +227,10 @@ def _prefilter_tickers(tickers, config):
                         and data["Volume"].mean() > config.VOL_FLOOR
                     ):
                         valid_tickers.append(t)
+                        if scan_limit and len(valid_tickers) >= scan_limit:
+                            for f in futures:
+                                f.cancel()
+                            return valid_tickers
                 except Exception:
                     continue
 
@@ -323,7 +327,7 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None)
     regime_info = get_market_regime()
     logger.info(f"Market Regime: {regime_info['regime']} ({regime_info['reason']})")
 
-    valid_tickers = _prefilter_tickers(tickers, config)[:scan_limit]
+    valid_tickers = _prefilter_tickers(tickers, config, scan_limit=scan_limit)
     results = []
     total = len(valid_tickers)
 
@@ -994,7 +998,7 @@ def get_universe():
         tickers = [str(t).strip() for t in tickers if isinstance(t, str) and 1 < len(str(t).strip()) < 6 and str(t).strip().isalpha()]
         if len(tickers) > 50:
             logger.info(f"IWM download success: {len(tickers)} tickers")
-            return tickers[:300]
+            return tickers
         raise ValueError("Too few tickers parsed")
     except Exception as e:
         logger.warning(f"IWM download failed: {e}")
@@ -1009,7 +1013,7 @@ def get_universe():
                     tickers = [str(t).strip() for t in tickers if 1 < len(str(t).strip()) < 6]
                     if len(tickers) > 50:
                         logger.info(f"Wikipedia success: {len(tickers)} tickers")
-                        return tickers[:300]
+                        return tickers
         raise ValueError("No ticker column found")
     except Exception as e:
         logger.warning(f"Wikipedia failed: {e}")
