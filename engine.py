@@ -201,7 +201,7 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
 
     # Process in batches to avoid overwhelming YF with massively wide requests
     def _download_batch(batch):
-        return yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=True)
+        return yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=False)
 
     batch_size = 50
     batches = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
