@@ -498,6 +498,9 @@ def monitor_portfolio():
         curr_price = float(current_prices[ticker])
         entry = float(pos["avg_buy"])
         
+        if entry <= 0:
+            continue
+        
         sl_price = entry * (1 - (pos["step_loss_pct"] / 100))
         tp_price = entry * (1 + (pos["take_profit_pct"] / 100))
         
