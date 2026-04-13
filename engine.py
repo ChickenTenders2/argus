@@ -36,10 +36,16 @@ def get_db_connection():
                         scan_date TEXT,
                         entry_price REAL,
                         position_size_pct REAL,
+                        shares REAL,
                         stop_loss_pct REAL,
                         take_profit_pct REAL,
                         notes TEXT
                     )''')
+    try:
+        conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
+    except:
+        pass
+        
     conn.execute('''CREATE TABLE IF NOT EXISTS features (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         ticker TEXT, sector TEXT, score REAL, f_score REAL,
@@ -407,6 +413,7 @@ def save_journal_entry(journal_file, entry):
         "scan_date": entry.get("scan_date", ""),
         "entry_price": entry.get("entry_price", ""),
         "position_size_pct": entry.get("position_size_pct", ""),
+        "shares": entry.get("shares", ""),
         "stop_loss_pct": entry.get("stop_loss_pct", ""),
         "take_profit_pct": entry.get("take_profit_pct", ""),
         "notes": entry.get("notes", ""),
@@ -424,7 +431,7 @@ def load_journal(journal_file=None):
     except:
         return pd.DataFrame(columns=[
             "timestamp", "ticker", "action", "scan_date", "entry_price",
-            "position_size_pct", "stop_loss_pct", "take_profit_pct", "notes",
+            "position_size_pct", "shares", "stop_loss_pct", "take_profit_pct", "notes",
         ])
 
 def monitor_portfolio():

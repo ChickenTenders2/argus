@@ -775,10 +775,11 @@ def add_journal_entry_dialog(cfg):
         journal_action = col2.selectbox("Action", ["BUY", "PASS", "SELL", "SCALE_IN", "TRIM"])
         journal_scan_date = col3.date_input("Bought Date", value=datetime.now())
         
-        col4, col5, col6 = st.columns(3)
+        col4, col5, col6, col7 = st.columns(4)
         entry_price = col4.number_input("Entry price", min_value=0.0, value=0.0)
-        stop_loss_pct = col5.number_input("Stop loss %", min_value=0.0, max_value=100.0, value=8.0)
-        take_profit_pct = col6.number_input("Take profit %", min_value=0.0, max_value=300.0, value=25.0)
+        shares = col5.number_input("Shares", min_value=0.0, value=0.0, step=1.0)
+        stop_loss_pct = col6.number_input("Stop loss %", min_value=0.0, max_value=100.0, value=8.0)
+        take_profit_pct = col7.number_input("Take profit %", min_value=0.0, max_value=300.0, value=25.0)
         
         position_size_pct = None
         if st.session_state.get("enable_journal_advanced"):
@@ -800,6 +801,7 @@ def add_journal_entry_dialog(cfg):
                         "action": journal_action,
                         "scan_date": str(journal_scan_date),
                         "entry_price": entry_price,
+                        "shares": shares,
                         "position_size_pct": position_size_pct if position_size_pct is not None else 0.0,
                         "stop_loss_pct": stop_loss_pct,
                         "take_profit_pct": take_profit_pct,
@@ -863,7 +865,8 @@ if active_tab == "Journal":
                 # Check if position is open
                 if buy_count > sell_count:
                     # Approximation: net 1 position open
-                    open_positions.append({"Ticker": t, "Avg Buy": avg_buy})
+                    net_shares = buys.get("shares", pd.Series([0])).sum() - sells.get("shares", pd.Series([0])).sum()
+                    open_positions.append({"Ticker": t, "Avg Buy": avg_buy, "Shares": net_shares})
                 
                 # Track realized trades if any sells exist
                 if sell_count > 0:
