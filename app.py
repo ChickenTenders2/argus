@@ -900,6 +900,25 @@ if active_tab == "Journal":
                 st.dataframe(open_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True)
             else:
                 st.info("No open positions found.")
+                
+        st.markdown("---")
+        st.markdown("### 🗑️ Remove Ticker Completely")
+        st.write("Permanently delete ALL journal entries and monitoring for a specific ticker.")
+        
+        del_col1, del_col2 = st.columns([3, 1], vertical_alignment="bottom")
+        with del_col1:
+            ticker_to_delete = st.selectbox("Select Ticker to Delete", [""] + sorted(journal_df["ticker"].unique().tolist()), key="del_ticker")
+        with del_col2:
+            if st.button("Delete All Logs", help="This action cannot be undone.", use_container_width=True):
+                if ticker_to_delete:
+                    conn = get_db_connection()
+                    conn.execute("DELETE FROM journal WHERE ticker = ?", (ticker_to_delete,))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"Successfully deleted {ticker_to_delete} from the Journal!")
+                    st.rerun()
+                else:
+                    st.error("Please select a ticker.")
 
 if active_tab == "Manual Run":
     st.subheader("⚙️ Manual Scan")
