@@ -55,10 +55,13 @@ def get_db_connection():
                             take_profit_pct REAL,
                             notes TEXT
                         )'''))
+        conn.commit()
+        
         try:
             conn.execute(text("ALTER TABLE journal ADD COLUMN shares REAL"))
+            conn.commit()
         except:
-            pass
+            conn.rollback()
             
         conn.execute(text('''CREATE TABLE IF NOT EXISTS features (
                             id SERIAL PRIMARY KEY,
@@ -99,8 +102,11 @@ def get_db_connection():
                             take_profit_pct REAL,
                             notes TEXT
                         )''')
+        conn.commit()
+        
         try:
             conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
+            conn.commit()
         except:
             pass
             
