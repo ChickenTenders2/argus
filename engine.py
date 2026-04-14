@@ -175,26 +175,51 @@ def migrate_csv_to_sqlite():
     finally:
         conn.close()
 
+import threading
+_cache_lock = threading.Lock()
+
 def get_stock_info(ticker):
     try:
         today = date.today().isoformat()
-        if os.path.exists(CACHE_FILE):
-            with open(CACHE_FILE, "r") as f:
-                raw = json.load(f)
-            cache = {k: v for k, v in raw.items() if v.get("date") == today}
-        else:
-            cache = {}
-
         date_str = datetime.now().strftime("%Y-%m-%d")
+        
+        with _cache_lock:
+            if os.path.exists(CACHE_FILE):
+                try:
+                    with open(CACHE_FILE, "r") as f:
+                        raw = json.load(f)
+                except Exception:
+                    raw = {} # Recover from corruption
+                cache = {k: v for k, v in raw.items() if v.get("date") == today}
+            else:
+                cache = {}
 
-        if ticker in cache and cache[ticker].get("date") == date_str:
-            return cache[ticker]["data"]
+            if ticker in cache and cache[ticker].get("date") == date_str:
+                return cache[ticker]["data"]
 
-        info = yf.Ticker(ticker).info
-        cache[ticker] = {"date": date_str, "data": info}
-        pruned = {k: v for k, v in cache.items() if v.get("date") == today}
-        with open(CACHE_FILE, "w") as f:
-            json.dump(pruned, f)
+        # Fetch outside the lock so we don't serialize slow network requests unnecessarily!
+        try:
+            info = yf.Ticker(ticker).info
+        except:
+            return {}
+            
+        with _cache_lock:
+            # Re-read cache to ensure we don't overwrite other threads that just finished
+            if os.path.exists(CACHE_FILE):
+                try:
+                    with open(CACHE_FILE, "r") as f:
+                        raw = json.load(f)
+                except Exception:
+                    raw = {}
+            else:
+                raw = {}
+                
+            raw[ticker] = {"date": date_str, "data": info}
+            pruned = {k: v for k, v in raw.items() if v.get("date") == today}
+            
+            with open(CACHE_FILE, "w") as f:
+                json.dump(pruned, f)
+                
         return info
     except Exception as e:
         logger.warning(f"Failed to fetch or cache info for {ticker}: {e}")
