@@ -1,5 +1,6 @@
 import sqlite3
 import yfinance as yf
+
 import pandas as pd
 import logging
 import os
@@ -314,7 +315,7 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
         batch = tickers[i:i + batch_size]
         try:
             # Let yfinance elegantly handle internal threads safely per batch
-            batch_hist = yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=True)
+            batch_hist = yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=False)
             
             for t in batch:
                 try:
@@ -444,12 +445,14 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None)
 
     def scan_worker(ticker):
         try:
+            import time
+            time.sleep(0.7)
             return score_stock(ticker, memory_df, config, regime_info)
         except Exception:
             return None
 
     # Limit workers to 10 to avoid too many simultaneous requests to Yahoo Finance
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # submit all tasks
         future_to_ticker = {executor.submit(scan_worker, t): t for t in valid_tickers}
         
@@ -497,8 +500,7 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
         df = pd.DataFrame(results).assign(
             scan_date=scan_date,
             scan_timestamp=scan_timestamp,
-            run_type=run_type,
-        )
+            run_type=run_type)
         # Handle "reasons" list conversion to string for sqlite
         if "reasons" in df.columns:
             df["reasons"] = df["reasons"].apply(lambda x: str(x) if isinstance(x, list) else x)
@@ -749,8 +751,7 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
             prob=("pred_prob", "mean"),
             bear=("fwd_return", lambda s: s.quantile(0.2)),
             base=("fwd_return", lambda s: s.quantile(0.5)),
-            bull=("fwd_return", lambda s: s.quantile(0.8)),
-        )
+            bull=("fwd_return", lambda s: s.quantile(0.8)))
         .reset_index()
     )
     bucket_stats = bucket_stats.rename(columns={"mock_score_bucket": "score_bucket"})
