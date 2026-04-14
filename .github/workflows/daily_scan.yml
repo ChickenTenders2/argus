@@ -3,7 +3,7 @@ name: Argus Daily Auto-Scan
 on:
   schedule:
     # Runs at 21:00 UTC (roughly Market Close in US) Monday-Friday
-    - cron: '0 21 * * 1-5'
+    - cron: '0 8 * * *'
   workflow_dispatch: # Allows you to manually click "Run workflow" in GitHub UI
 
 jobs:
