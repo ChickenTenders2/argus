@@ -199,6 +199,7 @@ class Config:
     MIN_SCORE: int = 65
     TOP_N: int = 10
     PRICE_FLOOR: float = 2.0
+    PRICE_CEILING: float = None
     VOL_FLOOR: int = 200000
     RESULTS_FILE: str = "argus_results.csv"
     RESULTS_HISTORY_FILE: str = "argus_results_history.csv"
@@ -286,9 +287,11 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
                     else:
                         continue
                     
+                    
                     if (
                         not data["Close"].dropna().empty
                         and data["Close"].iloc[-1] > config.PRICE_FLOOR
+                        and (config.PRICE_CEILING is None or data["Close"].iloc[-1] <= config.PRICE_CEILING)
                         and data["Volume"].mean() > config.VOL_FLOOR
                     ):
                         valid_tickers.append(t)

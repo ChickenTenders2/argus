@@ -190,6 +190,7 @@ def send_telegram_message(token, chat_id, message):
 
 def apply_preset():
     preset = st.session_state.preset_selector
+    st.session_state.price_ceiling = 0.0
     if preset == "High Conviction":
         st.session_state.preset_desc = "The opposite of wide scanning — ultra-strict score filter to surface only the absolute best setups."
         st.session_state.min_score = 90
@@ -271,6 +272,17 @@ def apply_preset():
         st.session_state.max_position_pct = 5.00
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
+        st.session_state.price_ceiling = 0.0
+    elif preset == "Penny Stock High Risk ($1-$10)":
+        st.session_state.preset_desc = "Extremely high risk, high reward plays constrained to penny stocks between $1 and $10."
+        st.session_state.min_score = 60
+        st.session_state.horizon_days = 21
+        st.session_state.target_return = 50
+        st.session_state.risk_per_trade_pct = 2.0
+        st.session_state.max_position_pct = 5.00
+        st.session_state.vol_floor = 100000
+        st.session_state.price_floor = 1.0
+        st.session_state.price_ceiling = 10.0
     elif preset == "Default":
         st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
         st.session_state.min_score = 65
@@ -280,6 +292,10 @@ def apply_preset():
         st.session_state.max_position_pct = 8.00
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
+        st.session_state.price_ceiling = 0.0
+
+if "price_ceiling" not in st.session_state:
+    st.session_state.price_ceiling = 0.0
 
 if "min_score" not in st.session_state:
     st.session_state.min_score = 65
@@ -398,6 +414,7 @@ with st.sidebar:
 
     with st.expander("Advanced Filters & Constraints"):
         price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor")
+        price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling")
         vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor")
 
     with st.expander("ML Prediction Horizons"):
@@ -416,7 +433,7 @@ with st.sidebar:
         on_change=update_telegram_pref
     )
 
-    config = Config(MIN_SCORE=min_score, PRICE_FLOOR=price_floor, VOL_FLOOR=vol_floor)
+    config = Config(MIN_SCORE=min_score, PRICE_FLOOR=price_floor, PRICE_CEILING=(price_ceiling if price_ceiling > 0 else None), VOL_FLOOR=vol_floor)
 
 model = build_prediction_model(
     features_file=config.FEATURES_FILE,
