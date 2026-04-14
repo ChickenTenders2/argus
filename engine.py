@@ -22,110 +22,124 @@ logger = logging.getLogger("Argus.Engine")
 CACHE_FILE = "metadata_cache.json"
 DB_FILE = "argus.db"
 
+_DB_ENGINE = None
+_DB_INITIALIZED = False
+_SQLITE_CONN = None
+
 def get_db_connection():
+    global _DB_ENGINE, _DB_INITIALIZED, _SQLITE_CONN
     db_url = os.environ.get("DATABASE_URL")
     
     if db_url:
         import sqlalchemy
         
-        # Neon/Supabase often require this exact schema protocol for psycopg2:
-        if db_url.startswith("postgres://"):
-            db_url = db_url.replace("postgres://", "postgresql://", 1)
+        if _DB_ENGINE is None:
+            # Neon/Supabase often require this exact schema protocol for psycopg2:
+            if db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql://", 1)
+            # Add pool sizing for Streamlit multithreading optimization
+            _DB_ENGINE = sqlalchemy.create_engine(db_url, pool_size=5, max_overflow=10, pool_pre_ping=True)
             
-        sql_engine = create_engine(db_url, pool_pre_ping=True)
-        # We return the raw connection for backwards compatibility with pandas.read_sql & raw executes
-        conn = sql_engine.connect()
+        conn = _DB_ENGINE.connect()
         
-        # Postgres-compatible schema creation
-        conn.execute(text('''CREATE TABLE IF NOT EXISTS memory (
-                            ticker TEXT PRIMARY KEY,
-                            first_seen TEXT,
-                            times_flagged INTEGER,
-                            last_score REAL
-                        )'''))
-        conn.execute(text('''CREATE TABLE IF NOT EXISTS journal (
-                            timestamp TEXT,
-                            ticker TEXT,
-                            action TEXT,
-                            scan_date TEXT,
-                            entry_price REAL,
-                            position_size_pct REAL,
-                            shares REAL,
-                            stop_loss_pct REAL,
-                            take_profit_pct REAL,
-                            notes TEXT
-                        )'''))
-        conn.commit()
-        
-        try:
-            conn.execute(text("ALTER TABLE journal ADD COLUMN shares REAL"))
+        if not _DB_INITIALIZED:
+            # Postgres-compatible schema creation
+            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS memory (
+                                ticker TEXT PRIMARY KEY,
+                                first_seen TEXT,
+                                times_flagged INTEGER,
+                                last_score REAL
+                            )"""))
+            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS journal (
+                                timestamp TEXT,
+                                ticker TEXT,
+                                action TEXT,
+                                scan_date TEXT,
+                                entry_price REAL,
+                                position_size_pct REAL,
+                                shares REAL,
+                                stop_loss_pct REAL,
+                                take_profit_pct REAL,
+                                notes TEXT
+                            )"""))
             conn.commit()
-        except:
-            conn.rollback()
             
-        conn.execute(text('''CREATE TABLE IF NOT EXISTS features (
-                            id SERIAL PRIMARY KEY,
-                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                            tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
-                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                        )'''))
-        conn.execute(text('''CREATE TABLE IF NOT EXISTS results (
-                            id SERIAL PRIMARY KEY,
-                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                            tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
-                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                        )'''))
-        conn.commit()
+            try:
+                conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN shares REAL"))
+                conn.commit()
+            except:
+                conn.rollback()
+                
+            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS features (
+                                id SERIAL PRIMARY KEY,
+                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
+                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                            )"""))
+            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS results (
+                                id SERIAL PRIMARY KEY,
+                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
+                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                            )"""))
+            conn.commit()
+            _DB_INITIALIZED = True
+            
         return conn
         
     else:
         # Fallback to local SQLite if cloud not configured
-        conn = sqlite3.connect(DB_FILE)
-        # Ensure tables exist
-        conn.execute('''CREATE TABLE IF NOT EXISTS memory (
-                            ticker TEXT PRIMARY KEY,
-                            first_seen TEXT,
-                            times_flagged INTEGER,
-                            last_score REAL
-                        )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS journal (
-                            timestamp TEXT,
-                            ticker TEXT,
-                            action TEXT,
-                            scan_date TEXT,
-                            entry_price REAL,
-                            position_size_pct REAL,
-                            shares REAL,
-                            stop_loss_pct REAL,
-                            take_profit_pct REAL,
-                            notes TEXT
-                        )''')
-        conn.commit()
-        
-        try:
-            conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
-            conn.commit()
-        except:
-            pass
+        if _SQLITE_CONN is None:
+            _SQLITE_CONN = sqlite3.connect(DB_FILE, check_same_thread=False)
             
-        conn.execute('''CREATE TABLE IF NOT EXISTS features (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                            tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
-                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                        )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS results (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                            tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
-                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                        )''')
-        conn.commit()
-        return conn
+        if not _DB_INITIALIZED:
+            # Ensure tables exist
+            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS memory (
+                                ticker TEXT PRIMARY KEY,
+                                first_seen TEXT,
+                                times_flagged INTEGER,
+                                last_score REAL
+                            )""")
+            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS journal (
+                                timestamp TEXT,
+                                ticker TEXT,
+                                action TEXT,
+                                scan_date TEXT,
+                                entry_price REAL,
+                                position_size_pct REAL,
+                                shares REAL,
+                                stop_loss_pct REAL,
+                                take_profit_pct REAL,
+                                notes TEXT
+                            )""")
+            _SQLITE_CONN.commit()
+            
+            try:
+                _SQLITE_CONN.execute("ALTER TABLE journal ADD COLUMN shares REAL")
+                _SQLITE_CONN.commit()
+            except:
+                pass
+                
+            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS features (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
+                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                            )""")
+            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS results (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
+                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                            )""")
+            _SQLITE_CONN.commit()
+            _DB_INITIALIZED = True
+            
+        return _SQLITE_CONN
 
 def migrate_csv_to_sqlite():
     """One-time migration script. Safe to call multiple times."""
