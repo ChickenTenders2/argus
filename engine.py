@@ -303,7 +303,10 @@ def _apply_sector_diversity(results, top_n, max_per_sector=3):
         bucket = sector_picks.setdefault(sector, [])
         if len(bucket) < max_per_sector:
             bucket.append(pick)
-    return [pick for picks in sector_picks.values() for pick in picks][:top_n]
+            
+    final_picks = [pick for picks in sector_picks.values() for pick in picks]
+    final_picks.sort(key=lambda x: x["score"], reverse=True)
+    return final_picks[:top_n]
 
 def get_market_regime():
     """Phase 3: Macroeconomic & Market Regime Filter"""
