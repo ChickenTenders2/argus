@@ -402,7 +402,8 @@ with st.sidebar:
         "Default", "High Conviction", "Liquidity Focus", 
         "Momentum Sprint", "Capital Preservation", 
         "Small Cap Hunter", "Earnings Season", 
-        "Swing Recovery", "Aggressive Growth", "Bear Market Defense"
+        "Swing Recovery", "Aggressive Growth", "Bear Market Defense", 
+        "Penny Stock High Risk ($1-$10)"
     ]
     st.selectbox("Select Preset", preset_options, key="preset_selector", on_change=apply_preset)
     
