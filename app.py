@@ -26,7 +26,10 @@ PREFS_FILE = "argus_prefs.json"
 def get_cached_sector(ticker):
     try:
         conn = get_db_connection()
-        sector_df = pd.read_sql("SELECT sector FROM features WHERE ticker = ? ORDER BY id DESC LIMIT 1", conn, params=(ticker,))
+        try:
+            sector_df = pd.read_sql("SELECT sector FROM features WHERE ticker = %(ticker)s ORDER BY id DESC LIMIT 1", conn, params={"ticker": ticker})
+        except:
+            sector_df = pd.read_sql("SELECT sector FROM features WHERE ticker = ? ORDER BY id DESC LIMIT 1", conn, params=(ticker,))
         conn.close()
         if not sector_df.empty:
             return sector_df.iloc[0]["sector"]
@@ -598,8 +601,13 @@ if active_tab == "History":
                     try:
                         conn = get_db_connection()
                         # delete from results and features tables for that specific scan_date starting with selected_day
-                        conn.execute("DELETE FROM results WHERE scan_date LIKE ?", (selected_day + "%",))
-                        conn.execute("DELETE FROM features WHERE scan_date LIKE ?", (selected_day + "%",))
+                        try:
+                            from sqlalchemy import text
+                            conn.execute(text("DELETE FROM results WHERE scan_date LIKE :sd"), {"sd": selected_day + "%"})
+                            conn.execute(text("DELETE FROM features WHERE scan_date LIKE :sd"), {"sd": selected_day + "%"})
+                        except:
+                            conn.execute("DELETE FROM results WHERE scan_date LIKE ?", (selected_day + "%",))
+                            conn.execute("DELETE FROM features WHERE scan_date LIKE ?", (selected_day + "%",))
                         conn.commit()
                         conn.close()
                         st.success(f"Deleted history for {selected_day}")
@@ -995,7 +1003,12 @@ if active_tab == "Journal":
             if st.button("Delete All Logs", help="This action cannot be undone.", use_container_width=True):
                 if ticker_to_delete:
                     conn = get_db_connection()
-                    conn.execute("DELETE FROM journal WHERE ticker = ?", (ticker_to_delete,))
+                    try:
+                        from sqlalchemy import text
+                        conn.execute(text("DELETE FROM journal WHERE ticker = :ticker"), {"ticker": ticker_to_delete})
+                    except:
+                        # Fallback for raw sqlite3
+                        conn.execute("DELETE FROM journal WHERE ticker = ?", (ticker_to_delete,))
                     conn.commit()
                     conn.close()
                     st.success(f"Successfully deleted {ticker_to_delete} from the Journal!")

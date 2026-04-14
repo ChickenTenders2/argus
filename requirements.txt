@@ -9,3 +9,5 @@ groq
 plotly
 streamlit-shadcn-ui
 shap
+SQLAlchemy
+psycopg2-binary
