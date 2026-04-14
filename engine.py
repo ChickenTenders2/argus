@@ -26,9 +26,11 @@ DB_FILE = "argus.db"
 _DB_ENGINE = None
 _DB_INITIALIZED = False
 _SQLITE_CONN = None
+import threading
+_DB_INIT_LOCK = threading.Lock()
 
 def get_db_connection():
-    global _DB_ENGINE, _DB_INITIALIZED, _SQLITE_CONN
+    global _DB_ENGINE, _DB_INITIALIZED, _SQLITE_CONN, _DB_INIT_LOCK
     db_url = os.environ.get("DATABASE_URL")
     
     if db_url:
@@ -44,49 +46,51 @@ def get_db_connection():
         conn = _DB_ENGINE.connect()
         
         if not _DB_INITIALIZED:
-            # Postgres-compatible schema creation
-            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS memory (
-                                ticker TEXT PRIMARY KEY,
-                                first_seen TEXT,
-                                times_flagged INTEGER,
-                                last_score REAL
-                            )"""))
-            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS journal (
-                                timestamp TEXT,
-                                ticker TEXT,
-                                action TEXT,
-                                scan_date TEXT,
-                                entry_price REAL,
-                                position_size_pct REAL,
-                                shares REAL,
-                                stop_loss_pct REAL,
-                                take_profit_pct REAL,
-                                notes TEXT
-                            )"""))
-            conn.commit()
-            
-            try:
-                conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN shares REAL"))
-                conn.commit()
-            except:
-                conn.rollback()
-                
-            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS features (
-                                id SERIAL PRIMARY KEY,
-                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
-                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                            )"""))
-            conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS results (
-                                id SERIAL PRIMARY KEY,
-                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
-                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                            )"""))
-            conn.commit()
-            _DB_INITIALIZED = True
+            with _DB_INIT_LOCK:
+                if not _DB_INITIALIZED:
+                    # Postgres-compatible schema creation
+                    conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS memory (
+                                        ticker TEXT PRIMARY KEY,
+                                        first_seen TEXT,
+                                        times_flagged INTEGER,
+                                        last_score REAL
+                                    )"""))
+                    conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS journal (
+                                        timestamp TEXT,
+                                        ticker TEXT,
+                                        action TEXT,
+                                        scan_date TEXT,
+                                        entry_price REAL,
+                                        position_size_pct REAL,
+                                        shares REAL,
+                                        stop_loss_pct REAL,
+                                        take_profit_pct REAL,
+                                        notes TEXT
+                                    )"""))
+                    conn.commit()
+                    
+                    try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN shares REAL"))
+                        conn.commit()
+                    except:
+                        conn.rollback()
+                        
+                    conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS features (
+                                        id SERIAL PRIMARY KEY,
+                                        ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                        v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                        tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
+                                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                                    )"""))
+                    conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS results (
+                                        id SERIAL PRIMARY KEY,
+                                        ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                        v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                        tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
+                                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                                    )"""))
+                    conn.commit()
+                    _DB_INITIALIZED = True
             
         return conn
         
@@ -96,49 +100,51 @@ def get_db_connection():
             _SQLITE_CONN = sqlite3.connect(DB_FILE, check_same_thread=False)
             
         if not _DB_INITIALIZED:
-            # Ensure tables exist
-            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS memory (
-                                ticker TEXT PRIMARY KEY,
-                                first_seen TEXT,
-                                times_flagged INTEGER,
-                                last_score REAL
-                            )""")
-            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS journal (
-                                timestamp TEXT,
-                                ticker TEXT,
-                                action TEXT,
-                                scan_date TEXT,
-                                entry_price REAL,
-                                position_size_pct REAL,
-                                shares REAL,
-                                stop_loss_pct REAL,
-                                take_profit_pct REAL,
-                                notes TEXT
-                            )""")
-            _SQLITE_CONN.commit()
-            
-            try:
-                _SQLITE_CONN.execute("ALTER TABLE journal ADD COLUMN shares REAL")
-                _SQLITE_CONN.commit()
-            except:
-                pass
-                
-            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS features (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
-                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                            )""")
-            _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS results (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
-                                scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                            )""")
-            _SQLITE_CONN.commit()
-            _DB_INITIALIZED = True
+            with _DB_INIT_LOCK:
+                if not _DB_INITIALIZED:
+                    # Ensure tables exist
+                    _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS memory (
+                                        ticker TEXT PRIMARY KEY,
+                                        first_seen TEXT,
+                                        times_flagged INTEGER,
+                                        last_score REAL
+                                    )""")
+                    _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS journal (
+                                        timestamp TEXT,
+                                        ticker TEXT,
+                                        action TEXT,
+                                        scan_date TEXT,
+                                        entry_price REAL,
+                                        position_size_pct REAL,
+                                        shares REAL,
+                                        stop_loss_pct REAL,
+                                        take_profit_pct REAL,
+                                        notes TEXT
+                                    )""")
+                    _SQLITE_CONN.commit()
+                    
+                    try:
+                        _SQLITE_CONN.execute("ALTER TABLE journal ADD COLUMN shares REAL")
+                        _SQLITE_CONN.commit()
+                    except:
+                        pass
+                        
+                    _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS features (
+                                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                        v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                        tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
+                                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                                    )""")
+                    _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS results (
+                                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        ticker TEXT, sector TEXT, score REAL, f_score REAL,
+                                        v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                                        tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
+                                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT
+                                    )""")
+                    _SQLITE_CONN.commit()
+                    _DB_INITIALIZED = True
             
         return _SQLITE_CONN
 
