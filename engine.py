@@ -1,11 +1,10 @@
 import sqlite3
-import yfinance as yf
-
-import pandas as pd
+import json
 import logging
 import os
-import json
 import numpy as np
+import pandas as pd
+import yfinance as yf
 from sqlalchemy import create_engine, text
 
 try:
@@ -359,7 +358,8 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
                         valid_tickers.append(t)
                         if scan_limit and len(valid_tickers) >= scan_limit:
                             return valid_tickers
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Skipping {t} in prefilter: {e}")
                     continue
         except Exception as e:
             logger.warning(f"Batch fail during prefilter: {e}")
@@ -525,7 +525,7 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
             run_type=run_type)
         # Handle "reasons" list conversion to string for sqlite
         if "reasons" in df.columns:
-            df["reasons"] = df["reasons"].apply(lambda x: str(x) if isinstance(x, list) else x)
+            df["reasons"] = df["reasons"].apply(lambda x: json.dumps(x) if isinstance(x, list) else x)
         
         df.to_sql("results", conn, if_exists="append", index=False)
         
@@ -593,17 +593,26 @@ def monitor_portfolio():
         t_df = t_df.sort_values("timestamp")
         buys = t_df[t_df["action"].isin(["BUY", "SCALE_IN"])]
         sells = t_df[t_df["action"].isin(["SELL", "TRIM"])]
-        
-        # If position is completely closed, skip
-        if len(buys) <= len(sells):
+
+        buy_shares = buys["shares"].fillna(0) if "shares" in buys.columns else pd.Series([0] * len(buys), dtype=float)
+        sell_shares = sells["shares"].fillna(0) if "shares" in sells.columns else pd.Series([0] * len(sells), dtype=float)
+        net_shares = buy_shares.sum() - sell_shares.sum()
+
+        # Skip if position is fully closed (prefer share count; fall back to trade count)
+        if net_shares <= 0 and len(buys) <= len(sells):
             continue
-            
-        avg_buy = buys["entry_price"].mean()
-        # Take SL/TP from the latest buy logic
+
+        # Shares-weighted average buy price; fall back to simple mean if shares absent
+        total_buy_shares = buy_shares.sum()
+        if total_buy_shares > 0:
+            avg_buy = float((buys["entry_price"] * buy_shares).sum() / total_buy_shares)
+        else:
+            avg_buy = float(buys["entry_price"].mean())
+
         latest_buy = buys.iloc[-1]
-        sl_pct = float(latest_buy.get("stop_loss_pct", 0) or 5.0)  # Default 5% SL
-        tp_pct = float(latest_buy.get("take_profit_pct", 0) or 20.0) # Default 20% TP
-        
+        sl_pct = float(latest_buy.get("stop_loss_pct", 0) or 5.0)
+        tp_pct = float(latest_buy.get("take_profit_pct", 0) or 20.0)
+
         open_positions[ticker] = {
             "avg_buy": avg_buy,
             "step_loss_pct": sl_pct,
@@ -845,6 +854,30 @@ def add_predictions(df_results, model):
     out["scenario_bull"] = out["score"].apply(lambda s: _lookup_scenario(s, "bull"))
     return out
 
+_vol_cache: dict = {}
+_vol_cache_ts: dict = {}
+_VOL_CACHE_TTL = 3600
+
+def _volatility_proxy(ticker: str) -> float:
+    """Return approximate 1-month volatility (%). Cached per ticker for 1 hour."""
+    import time
+    now = time.time()
+    if ticker in _vol_cache and (now - _vol_cache_ts.get(ticker, 0)) < _VOL_CACHE_TTL:
+        return _vol_cache[ticker]
+    try:
+        hist = yf.Ticker(ticker).history(period="6mo")
+        if hist.empty or "Close" not in hist.columns:
+            result = 8.0
+        else:
+            rets = hist["Close"].pct_change().dropna()
+            result = 8.0 if rets.empty else max(4.0, min(16.0, float(rets.std() * (20 ** 0.5) * 100)))
+    except Exception:
+        result = 8.0
+    _vol_cache[ticker] = result
+    _vol_cache_ts[ticker] = now
+    return result
+
+
 def add_risk_guidance(df_results, model, risk_per_trade_pct=0.75, max_position_pct=8.0):
     """
     Add practical execution guidance:
@@ -858,20 +891,6 @@ def add_risk_guidance(df_results, model, risk_per_trade_pct=0.75, max_position_p
 
     if "prob_upside" not in out.columns:
         out = add_predictions(out, model)
-
-    def _volatility_proxy(ticker):
-        try:
-            hist = yf.Ticker(ticker).history(period="6mo")
-            if hist.empty or "Close" not in hist.columns:
-                return 8.0
-            rets = hist["Close"].pct_change().dropna()
-            if rets.empty:
-                return 8.0
-            # Approximate 1-month move using 20 trading days.
-            monthly_vol_pct = float(rets.std() * (20 ** 0.5) * 100)
-            return max(4.0, min(16.0, monthly_vol_pct))
-        except Exception:
-            return 8.0
 
     global_prob = float(model["global_prob"]) if model.get("ready") else 0.5
 
@@ -1131,17 +1150,24 @@ def score_stock(ticker, memory_df, config, regime_info=None):
             "price":   round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
             "mkt_cap": f"${mkt_cap/1e6:.0f}M"
         }
-    except Exception:
+    except Exception as e:
+        logger.warning(f"score_stock failed for {ticker}: {e}")
         return None
 
 def get_universe():
     import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
+    import io
+    import urllib.request
+    _ssl_ctx = ssl.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = ssl.CERT_NONE
+    _opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=_ssl_ctx))
 
     # Method 1: Try iShares IWM holdings CSV
     try:
         url = "https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/1467271812596.ajax?fileType=csv&fileName=IWM_holdings&dataType=fund"
-        df = pd.read_csv(url, skiprows=9, on_bad_lines='skip')
+        raw = _opener.open(url, timeout=15).read()
+        df = pd.read_csv(io.BytesIO(raw), skiprows=9, on_bad_lines='skip')
         tickers = df.iloc[:, 0].dropna().tolist()
         tickers = [str(t).strip() for t in tickers if isinstance(t, str) and 1 < len(str(t).strip()) < 6 and str(t).strip().isalpha()]
         if len(tickers) > 50:
@@ -1205,7 +1231,7 @@ def optimize_portfolio(tickers: list, risk_free_rate: float = 0.04) -> dict:
     logger.info(f"Optimizing portfolio for: {tickers}")
     try:
         # Download 1y history
-        data = yf.download(tickers, period="1y", interval="1d")["Adj Close"]
+        data = yf.download(tickers, period="1y", interval="1d")["Close"]
         
         # If single ticker was passed accidentally
         if isinstance(data, pd.Series):

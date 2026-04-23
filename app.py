@@ -23,6 +23,39 @@ import plotly.express as px
 
 PREFS_FILE = "argus_prefs.json"
 
+
+def format_reasons(r):
+    """Deserialise a reasons value from the DB into a bullet-separated string."""
+    if isinstance(r, list):
+        return " • ".join(str(x) for x in r)
+    if isinstance(r, str):
+        if r.startswith("["):
+            try:
+                parsed = json.loads(r)
+                return " • ".join(str(x) for x in parsed)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        if " • " in r:
+            return r
+    return str(r) if r else ""
+
+
+@st.cache_data(ttl=1800)
+def cached_market_regime():
+    """Cached wrapper — avoids two yfinance fetches on every Streamlit rerun."""
+    return get_market_regime()
+
+
+@st.cache_data(ttl=3600)
+def cached_build_prediction_model(features_file, horizon_days, target_return):
+    """Cached wrapper — avoids re-training XGBoost on every page navigation."""
+    return build_prediction_model(
+        features_file=features_file,
+        horizon_days=horizon_days,
+        target_return=target_return,
+    )
+
+
 def get_cached_sector(ticker):
     try:
         conn = get_db_connection()
@@ -108,7 +141,6 @@ def fetch_current_prices(tickers):
     """Bulk fetch current prices to calculate historical return."""
     if not tickers: return {}
     try:
-        import yfinance as yf
         data = yf.download(list(tickers), period="5d", progress=False)
         prices = {}
         # Handle yf.download multiindex response based on number of tickers
@@ -344,18 +376,22 @@ def display_cards(df):
                 # Metrics/Reasons display (bullet points or badges)
                 if "reasons" in row and row["reasons"]:
                     st.markdown("##### Key Metrics")
-                    reasons = row["reasons"]
-                    if isinstance(reasons, str):
-                        if reasons.startswith("["):
+                    reasons_raw = row["reasons"]
+                    if isinstance(reasons_raw, list):
+                        reasons = reasons_raw
+                    elif isinstance(reasons_raw, str):
+                        if reasons_raw.startswith("["):
                             try:
-                                reasons = eval(reasons)
-                            except:
-                                reasons = [reasons]
-                        elif " • " in reasons:
-                            reasons = reasons.split(" • ")
+                                reasons = json.loads(reasons_raw)
+                            except (json.JSONDecodeError, ValueError):
+                                reasons = [reasons_raw]
+                        elif " • " in reasons_raw:
+                            reasons = reasons_raw.split(" • ")
                         else:
-                            reasons = [reasons]
-                    
+                            reasons = [reasons_raw]
+                    else:
+                        reasons = []
+
                     if isinstance(reasons, list):
                         # Construct a mini bulletd list
                         bullets = ""
@@ -436,7 +472,7 @@ with st.sidebar:
 
     config = Config(MIN_SCORE=min_score, PRICE_FLOOR=price_floor, PRICE_CEILING=(price_ceiling if price_ceiling > 0 else None), VOL_FLOOR=vol_floor)
 
-model = build_prediction_model(
+model = cached_build_prediction_model(
     features_file=config.FEATURES_FILE,
     horizon_days=horizon_days,
     target_return=target_return,
@@ -465,7 +501,7 @@ if active_tab == "Overview":
     st.subheader("📡 Latest Scheduled Scan")
     
     # Check Macro Market Regime
-    regime = get_market_regime()
+    regime = cached_market_regime()
     # Apply a color mapping to the regime text
     regime_color_map = {
         "Bull": "green",
@@ -524,18 +560,7 @@ if active_tab == "Overview":
         display_cards(subset_view)
         
         with st.expander("Show Raw Data Table"):
-            # Clean up the reasons column for the table
             if "reasons" in subset_view.columns:
-                def format_reasons(r):
-                    if isinstance(r, str) and r.startswith("["):
-                        try:
-                            r_list = eval(r)
-                            return " • ".join(r_list)
-                        except:
-                            return r
-                    elif isinstance(r, list):
-                        return " • ".join(r)
-                    return r
                 subset_view["reasons"] = subset_view["reasons"].apply(format_reasons)
             
             st.dataframe(
@@ -642,15 +667,6 @@ if active_tab == "History":
                     day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
                     
             if "reasons" in day_df.columns:
-                def format_reasons(r):
-                    if isinstance(r, str) and r.startswith("["):
-                        try:
-                            return " • ".join(eval(r))
-                        except:
-                            return r
-                    elif isinstance(r, list):
-                        return " • ".join(r)
-                    return r
                 day_df["reasons"] = day_df["reasons"].apply(format_reasons)
             
             # Show cards for better readability
@@ -727,7 +743,13 @@ if active_tab == "Ticker Detail":
                             else:
                                 reasons = latest_ticker_row["reasons"].iloc[0]
                                 if isinstance(reasons, str):
-                                    reasons = eval(reasons) if reasons.startswith("[") else [reasons]
+                                    if reasons.startswith("["):
+                                        try:
+                                            reasons = json.loads(reasons)
+                                        except (json.JSONDecodeError, ValueError):
+                                            reasons = [reasons]
+                                    else:
+                                        reasons = [reasons]
                                 elif not isinstance(reasons, list):
                                     reasons = []
                                 
@@ -799,15 +821,6 @@ if active_tab == "Ticker Detail":
             # --- BOTTOM SECTION: Data view & AI ---
             with st.expander("View Raw Scan History Table"):
                 if "reasons" in tdf.columns:
-                    def format_reasons(r):
-                        if isinstance(r, str) and r.startswith("["):
-                            try:
-                                return " • ".join(eval(r))
-                            except:
-                                return r
-                        elif isinstance(r, list):
-                            return " • ".join(r)
-                        return r
                     tdf["reasons"] = tdf["reasons"].apply(format_reasons)
                 
                 try:
@@ -910,31 +923,39 @@ if active_tab == "Journal":
         
         for t in j_sorted["ticker"].unique():
             t_df = j_sorted[j_sorted["ticker"] == t]
-            buys = t_df[t_df["action"].isin(["BUY", "SCALE_IN"])]
-            sells = t_df[t_df["action"].isin(["SELL", "TRIM"])]
-            
-            total_buy_value = buys["entry_price"].sum()
-            total_sell_value = sells["entry_price"].sum()
-            
+            buys = t_df[t_df["action"].isin(["BUY", "SCALE_IN"])].copy()
+            sells = t_df[t_df["action"].isin(["SELL", "TRIM"])].copy()
+
+            buy_shares = buys["shares"].fillna(0)
+            sell_shares = sells["shares"].fillna(0)
+
+            total_buy_shares = buy_shares.sum()
+            total_sell_shares = sell_shares.sum()
+
             buy_count = len(buys)
             sell_count = len(sells)
-            
+
             if buy_count > 0:
-                avg_buy = buys["entry_price"].mean()
-                
-                # Check if position is open
-                if buy_count > sell_count:
-                    # Approximation: net 1 position open
-                    net_shares = buys.get("shares", pd.Series([0])).sum() - sells.get("shares", pd.Series([0])).sum()
+                # Shares-weighted average buy price (fall back to simple mean if shares absent)
+                if total_buy_shares > 0:
+                    avg_buy = float((buys["entry_price"] * buy_shares).sum() / total_buy_shares)
+                else:
+                    avg_buy = float(buys["entry_price"].mean())
+
+                # Check if position is open (net shares still held)
+                net_shares = max(0.0, total_buy_shares - total_sell_shares)
+                if net_shares > 0 or (buy_count > sell_count and total_buy_shares == 0):
                     first_buy_date = buys["timestamp"].min()
-                    # Ensure first_buy_date is a valid date string
                     first_buy_date_str = str(first_buy_date)[:10] if pd.notnull(first_buy_date) else datetime.now().strftime("%Y-%m-%d")
                     open_positions.append({"Ticker": t, "Avg Buy": avg_buy, "Shares": net_shares, "First Date": first_buy_date_str})
-                
+
                 # Track realized trades if any sells exist
                 if sell_count > 0:
-                    avg_sell = sells["entry_price"].mean()
-                    ret_pct = ((avg_sell - avg_buy) / avg_buy) * 100
+                    if total_sell_shares > 0:
+                        avg_sell = float((sells["entry_price"] * sell_shares).sum() / total_sell_shares)
+                    else:
+                        avg_sell = float(sells["entry_price"].mean())
+                    ret_pct = ((avg_sell - avg_buy) / avg_buy) * 100 if avg_buy > 0 else 0.0
                     trades.append({"Ticker": t, "Avg Buy": avg_buy, "Avg Sell": avg_sell, "Return (%)": ret_pct})
 
         realized_tab, unrealized_tab = st.tabs(["Realized P&L", "Open Positions (Live)"])
@@ -1070,7 +1091,7 @@ if active_tab == "Manual Run":
 
         st.caption(f"Scanned {scanned_count} tickers")
         if results:
-            regime = get_market_regime()
+            regime = cached_market_regime()
             st.success(f"{len(results)} picks met requirements in {regime['regime']} regime.")
             df_res = pd.DataFrame(results).sort_values("score", ascending=False)
             df_res = add_predictions(df_res, model)
@@ -1086,15 +1107,6 @@ if active_tab == "Manual Run":
             )
             
             if "reasons" in df_res.columns:
-                def format_reasons(r):
-                    if isinstance(r, str) and r.startswith("["):
-                        try:
-                            return " • ".join(eval(r))
-                        except:
-                            return r
-                    elif isinstance(r, list):
-                        return " • ".join(r)
-                    return r
                 df_res["reasons"] = df_res["reasons"].apply(format_reasons)
                 
             display_cards(df_res)

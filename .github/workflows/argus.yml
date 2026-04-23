@@ -5,7 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # 7am UTC weekdays
+    - cron: '0 8 * * 1-5'  # 8am UTC, Monday–Friday
   workflow_dispatch:         # allows manual trigger from GitHub UI
 
 jobs:
@@ -31,10 +31,10 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python argus.py
 
-      - name: Commit memory update
+      - name: Commit updated data
         run: |
           git config user.name "Argus"
           git config user.email "argus@bot"
-          git add argus_memory.csv
-          git diff --staged --quiet || git commit -m "Argus memory update $(date +'%Y-%m-%d')"
+          git add argus.db argus_results.csv argus_alerts_log.txt
+          git diff --staged --quiet || git commit -m "Argus data update $(date +'%Y-%m-%d')"
           git push
