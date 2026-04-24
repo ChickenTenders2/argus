@@ -104,21 +104,20 @@ def get_db_connection():
         
     else:
         # Fallback to local SQLite if cloud not configured
-        if _SQLITE_CONN is None:
-            _SQLITE_CONN = sqlite3.connect(DB_FILE, check_same_thread=False)
-            
+        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+
         if not _DB_INITIALIZED:
             with _DB_INIT_LOCK:
                 if not _DB_INITIALIZED:
                     # Ensure tables exist
                     try:
-                        _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS memory (
+                        conn.execute("""CREATE TABLE IF NOT EXISTS memory (
                                             ticker TEXT PRIMARY KEY,
                                             first_seen TEXT,
                                             times_flagged INTEGER,
                                             last_score REAL
                                         )""")
-                        _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS journal (
+                        conn.execute("""CREATE TABLE IF NOT EXISTS journal (
                                             timestamp TEXT,
                                             ticker TEXT,
                                             action TEXT,
@@ -130,38 +129,38 @@ def get_db_connection():
                                             take_profit_pct REAL,
                                             notes TEXT
                                         )""")
-                        _SQLITE_CONN.commit()
+                        conn.commit()
                     except Exception as e:
                         logger.warning(f"Concurrent local DB init safely skipped (Phase 1): {e}")
                         
                     try:
-                        _SQLITE_CONN.execute("ALTER TABLE journal ADD COLUMN shares REAL")
-                        _SQLITE_CONN.commit()
+                        conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
+                        conn.commit()
                     except:
                         pass
                         
                     try:
-                        _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS features (
+                        conn.execute("""CREATE TABLE IF NOT EXISTS features (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                                             ticker TEXT, sector TEXT, score REAL, f_score REAL,
                                             v_score REAL, m_score REAL, s_score REAL, p_score REAL,
                                             tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
                                             scan_date TEXT, scan_timestamp TEXT, run_type TEXT
                                         )""")
-                        _SQLITE_CONN.execute("""CREATE TABLE IF NOT EXISTS results (
+                        conn.execute("""CREATE TABLE IF NOT EXISTS results (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                                             ticker TEXT, sector TEXT, score REAL, f_score REAL,
                                             v_score REAL, m_score REAL, s_score REAL, p_score REAL,
                                             tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
                                             scan_date TEXT, scan_timestamp TEXT, run_type TEXT
                                         )""")
-                        _SQLITE_CONN.commit()
+                        conn.commit()
                     except Exception as e:
                         logger.warning(f"Concurrent local DB init safely skipped (Phase 2): {e}")
 
                     _DB_INITIALIZED = True
             
-        return _SQLITE_CONN
+        return conn
 
 def migrate_csv_to_sqlite():
     """One-time migration script. Safe to call multiple times."""
