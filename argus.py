@@ -20,6 +20,30 @@ logging.basicConfig(
 logger = logging.getLogger("Argus")
 
 config = Config()
+TELEGRAM_MESSAGE_LIMIT = 4000
+
+
+def _split_telegram_message(message, limit=TELEGRAM_MESSAGE_LIMIT):
+    if len(message) <= limit:
+        return [message]
+
+    chunks = []
+    remaining = message
+    while len(remaining) > limit:
+        split_at = remaining.rfind("\n\n", 0, limit)
+        if split_at == -1:
+            split_at = remaining.rfind("\n", 0, limit)
+        if split_at == -1:
+            split_at = limit
+        chunk = remaining[:split_at].strip()
+        if not chunk:
+            chunk = remaining[:limit]
+            split_at = limit
+        chunks.append(chunk)
+        remaining = remaining[split_at:].lstrip()
+    if remaining:
+        chunks.append(remaining)
+    return chunks
 
 # ── Telegram ─────────────────────────────────────────────
 def send_telegram(message):
@@ -31,17 +55,40 @@ def send_telegram(message):
 
     if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
         logger.error("Telegram credentials missing. Cannot send message.")
-        return
+        return False
     url = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": config.TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    try:
-        requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        logger.error(f"Failed to send Telegram message: {e}")
+    sent_chunks = 0
+    for chunk in _split_telegram_message(message):
+        payload = {
+            "chat_id": config.TELEGRAM_CHAT_ID,
+            "text": chunk,
+            "parse_mode": "Markdown"
+        }
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+            if response.ok:
+                sent_chunks += 1
+                continue
+
+            logger.error(f"Telegram API rejected message chunk: {response.status_code} {response.text}")
+            fallback_payload = {
+                "chat_id": config.TELEGRAM_CHAT_ID,
+                "text": chunk,
+            }
+            fallback_response = requests.post(url, json=fallback_payload, timeout=10)
+            if fallback_response.ok:
+                sent_chunks += 1
+            else:
+                logger.error(f"Telegram fallback send failed: {fallback_response.status_code} {fallback_response.text}")
+        except Exception as e:
+            logger.error(f"Failed to send Telegram message: {e}")
+
+    if sent_chunks == 0:
+        logger.error("Telegram delivery failed for all message chunks.")
+        return False
+    else:
+        logger.info(f"Telegram delivery succeeded for {sent_chunks} message chunk(s).")
+        return True
 
 # ── Format Telegram Message ──────────────────────────────
 def format_pick(pick, memory_df, ai_thesis=None):
@@ -105,10 +152,12 @@ def main():
     scanned_count = scan_payload["scanned_count"]
 
     if not results:
-        send_telegram(
+        send_ok = send_telegram(
             f"👁 *Argus Daily Scan — {datetime.now().strftime('%d %b %Y')}*\n"
             f"No high-conviction picks found today. Market may be choppy."
         )
+        if not send_ok:
+            raise RuntimeError("Failed to deliver daily Telegram message.")
         save_results(
             results=[],
             scan_date=scan_date,
@@ -168,7 +217,9 @@ def main():
     high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
     footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
     body = highest_block + high_block
-    send_telegram(header + alerts_block + body + footer)
+    send_ok = send_telegram(header + alerts_block + body + footer)
+    if not send_ok:
+        raise RuntimeError("Failed to deliver daily Telegram message.")
     
     # FMP enrichment is intentionally disabled — enrichment runs separately
     # via fmp_fetch.py to avoid blocking the nightly scan Action.
