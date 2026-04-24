@@ -35,6 +35,6 @@ jobs:
         run: |
           git config user.name "Argus"
           git config user.email "argus@bot"
-          git add argus.db argus_results.csv argus_alerts_log.txt
+          git add argus.db argus_results.csv
           git diff --staged --quiet || git commit -m "Argus data update $(date +'%Y-%m-%d')"
           git push
