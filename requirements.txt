@@ -14,3 +14,7 @@ SQLAlchemy
 psycopg2-binary
 matplotlib
 numpy
+streamlit-aggrid
+st-annotated-text
+streamlit-lottie
+streamlit-extras

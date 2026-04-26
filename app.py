@@ -21,6 +21,31 @@ import json
 from datetime import datetime
 import plotly.express as px
 
+# ── Optional enhanced-UI libraries (all fail-safe) ───────
+try:
+    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+    HAS_AGGRID = True
+except ImportError:
+    HAS_AGGRID = False
+
+try:
+    from annotated_text import annotated_text
+    HAS_ANNOTATED = True
+except ImportError:
+    HAS_ANNOTATED = False
+
+try:
+    from streamlit_lottie import st_lottie
+    HAS_LOTTIE = True
+except ImportError:
+    HAS_LOTTIE = False
+
+try:
+    from streamlit_extras.metric_cards import style_metric_cards
+    HAS_EXTRAS = True
+except ImportError:
+    HAS_EXTRAS = False
+
 PREFS_FILE = "argus_prefs.json"
 
 
@@ -54,6 +79,39 @@ def cached_build_prediction_model(features_file, horizon_days, target_return):
         horizon_days=horizon_days,
         target_return=target_return,
     )
+
+
+@st.cache_data(ttl=86400)
+def _load_lottie(url: str):
+    try:
+        r = requests.get(url, timeout=5)
+        return r.json() if r.status_code == 200 else None
+    except Exception:
+        return None
+
+
+def show_aggrid(df, height=380, fit_columns=True):
+    """AgGrid table with fallback to st.dataframe when library is absent."""
+    if not HAS_AGGRID or df.empty:
+        st.dataframe(df, use_container_width=True)
+        return
+    try:
+        gb = GridOptionsBuilder.from_dataframe(df)
+        gb.configure_default_column(sortable=True, filter=True, resizable=True, wrapText=True)
+        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
+        gb.configure_grid_options(domLayout="normal")
+        AgGrid(
+            df,
+            gridOptions=gb.build(),
+            use_container_width=True,
+            height=height,
+            theme="alpine",
+            update_mode=GridUpdateMode.NO_UPDATE,
+            allow_unsafe_jscode=False,
+            fit_columns_on_grid_load=fit_columns,
+        )
+    except Exception:
+        st.dataframe(df, use_container_width=True)
 
 
 def get_cached_sector(ticker):
@@ -393,18 +451,24 @@ def display_cards(df):
                         reasons = []
 
                     if isinstance(reasons, list):
-                        # Construct a mini bulletd list
-                        bullets = ""
-                        for r in reasons:
-                            # Try to separate metric name from value for bolding
-                            parts = r.split(" ")
-                            if len(parts) > 1 and parts[-1].replace('%', '').replace('.', '').replace('x', '').isdigit():
-                                name = " ".join(parts[:-1])
-                                val = parts[-1]
-                                bullets += f"• {name} **{val}**  \n"
-                            else:
-                                bullets += f"• {r}  \n"
-                        st.markdown(bullets)
+                        if HAS_ANNOTATED:
+                            try:
+                                tier_str = row.get("tier", "")
+                                badge_bg = "#1a4731" if "HIGH CONVICTION" in str(tier_str) else "#1a2e4a"
+                                annotated_text(*[(r.strip(), "", badge_bg) for r in reasons if r.strip()])
+                            except Exception:
+                                st.markdown("  \n".join(f"• {r}" for r in reasons))
+                        else:
+                            bullets = ""
+                            for r in reasons:
+                                parts = r.split(" ")
+                                if len(parts) > 1 and parts[-1].replace('%', '').replace('.', '').replace('x', '').isdigit():
+                                    name = " ".join(parts[:-1])
+                                    val = parts[-1]
+                                    bullets += f"• {name} **{val}**  \n"
+                                else:
+                                    bullets += f"• {r}  \n"
+                            st.markdown(bullets)
                     else:
                         st.markdown(f"• {reasons}")
                 
@@ -544,6 +608,12 @@ if active_tab == "Overview":
                 else:
                     st.metric("Avg Upside Prob", "N/A", help="ML Projected")
 
+        if HAS_EXTRAS:
+            try:
+                style_metric_cards(border_left_color="#00b4d8", border_color="#262730", background_color="#0e1117")
+            except Exception:
+                pass
+
         display_cols = [
             "ticker", "sector", "score", "tier", "reasons", "price", "mkt_cap",
             "prob_upside", "scenario_bear", "scenario_base", "scenario_bull",
@@ -624,7 +694,7 @@ if active_tab == "History":
                 .agg(picks=("ticker", "count"), top_score=("score", "max"), avg_score=("score", "mean"))
                 .sort_values("scan_day", ascending=False)
             )
-            st.dataframe(daily, use_container_width=True)
+            show_aggrid(daily, height=280)
 
             st.caption("Score trend")
             trend = (
@@ -673,10 +743,13 @@ if active_tab == "History":
             display_cards(day_df)
             
             with st.expander("Show History Table"):
-                style = day_df.style
-                if "Return (%)" in day_df.columns:
-                    style = style.background_gradient(subset=["Return (%)"], cmap="RdYlGn")
-                st.dataframe(style, use_container_width=True)
+                if HAS_AGGRID:
+                    show_aggrid(day_df, height=320)
+                else:
+                    style = day_df.style
+                    if "Return (%)" in day_df.columns:
+                        style = style.background_gradient(subset=["Return (%)"], cmap="RdYlGn")
+                    st.dataframe(style, use_container_width=True)
 
 if active_tab == "Ticker Detail":
     st.subheader("🔎 Ticker Detail")
@@ -1062,9 +1135,16 @@ if active_tab == "Manual Run":
         
         st.info(f"Scan executing using preset: **{st.session_state.preset_selector}**")
         
+        _lottie_ph = st.empty()
+        if HAS_LOTTIE:
+            _anim = _load_lottie("https://assets5.lottiefiles.com/packages/lf20_qp1q7mct.json")
+            if _anim:
+                with _lottie_ph:
+                    st_lottie(_anim, height=130, key="scan_lottie", speed=1, loop=True)
+
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         def scan_progress_cb(ticker, idx, total):
             progress = (idx + 1) / total
             progress_bar.progress(progress)
@@ -1089,6 +1169,7 @@ if active_tab == "Manual Run":
                 feature_file=config.FEATURES_FILE,
             )
 
+        _lottie_ph.empty()
         st.caption(f"Scanned {scanned_count} tickers")
         if results:
             regime = cached_market_regime()
