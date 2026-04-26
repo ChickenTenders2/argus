@@ -282,7 +282,7 @@ def apply_preset():
     preset = st.session_state.preset_selector
     st.session_state.price_ceiling = 0.0
     if preset == "High Conviction":
-        st.session_state.preset_desc = "The opposite of wide scanning — ultra-strict score filter to surface only the absolute best setups."
+        st.session_state.preset_desc = "**Use when:** You want the fewest, highest-quality picks only. Ultra-strict score filter (≥90) in a strong bull market where you are comfortable concentrating capital into 1–3 exceptional setups instead of diversifying broadly."
         st.session_state.min_score = 90
         st.session_state.horizon_days = 63
         st.session_state.target_return = 15
@@ -291,7 +291,7 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Liquidity Focus":
-        st.session_state.preset_desc = "Raises the volume floor dramatically to only trade highly liquid, large-cap names."
+        st.session_state.preset_desc = "**Use when:** You need to enter and exit positions quickly without slippage (e.g. trading large account sizes). Restricts picks to only highly liquid, large-cap names with ≥2M average daily volume."
         st.session_state.min_score = 65
         st.session_state.horizon_days = 63
         st.session_state.target_return = 10
@@ -300,7 +300,7 @@ def apply_preset():
         st.session_state.vol_floor = 2000000
         st.session_state.price_floor = 10.00
     elif preset == "Momentum Sprint":
-        st.session_state.preset_desc = "Very short horizon, high target return — designed to catch explosive breakouts."
+        st.session_state.preset_desc = "**Use when:** The market is trending hard and you want to catch explosive short-term breakouts. 21-day horizon targets +30% moves. Best used after confirmed momentum weeks, not during chop or reversal."
         st.session_state.min_score = 72
         st.session_state.horizon_days = 21
         st.session_state.target_return = 30
@@ -309,7 +309,7 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Capital Preservation":
-        st.session_state.preset_desc = "Designed for deep bear markets or extreme uncertainty. Minimal risk, long timeframe."
+        st.session_state.preset_desc = "**Use when:** VIX is elevated, SPY is below its 200-day MA, or you are in a confirmed bear market. Minimum risk per trade (0.15%), very high score threshold (≥85), and a 6-month horizon to weather volatility."
         st.session_state.min_score = 85
         st.session_state.horizon_days = 126
         st.session_state.target_return = 3
@@ -318,7 +318,7 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Small Cap Hunter":
-        st.session_state.preset_desc = "Lowers price and volume floors to scan micro/small-caps. Higher risk tolerance."
+        st.session_state.preset_desc = "**Use when:** You want exposure to high-growth micro/small-cap names. Lowers price floor to $0.50 and volume floor to 100K. Best used in a bull market where risk appetite is high. Expect higher volatility."
         st.session_state.min_score = 68
         st.session_state.horizon_days = 84
         st.session_state.target_return = 40
@@ -327,7 +327,7 @@ def apply_preset():
         st.session_state.vol_floor = 100000
         st.session_state.price_floor = 0.50
     elif preset == "Earnings Season":
-        st.session_state.preset_desc = "Tightened around the 21-day horizon to capture pre/post earnings momentum."
+        st.session_state.preset_desc = "**Use when:** Earnings reports are imminent (typically Jan, Apr, Jul, Oct). 21-day horizon captures pre-earnings momentum and post-earnings gap moves. Tighter risk rules reduce exposure to surprise miss gaps."
         st.session_state.min_score = 65
         st.session_state.horizon_days = 21
         st.session_state.target_return = 12
@@ -336,7 +336,7 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Swing Recovery":
-        st.session_state.preset_desc = "Targets beaten-down tickers with strong fundamentals. Medium horizon, moderate score."
+        st.session_state.preset_desc = "**Use when:** The market has pulled back significantly (10–20%) but fundamentals remain intact. Targets beaten-down quality tickers expecting mean-reversion over 6 weeks. Score ≥70 filters out genuine deteriorations."
         st.session_state.min_score = 70
         st.session_state.horizon_days = 42
         st.session_state.target_return = 15
@@ -345,7 +345,7 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Aggressive Growth":
-        st.session_state.preset_desc = "Standard aggressive growth."
+        st.session_state.preset_desc = "**Use when:** Market is in a confirmed bull run and you are comfortable with higher risk per trade (1%). Targets +20% moves over 6 weeks. Best suited for growth-oriented accounts not needing capital preservation."
         st.session_state.min_score = 70
         st.session_state.horizon_days = 42
         st.session_state.target_return = 20
@@ -354,7 +354,7 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Bear Market Defense":
-        st.session_state.preset_desc = "Standard bear market defense."
+        st.session_state.preset_desc = "**Use when:** SPY is below the 200-day MA or a recession is likely. Extremely low risk (0.25%), high score threshold (≥80), and a 3-month horizon. Focuses on defensive names that hold value in downturns."
         st.session_state.min_score = 80
         st.session_state.horizon_days = 84
         st.session_state.target_return = 5
@@ -364,7 +364,7 @@ def apply_preset():
         st.session_state.price_floor = 2.0
         st.session_state.price_ceiling = 0.0
     elif preset == "Penny Stock High Risk ($1-$10)":
-        st.session_state.preset_desc = "Extremely high risk, high reward plays constrained to penny stocks between $1 and $10."
+        st.session_state.preset_desc = "**Use when:** You want speculative, high-reward plays with a small, dedicated risk allocation. Constrained to $1–$10 stocks with the highest score-to-volatility ratio. Only deploy a small fraction of your total portfolio here."
         st.session_state.min_score = 60
         st.session_state.horizon_days = 21
         st.session_state.target_return = 50
@@ -374,7 +374,7 @@ def apply_preset():
         st.session_state.price_floor = 1.0
         st.session_state.price_ceiling = 10.0
     elif preset == "Default":
-        st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
+        st.session_state.preset_desc = "**Use when:** Market conditions are neutral or you are unsure which preset to choose. Score ≥65, 63-day horizon, 0.75% risk per trade. A well-rounded starting point for most market environments."
         st.session_state.min_score = 65
         st.session_state.horizon_days = 63
         st.session_state.target_return = 10
@@ -507,7 +507,10 @@ with st.sidebar:
     ]
     st.selectbox("Select Preset", preset_options, key="preset_selector", on_change=apply_preset)
     
-    st.info(st.session_state.preset_desc)
+    st.markdown(
+        f"<div style='background:#2b2b2b;border-left:3px solid #888;border-radius:4px;padding:10px 14px;font-size:0.82rem;color:#ccc;margin-bottom:6px;'>{st.session_state.preset_desc}</div>",
+        unsafe_allow_html=True,
+    )
 
     st.header("Quick Scan Settings")
     min_score = st.slider("Minimum Score", 50, 95, key="min_score")
@@ -566,15 +569,49 @@ if active_tab == "Overview":
     
     # Check Macro Market Regime
     regime = cached_market_regime()
-    # Apply a color mapping to the regime text
-    regime_color_map = {
-        "Bull": "green",
-        "Neutral": "blue",
-        "Bear": "orange",
-        "Extreme Fear": "red"
-    }
+    regime_color_map = {"Bull": "green", "Neutral": "blue", "Bear": "orange", "Extreme Fear": "red"}
     r_color = regime_color_map.get(regime["regime"], "white")
-    st.markdown(f"**Current Market Regime:** :{r_color}[**{regime['regime']}**] *(Multiplier: {regime['multiplier']}x - {regime['reason']})*")
+
+    rc1, rc2, rc3 = st.columns([2, 1, 1])
+    with rc1:
+        st.markdown(f"**Current Market Regime:** :{r_color}[**{regime['regime']}**] — *{regime['reason']}* · Multiplier **{regime['multiplier']}x**")
+        scan_date_display = latest_df["scan_date"].iloc[0] if not latest_df.empty and "scan_date" in latest_df.columns else "N/A"
+        st.caption(f"Last scan: **{scan_date_display}** · Regime refreshes every hour")
+    with rc2:
+        vix_val = regime.get("vix_level")
+        vix_trend = regime.get("vix_trend", "stable")
+        vix_arrow = "↑" if vix_trend == "rising" else ("↓" if vix_trend == "falling" else "→")
+        vix_color = "red" if vix_val and vix_val > 25 else ("orange" if vix_val and vix_val > 18 else "green")
+        vix_str = f"{vix_val:.1f} {vix_arrow}" if vix_val else "N/A"
+        st.markdown(f"**VIX:** :{vix_color}[{vix_str}]")
+        st.caption("Fear gauge · >25 = elevated")
+    with rc3:
+        gap = regime.get("spy_ma200_gap_pct")
+        if gap is not None:
+            gap_color = "green" if gap > 3 else ("orange" if gap > 0 else "red")
+            gap_label = f"{gap:+.1f}%"
+            st.markdown(f"**SPY vs 200MA:** :{gap_color}[{gap_label}]")
+            if 0 < gap <= 4:
+                st.caption("⚠️ Near bear threshold — tighten risk")
+            elif gap <= 0:
+                st.caption("🔴 Below 200MA — bear confirmed")
+            else:
+                st.caption("Healthy buffer above 200MA")
+        else:
+            st.markdown("**SPY vs 200MA:** N/A")
+            st.caption("Insufficient data")
+
+    # Bear turn prediction blurb
+    if regime.get("spy_ma200_gap_pct") is not None:
+        gap = regime["spy_ma200_gap_pct"]
+        vix_val = regime.get("vix_level") or 0
+        vix_trend = regime.get("vix_trend", "stable")
+        if gap <= 0:
+            st.warning("🐻 **Bear Market Active.** SPY has crossed below its 200-day MA. Consider switching to **Capital Preservation** or **Bear Market Defense** preset.")
+        elif gap <= 4 and vix_trend == "rising":
+            st.warning(f"⚠️ **Bear Transition Risk:** SPY is only {gap:.1f}% above its 200-day MA and VIX is rising. A further SPY pullback of ~{gap:.1f}% would trigger a regime shift to Bear. Reduce position sizes.")
+        elif gap <= 8 and vix_val > 20:
+            st.info(f"📊 **Caution zone:** SPY is {gap:.1f}% above its 200-day MA with VIX at {vix_val:.1f}. Market is not yet bearish, but elevated volatility warrants attention.")
     st.markdown("---")
 
     if latest_df.empty:
@@ -694,6 +731,9 @@ if active_tab == "History":
                 .agg(picks=("ticker", "count"), top_score=("score", "max"), avg_score=("score", "mean"))
                 .sort_values("scan_day", ascending=False)
             )
+            daily["scan_day"] = daily["scan_day"].astype(str)
+            daily["avg_score"] = daily["avg_score"].round(1)
+            daily["top_score"] = daily["top_score"].round(1)
             show_aggrid(daily, height=280)
 
             st.caption("Score trend")
@@ -840,26 +880,60 @@ if active_tab == "Ticker Detail":
             colC, colD = st.columns([2, 1])
             with colC:
                 st.markdown("#### Price & Score History (1 Year)")
+                st.caption("Top: 1-year price. Bottom: Argus score over each scan — 🟢 ≥75 strong, 🟡 50–75 watch, 🔴 <50 weak.")
                 hist = fetch_ticker_history(ticker, period="1y")
-                
+
                 try:
                     import plotly.graph_objects as go
                     from plotly.subplots import make_subplots
-                    
-                    fig = make_subplots(specs=[[{"secondary_y": True}]])
-                    if not hist.empty:
-                        fig.add_trace(go.Scatter(x=hist.index, y=hist["Close"], name="Price", line=dict(color='blue')), secondary_y=False)
-                        
+
                     tdf_scores = tdf.dropna(subset=["scan_date", "score"]).sort_values("scan_date")
+
+                    fig = make_subplots(
+                        rows=2, cols=1,
+                        shared_xaxes=True,
+                        vertical_spacing=0.10,
+                        subplot_titles=("Price ($)", "Argus Score (0–100)"),
+                        row_heights=[0.62, 0.38],
+                    )
+
+                    if not hist.empty:
+                        fig.add_trace(
+                            go.Scatter(x=hist.index, y=hist["Close"], name="Price",
+                                       line=dict(color="#2196F3", width=1.5), fill="tozeroy",
+                                       fillcolor="rgba(33,150,243,0.07)"),
+                            row=1, col=1,
+                        )
+
                     if not tdf_scores.empty:
-                        fig.add_trace(go.Scatter(x=tdf_scores["scan_date"], y=tdf_scores["score"], name="Argus Score", mode="lines+markers", line=dict(dash='dot', color='orange')), secondary_y=True)
-                        
-                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
-                    fig.update_yaxes(title_text="Close Price", secondary_y=False)
-                    fig.update_yaxes(title_text="Argus Score", secondary_y=True)
+                        fig.add_hrect(y0=75, y1=100, fillcolor="rgba(76,175,80,0.12)", line_width=0, row=2, col=1)
+                        fig.add_hrect(y0=50, y1=75,  fillcolor="rgba(255,193,7,0.10)",  line_width=0, row=2, col=1)
+                        fig.add_hrect(y0=0,  y1=50,  fillcolor="rgba(244,67,54,0.08)",  line_width=0, row=2, col=1)
+                        fig.add_hline(y=75, line_dash="dot", line_color="rgba(76,175,80,0.5)",  row=2, col=1)
+                        fig.add_hline(y=50, line_dash="dot", line_color="rgba(255,193,7,0.5)",  row=2, col=1)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=tdf_scores["scan_date"], y=tdf_scores["score"],
+                                name="Argus Score", mode="lines+markers",
+                                line=dict(color="orange", width=2),
+                                marker=dict(size=7, color=tdf_scores["score"],
+                                            colorscale=[[0,"#f44336"],[0.5,"#ffc107"],[1,"#4caf50"]],
+                                            cmin=0, cmax=100, showscale=False),
+                                text=[f"Score: {s:.0f}" for s in tdf_scores["score"]],
+                                hovertemplate="%{text}<extra></extra>",
+                            ),
+                            row=2, col=1,
+                        )
+
+                    fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+                    fig.update_yaxes(title_text="Score", range=[0, 100], row=2, col=1)
+                    fig.update_layout(
+                        height=420, margin=dict(l=0, r=0, t=30, b=0),
+                        hovermode="x unified", showlegend=False,
+                    )
                     st.plotly_chart(fig, use_container_width=True)
                 except Exception as e:
-                    st.warning("Could not render dual-axis chart.")
+                    st.warning("Could not render chart.")
                     if not hist.empty:
                         safe_line_chart(hist["Close"], y_label="close price")
                     else:
@@ -1389,15 +1463,75 @@ if active_tab == "Help":
     
     ---
     ### Pages Overview
-    * **Overview:** Snapshot of the latest scan results with interactive visual metric cards. View the current macro Market Regime and top stock picks.
-    * **Ticker Detail:** Deep dive into specific tickers. Evaluate Plotly interactive price charts, quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq).
+    * **Overview:** Snapshot of the latest scan results with interactive visual metric cards. View the current macro Market Regime, last scan date, VIX level, and SPY vs 200-day MA proximity. Bear transition warnings appear automatically when conditions deteriorate.
+    * **Ticker Detail:** Deep dive into specific tickers. Evaluate a two-panel Plotly chart (price on top, Argus score with colour bands on bottom — 🟢 ≥75, 🟡 50–75, 🔴 <50), quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq).
     * **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate the statistically optimal portfolio sizing using the efficient frontier.
     * **Manual Run:** Instantly run a new global scan based on your sidebar settings. Includes Telegram notification support and Auto-Pilot portfolio monitoring.
-    * **History:** Browse historical database scans with interactive tables. Select any row to view a visual card grid of its scoring reasons.
+    * **History:** Browse historical database scans with interactive sortable tables. Select any scan day to view a visual card grid of its scoring reasons.
     * **Journal:** Personal logbook featuring a **Live Portfolio Analytics Dashboard**. Track Total Invested, Current Value, Net Return %, and visualize Sector Diversification via interactive pie charts. Benchmarks portfolio performance against the S&P 500 (SPY). Powered by the Auto-Pilot monitor for live SL/TP tracking.
     * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, and calibration accuracy across different market conditions.
-    * **Alerts Log:** Record of all automated signals pushed via Telegram.
-    * **Prompts:** Curated LLM prompts to assist with deeper external research.
+    * **Alerts Log:** Record of all automated Telegram push notifications generated by both local manual runs and the GitHub Actions daily scan.
+    * **Prompts:** Curated LLM prompts for deeper external research, plus market condition templates.
+
+    ---
+    ### 🤖 ML Prediction Model — When Does It Activate?
+
+    The XGBoost model trains on rows in the `features` table where the **future return is already known** (i.e., the scan happened at least `Horizon Days` ago — default 63 days). Each scan of N tickers produces up to N feature rows. Once those rows mature past the horizon, they become labeled training samples.
+
+    **Practical timeline:**
+    * 1 scan of 200 tickers = up to 200 samples (but only usable after 63 days)
+    * After ~1–2 months of daily GitHub Action scans, you will likely have 1,000–4,000 labeled samples — well above the 30-sample minimum
+    * The model activates automatically as soon as 30+ matured samples exist; it improves steadily thereafter
+
+    The model is **100% free** — it uses `yfinance` price data (free) and trains locally with XGBoost. No paid data feed is required.
+
+    ---
+    ### 📊 Upside Prob (%), Scenario Bear / Base / Bull — How Are They Calculated?
+
+    All three are derived from the **local XGBoost model** and historical scan data — no paid API is needed:
+
+    * **Upside Prob (%):** The ML model's predicted probability that this ticker will hit the Target Return within the Horizon Days. Calibrated using historical hit rates across score buckets.
+    * **Scenario Bear:** The historical hit-rate for tickers in the same score bucket when market conditions were bearish (low-multiplier regimes).
+    * **Scenario Base:** The overall historical hit-rate for this score bucket across all regimes.
+    * **Scenario Bull:** The hit-rate observed in bullish regime periods (high-multiplier).
+
+    These figures populate automatically once the ML model is active. Until then, they display as N/A.
+
+    ---
+    ### 🔔 Alerts Log — How It Links to Telegram
+
+    The **Alerts Log** tab reads from `argus_alerts_log.txt`, which is updated in two ways:
+
+    1. **GitHub Actions daily scan:** `argus.py` writes the full message to `argus_alerts_log.txt` and then commits it back to the repository. When you pull the latest code, the log file is updated with every automated run.
+    2. **Local manual runs:** Running the scan via the Manual Run tab also appends to the same file on your local machine.
+
+    > **Note:** The Alerts Log shows what was *sent* to Telegram. If a run failed to deliver to Telegram (bad token, rate limit, etc.), the log entry is still written so you can diagnose the issue.
+
+    ---
+    ### 📒 Journal Persistence — Your Entries Are Safe
+
+    Journal entries are stored in `argus.db` (SQLite) **locally on your machine only**. The database is now excluded from Git tracking, so:
+
+    * GitHub Actions daily runs will **never overwrite** your local database
+    * Pulling new commits will **never wipe** your journal entries
+    * Scan history is preserved via the committed CSV files (`argus_results_history.csv`) and automatically re-imported into your local database if it is ever missing
+
+    ---
+    ### 🎛 Global Presets — Quick Reference
+
+    | Preset | Best for |
+    |---|---|
+    | **Default** | Neutral market, unsure which preset |
+    | **High Conviction** | Bull market, concentrate into 1–3 best picks |
+    | **Momentum Sprint** | Strong trend, catch short-term breakouts |
+    | **Earnings Season** | Jan / Apr / Jul / Oct earnings cycles |
+    | **Swing Recovery** | Market pulled back 10–20%, expect mean-reversion |
+    | **Aggressive Growth** | Confirmed bull run, higher risk tolerance |
+    | **Liquidity Focus** | Large accounts needing fast entry/exit |
+    | **Capital Preservation** | Bear or Extreme Fear regime active |
+    | **Bear Market Defense** | SPY below 200-day MA |
+    | **Small Cap Hunter** | Bull market, high risk appetite |
+    | **Penny Stock High Risk** | Speculative allocation only |
 
     ---
     ### Sidebar Settings Explained
@@ -1421,7 +1555,59 @@ if active_tab == "Help":
 
 if active_tab == "Prompts":
     st.subheader("🤖 AI Prompts for Research")
-    st.caption("Copy these templates and paste them into AI tools (like Perplexity, ChatGPT, or Claude) to deeper analyze tickers.")
+    st.caption("Copy these templates and paste them into AI tools (Perplexity, ChatGPT, Claude, Grok) for deeper analysis. Replace bracketed placeholders with your data.")
+
+    st.markdown("---")
+    st.markdown("### 🌍 Market Condition Prompts")
+    st.caption("Use these to get a fast read on the current macro environment and whether you should be cautious or aggressive.")
+
+    st.markdown("#### M1. Today's Market Overview")
+    st.code("""Today is [TODAY'S DATE]. Give me a concise macro market overview for a U.S. equity investor.
+Cover:
+1. S&P 500 and Nasdaq current trend vs their 50-day and 200-day moving averages.
+2. VIX level — is fear elevated or complacent?
+3. The most important macroeconomic headline from the past 48 hours (Fed, inflation, jobs, geopolitics).
+4. Overall risk-on or risk-off sentiment verdict.
+5. One sector you would overweight and one you would underweight right now, with brief reasoning.
+Keep it professional, factual, and under 250 words.""", language="text")
+
+    st.markdown("#### M2. Should I Be Worried or Excited Right Now?")
+    st.code("""Today is [TODAY'S DATE]. Act as a senior portfolio manager reviewing current market conditions.
+Tell me:
+- The top 2 macro risks that could cause a meaningful correction in U.S. equities in the next 30–60 days.
+- The top 2 bullish tailwinds that could drive a continued rally.
+- Net verdict: should a medium-risk equity investor be adding, holding, or reducing exposure right now?
+Be direct and concrete — avoid vague disclaimers. Give me a clear signal.""", language="text")
+
+    st.markdown("#### M3. Argus Watchlist Impact Check")
+    st.code("""The following stocks are on my active watchlist: [TICKER1, TICKER2, TICKER3, ...].
+Today is [TODAY'S DATE]. For each ticker, briefly answer:
+1. Is there any major news or catalyst in the last 5 days that directly affects this company?
+2. Does any broad macro event (rate decisions, earnings cycle, sector rotation) meaningfully change the risk/reward for this stock?
+3. Flag any ticker I should be especially cautious about right now, and why.
+Format as a bullet list per ticker.""", language="text")
+
+    st.markdown("#### M4. Bearish Signal Checklist")
+    st.code("""Today is [TODAY'S DATE]. Run through the following bearish checklist for U.S. equities and rate each signal as Red / Yellow / Green:
+- VIX trend (3-week change): rising sharply = Red
+- SPY vs 200-day MA: below = Red, within 5% = Yellow, healthy buffer = Green
+- Credit spreads (HYG vs LQD): widening = Red
+- Yield curve (10Y–2Y): deeply inverted = Red
+- Fed posture: hawkish surprise = Red, neutral/dovish = Green
+- Recent earnings trend: majority misses = Red
+
+Summarize the overall market health verdict in one sentence.""", language="text")
+
+    st.markdown("#### M5. Sector Rotation Insight")
+    st.code("""Today is [TODAY'S DATE]. Based on the current macro cycle stage (early recovery / mid-cycle / late cycle / contraction), which U.S. equity sectors are typically in favour and which are typically out of favour?
+
+Map this to the current market conditions. Which of these sectors are showing relative strength vs the S&P 500 right now:
+Technology, Healthcare, Financials, Energy, Consumer Staples, Consumer Discretionary, Industrials, Utilities, Real Estate, Materials, Communication Services?
+
+Rank the top 3 to overweight and bottom 3 to underweight, with one-line justification each.""", language="text")
+
+    st.markdown("---")
+    st.markdown("### 📈 Individual Ticker Research Prompts")
 
     st.markdown("#### 1. Fundamental & Deep Research")
     st.code("""I am researching the stock [TICKER]. Please provide a comprehensive 

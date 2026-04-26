@@ -25,11 +25,14 @@ The project is designed to run automatically via local chron or GitHub Actions, 
 
 ## 🚀 Features
 
-*   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI and interactive history tables for professional-grade navigation, metric drill-downs, and scalable data consumption.
+*   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI, interactive AgGrid history tables, annotated metric badges, and styled metric cards for professional-grade navigation and data consumption.
 *   **Quantitative Scoring:** Ranks tickers (0-100) using a multi-factor `get_score()` algorithm focusing on revenue growth, margins, technical momentum (50MA, 200MA), and relative strength vs IWM/SPY.
-*   **Deep Dive Integrations:** Seamlessly navigate to a specific ticker via table clicks and interactive callbacks to review technical setups.
-*   **Portfolio Analytics Journal:** Built-in quantitative logbook tracking Total Invested, Net Returns, SPY Benchmark Comparisons, and Sector Exposure Pie Charts. Powered by an Auto-Pilot monitor to protect long-term holds and push SL/TP alerts.
-*   **Telegram Alerts:** Opt-in automated push notifications sending the top tier 'High Conviction' tickers straight to your phone.
+*   **Market Regime Panel:** Overview tab displays the current regime (Bull/Bear/Neutral/Extreme Fear), live VIX level with trend arrow, SPY vs 200-day MA gap, last scan date, and automatic bear-transition warnings.
+*   **Two-Panel Price & Score Chart:** Ticker Detail tab shows a stacked Plotly chart — price on top, Argus score on bottom with colour-coded bands (🟢 ≥75, 🟡 50–75, 🔴 <50) so you immediately understand where a score sits in context.
+*   **Deep Dive Integrations:** Seamlessly navigate to a specific ticker via table clicks and interactive callbacks to review technical setups, AI thesis, and execution guidance.
+*   **Portfolio Analytics Journal:** Built-in quantitative logbook tracking Total Invested, Net Returns, SPY Benchmark Comparisons, and Sector Exposure Pie Charts. Journal entries are stored locally and are **never overwritten** by GitHub Actions.
+*   **Telegram Alerts + Alerts Log:** Opt-in automated push notifications sending top 'High Conviction' tickers to your phone. The Alerts Log tab displays all historical messages, including those sent by the daily GitHub Action.
+*   **AI Research Prompts:** Curated prompt templates for macro market overview, bear signal checklists, sector rotation analysis, and individual ticker deep-dives — ready to paste into ChatGPT, Claude, Perplexity, or Grok.
 
 ---
 
@@ -78,12 +81,29 @@ The workstation will launch in your browser at `http://localhost:8502`.
 
 ## 📚 Dashboard Navigation
 
-1. **Overview:** Daily snapshot of your most recent scan outputs and current Macro Market Regime, using interactive visual metric cards.
-2. **Ticker Detail:** Deep dive into Plotly charts, quantitative execution guidance, and generate qualitative AI investment thesis reports via dynamic `nav_to_ticker` callbacks.
+1. **Overview:** Daily snapshot of your most recent scan outputs, current Macro Market Regime (Bull/Bear/Neutral/Extreme Fear), live VIX level, SPY vs 200-day MA gap, last scan date, and automatic bear-transition risk alerts.
+2. **Ticker Detail:** Deep dive into a two-panel price+score chart, quantitative execution guidance, and generate qualitative AI investment thesis reports via `nav_to_ticker`.
 3. **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate Max Sharpe allocations using Markowitz efficient frontier logic.
 4. **Manual Run:** Instantly trigger a new global algorithmic scan across the market using your sidebar settings, and evaluate **Auto-Pilot** alerts.
-5. **History & Journal:** Review historic databases with robust on-click UI rendering, and log your personal swing trades tightly monitored against live trigger constraints.
-6. **Prediction Model:** ML diagnostics reviewing XGBoost hit rates across thousands of accumulated past predictions.
+5. **History:** Review interactive sortable scan tables. Select any day to view a visual card grid with full scoring reasons.
+6. **Journal:** Personal logbook for swing trade tracking. Entries are stored locally in `argus.db` and are never overwritten by GitHub Actions.
+7. **Prediction Model:** ML diagnostics reviewing XGBoost hit rates. Activates automatically once 30+ matured samples exist (scans older than your configured Horizon Days). Typically active after 1–2 months of daily GitHub Action runs.
+8. **Alerts Log:** Historical record of all Telegram push notifications from both manual runs and the GitHub Actions daily scan. Populated by `argus_alerts_log.txt` which the Action commits back to the repository.
+9. **Prompts:** 5 market condition prompt templates (macro overview, bearish checklist, watchlist impact, sector rotation) plus 4 individual ticker research templates — paste into any AI tool.
+
+---
+
+## 🗄️ Data Persistence
+
+| File | Tracked in Git | Updated by | Purpose |
+|---|---|---|---|
+| `argus_results.csv` | ✅ Yes | GitHub Action | Latest scan results |
+| `argus_results_history.csv` | ✅ Yes | GitHub Action | Full scan history |
+| `argus_feature_history.csv` | ✅ Yes | GitHub Action | ML feature store |
+| `argus_alerts_log.txt` | ✅ Yes | Both | Telegram alert log |
+| `argus.db` | ❌ No (gitignored) | Local app only | Journal + local DB |
+
+> `argus.db` is intentionally gitignored so that journal entries on your local machine are never lost when pulling GitHub Action updates.
 
 ---
 

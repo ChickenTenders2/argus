@@ -385,24 +385,32 @@ def get_market_regime():
         vix = yf.Ticker("^VIX").history(period="1mo")
         
         if spy.empty or vix.empty or len(spy) < 200:
-            return {"regime": "Neutral", "multiplier": 1.0, "reason": "Insufficient data"}
+            return {"regime": "Neutral", "multiplier": 1.0, "reason": "Insufficient data",
+                    "spy_ma200_gap_pct": None, "vix_level": None, "vix_trend": None}
             
         spy_price = spy["Close"].iloc[-1]
         spy_ma50 = spy["Close"].rolling(50).mean().iloc[-1]
         spy_ma200 = spy["Close"].rolling(200).mean().iloc[-1]
         vix_price = vix["Close"].iloc[-1]
-        
+
+        spy_ma200_gap_pct = ((spy_price - spy_ma200) / spy_ma200) * 100
+        vix_week_ago = vix["Close"].iloc[-5] if len(vix) >= 5 else vix["Close"].iloc[0]
+        vix_trend = "rising" if vix_price > vix_week_ago * 1.05 else ("falling" if vix_price < vix_week_ago * 0.95 else "stable")
+
+        extra = {"spy_ma200_gap_pct": spy_ma200_gap_pct, "vix_level": vix_price, "vix_trend": vix_trend}
+
         if vix_price > 30:
-            return {"regime": "Extreme Fear", "multiplier": 0.7, "reason": f"VIX elevated at {vix_price:.1f}"}
+            return {"regime": "Extreme Fear", "multiplier": 0.7, "reason": f"VIX elevated at {vix_price:.1f}", **extra}
         elif spy_price < spy_ma200:
-            return {"regime": "Bear", "multiplier": 0.8, "reason": "SPY below 200-day MA"}
+            return {"regime": "Bear", "multiplier": 0.8, "reason": "SPY below 200-day MA", **extra}
         elif spy_price > spy_ma50 and spy_price > spy_ma200:
-            return {"regime": "Bull", "multiplier": 1.1, "reason": "SPY above 50-day and 200-day MA"}
+            return {"regime": "Bull", "multiplier": 1.1, "reason": "SPY above 50-day and 200-day MA", **extra}
         else:
-            return {"regime": "Neutral", "multiplier": 1.0, "reason": "SPY consolidating between moving averages"}
+            return {"regime": "Neutral", "multiplier": 1.0, "reason": "SPY consolidating between moving averages", **extra}
     except Exception as e:
         logger.warning(f"Market regime check failed: {e}")
-        return {"regime": "Neutral", "multiplier": 1.0, "reason": "Data fetch error"}
+        return {"regime": "Neutral", "multiplier": 1.0, "reason": "Data fetch error",
+                "spy_ma200_gap_pct": None, "vix_level": None, "vix_trend": None}
 
 def format_pick(pick, memory_df):
     ticker = pick["ticker"]
