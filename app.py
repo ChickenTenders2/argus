@@ -294,27 +294,36 @@ def fetch_financial_snapshot(ticker):
     except Exception:
         return {}
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def fetch_current_prices(tickers):
     """Bulk fetch current prices to calculate historical return."""
     if not tickers: return {}
+    prices = {}
     try:
-        data = yf.download(list(tickers), period="5d", progress=False)
-        prices = {}
-        # Handle yf.download multiindex response based on number of tickers
-        if len(tickers) == 1:
-            t = tickers[0]
-            if "Close" in data.columns:
-                prices[t] = float(data["Close"].dropna().iloc[-1])
+        data = yf.download(list(tickers), period="2d", progress=False, auto_adjust=True)
+        if data.empty:
+            return prices
+        if isinstance(data.columns, pd.MultiIndex):
+            # yfinance 1.x multi-ticker: columns are (Price, Ticker)
+            top_level = data.columns.get_level_values(0)
+            price_col = "Close" if "Close" in top_level else None
+            if price_col is None:
+                return prices
+            close_df = data[price_col]
+            for t in tickers:
+                if t in close_df.columns:
+                    val = close_df[t].dropna()
+                    if not val.empty:
+                        prices[t] = float(val.iloc[-1])
         else:
-            if "Close" in data.columns:
-                close_df = data["Close"]
-                for t in tickers:
-                    if t in close_df.columns:
-                        prices[t] = float(close_df[t].dropna().iloc[-1])
-        return prices
-    except Exception as e:
-        return {}
+            # Single ticker — flat columns
+            t = tickers[0]
+            col = "Close" if "Close" in data.columns else None
+            if col and not data[col].dropna().empty:
+                prices[t] = float(data[col].dropna().iloc[-1])
+    except Exception:
+        pass
+    return prices
 
 def safe_line_chart(data, y_label="value"):
     """
