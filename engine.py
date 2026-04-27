@@ -101,6 +101,11 @@ def get_db_connection():
         return conn
 
     # ── SQLite fallback ───────────────────────────────────────────────────────
+    if _SQLITE_CONN is not None:
+        try:
+            _SQLITE_CONN.execute("SELECT 1")  # verify still alive
+        except Exception:
+            _SQLITE_CONN = None  # was closed externally — force reopen
     if _SQLITE_CONN is None:
         _SQLITE_CONN = sqlite3.connect(DB_FILE, check_same_thread=False)
     conn = _SQLITE_CONN

@@ -1255,8 +1255,8 @@ if active_tab == "Journal":
                             _import_df["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             conn = get_db_connection()
                             _import_df.to_sql("journal", conn, if_exists="append", index=False)
-                            conn.close()
                             sync_journal_to_csv(config.JOURNAL_FILE)
+                            conn.close()
                             st.success(f"Imported {len(_import_df)} entries into '{_target_j}'.")
                             st.rerun()
                 except Exception as _csv_err:
@@ -1270,33 +1270,98 @@ if active_tab == "Journal":
     if journal_df.empty:
         st.info("No journal entries yet.")
     else:
-        st.markdown("### 📋 Logged Entries")
-        
-        edited_df = st.data_editor(
-            journal_df.sort_values("timestamp", ascending=False),
-            num_rows="dynamic",
-            use_container_width=True,
-            key="journal_editor"
-        )
-        
-        if not edited_df.equals(journal_df.sort_values("timestamp", ascending=False)):
-            if st.button("💾 Save Edited Log"):
-                conn = get_db_connection()
-                if _current_journal:
-                    try:
-                        from sqlalchemy import text as _sa_text
-                        conn.execute(_sa_text("DELETE FROM journal WHERE journal_name = :jn"), {"jn": _current_journal})
-                    except Exception:
-                        conn.execute("DELETE FROM journal WHERE journal_name = ?", (_current_journal,))
-                    conn.commit()
-                    edited_df.to_sql("journal", conn, if_exists="append", index=False)
-                else:
-                    edited_df.to_sql("journal", conn, if_exists="replace", index=False)
-                conn.close()
-                sync_journal_to_csv(config.JOURNAL_FILE)
-                st.success("Log updated successfully!")
-                st.rerun()
-        
+        _tx_tab, _hold_tab = st.tabs(["📋 All Transactions", "🏦 Holdings Summary"])
+
+        with _tx_tab:
+            edited_df = st.data_editor(
+                journal_df.sort_values("timestamp", ascending=False),
+                num_rows="dynamic",
+                use_container_width=True,
+                key="journal_editor"
+            )
+            if not edited_df.equals(journal_df.sort_values("timestamp", ascending=False)):
+                if st.button("💾 Save Edited Log"):
+                    conn = get_db_connection()
+                    if _current_journal:
+                        try:
+                            from sqlalchemy import text as _sa_text
+                            conn.execute(_sa_text("DELETE FROM journal WHERE journal_name = :jn"), {"jn": _current_journal})
+                        except Exception:
+                            conn.execute("DELETE FROM journal WHERE journal_name = ?", (_current_journal,))
+                        conn.commit()
+                        edited_df.to_sql("journal", conn, if_exists="append", index=False)
+                    else:
+                        edited_df.to_sql("journal", conn, if_exists="replace", index=False)
+                    sync_journal_to_csv(config.JOURNAL_FILE)
+                    conn.close()
+                    st.success("Log updated successfully!")
+                    st.rerun()
+
+        with _hold_tab:
+            _hold_map = {}
+            for _, _hr in journal_df.iterrows():
+                _ht = str(_hr.get("ticker", "")).strip().upper()
+                _ha = str(_hr.get("action", "")).strip().upper()
+                _hs = float(_hr.get("shares") or 0)
+                _hp = float(_hr.get("entry_price") or 0)
+                if not _ht:
+                    continue
+                if _ht not in _hold_map:
+                    _hold_map[_ht] = {"shares": 0.0, "cost": 0.0, "txns": 0}
+                _hold_map[_ht]["txns"] += 1
+                if _ha in ("BUY", "SCALE_IN"):
+                    _hold_map[_ht]["shares"] += _hs
+                    _hold_map[_ht]["cost"] += _hs * _hp
+                elif _ha in ("SELL", "TRIM") and _hold_map[_ht]["shares"] > 0:
+                    _rm = min(_hs, _hold_map[_ht]["shares"])
+                    _ratio = _rm / _hold_map[_ht]["shares"]
+                    _hold_map[_ht]["cost"] -= _hold_map[_ht]["cost"] * _ratio
+                    _hold_map[_ht]["shares"] -= _rm
+
+            _hold_rows = []
+            for _ht, _hd in _hold_map.items():
+                _avg_p = _hd["cost"] / _hd["shares"] if _hd["shares"] > 0.001 else 0.0
+                _hold_rows.append({
+                    "Ticker": _ht,
+                    "Transactions": _hd["txns"],
+                    "Shares Held": round(_hd["shares"], 4),
+                    "Avg Entry ($)": round(_avg_p, 2),
+                    "Total Cost ($)": round(_hd["shares"] * _avg_p, 2),
+                })
+
+            if _hold_rows:
+                _hold_df = pd.DataFrame(_hold_rows)
+                _open_hold = _hold_df[_hold_df["Shares Held"] > 0.001].copy()
+                if not _open_hold.empty:
+                    with st.spinner("Fetching live prices..."):
+                        _live_p = fetch_current_prices(_open_hold["Ticker"].tolist())
+                    _open_hold["Current ($)"] = _open_hold["Ticker"].map(_live_p).round(2)
+                    _open_hold["Mkt Value ($)"] = (_open_hold["Shares Held"] * _open_hold["Current ($)"]).round(2)
+                    _open_hold["P&L ($)"] = (_open_hold["Mkt Value ($)"] - _open_hold["Total Cost ($)"]).round(2)
+                    _open_hold["P&L (%)"] = (
+                        (_open_hold["Current ($)"] - _open_hold["Avg Entry ($)"]) /
+                        _open_hold["Avg Entry ($)"].replace(0, float("nan")) * 100
+                    ).round(2)
+                    _tc = _open_hold["Total Cost ($)"].sum()
+                    _tv = _open_hold["Mkt Value ($)"].sum()
+                    _tp = _open_hold["P&L ($)"].sum()
+                    _tpp = (_tp / _tc * 100) if _tc > 0 else 0
+                    hc1, hc2, hc3, hc4 = st.columns(4)
+                    hc1.metric("Open Positions", len(_open_hold))
+                    hc2.metric("Total Cost", f"${_tc:,.2f}")
+                    hc3.metric("Market Value", f"${_tv:,.2f}")
+                    hc4.metric("Total P&L", f"${_tp:+,.2f}", delta=f"{_tpp:+.1f}%")
+                    st.dataframe(
+                        _open_hold.style.background_gradient(subset=["P&L (%)"], cmap="RdYlGn"),
+                        use_container_width=True, hide_index=True
+                    )
+                _closed = _hold_df[_hold_df["Shares Held"] <= 0.001][["Ticker", "Transactions"]].copy()
+                if not _closed.empty:
+                    with st.expander(f"Closed / Exited Positions ({len(_closed)})"):
+                        st.dataframe(_closed, use_container_width=True, hide_index=True)
+            else:
+                st.info("No transactions to summarise yet.")
+
         st.markdown("### 📊 Portfolio P&L Status")
         
         trades = []
@@ -1418,8 +1483,8 @@ if active_tab == "Journal":
                     except:
                         conn.execute("DELETE FROM journal WHERE ticker = ?", (ticker_to_delete,))
                     conn.commit()
-                    conn.close()
                     sync_journal_to_csv(config.JOURNAL_FILE)
+                    conn.close()
                     st.success(f"Successfully deleted {ticker_to_delete} from the Journal!")
                     st.rerun()
                 else:
