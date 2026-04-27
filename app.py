@@ -19,6 +19,7 @@ from engine import (
     monitor_portfolio
 )
 import os
+import re
 import requests
 import json
 from datetime import datetime
@@ -1230,7 +1231,11 @@ if active_tab == "Journal":
                 try:
                     _import_df = pd.read_csv(_uploaded_csv)
                     _required_cols = {"ticker", "action"}
-                    _import_df.columns = [c.lower().replace(" ", "_") for c in _import_df.columns]
+                    def _norm_col(c):
+                        c = c.lower().replace(" ", "_").replace("%", "pct")
+                        c = re.sub(r'[^a-z0-9_]', '', c)
+                        return re.sub(r'_+', '_', c).strip('_')
+                    _import_df.columns = [_norm_col(c) for c in _import_df.columns]
                     _missing = _required_cols - set(_import_df.columns)
                     if _missing:
                         st.error(f"Missing required columns: {', '.join(_missing)}. Only 'ticker' and 'action' are mandatory.")
