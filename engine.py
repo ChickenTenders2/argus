@@ -31,151 +31,117 @@ _DB_INIT_LOCK = threading.Lock()
 def get_db_connection():
     global _DB_ENGINE, _DB_INITIALIZED, _SQLITE_CONN, _DB_INIT_LOCK
     db_url = os.environ.get("DATABASE_URL")
-    
+
+    # ── PostgreSQL path ───────────────────────────────────────────────────────
     if db_url:
         import sqlalchemy
-        
+
         if _DB_ENGINE is None:
-            # Neon/Supabase often require this exact schema protocol for psycopg2:
             if db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql://", 1)
-            # Supabase and most managed Postgres require SSL — add if not already present
-            if "sslmode" not in db_url:
-                db_url += ("&" if "?" in db_url else "?") + "sslmode=require"
-            # Add pool sizing for Streamlit multithreading optimization
-            _DB_ENGINE = sqlalchemy.create_engine(db_url, pool_size=5, max_overflow=10, pool_pre_ping=True)
-            
+            try:
+                _DB_ENGINE = sqlalchemy.create_engine(
+                    db_url,
+                    pool_size=3,
+                    max_overflow=5,
+                    pool_pre_ping=True,
+                    connect_args={"sslmode": "require", "connect_timeout": 10},
+                )
+                with _DB_ENGINE.connect() as _test:
+                    _test.execute(sqlalchemy.text("SELECT 1"))
+            except Exception as _pg_err:
+                logger.error(
+                    f"PostgreSQL connection failed — falling back to SQLite. "
+                    f"Reason: {type(_pg_err).__name__}: {str(_pg_err)[:300]}"
+                )
+                _DB_ENGINE = None
+                db_url = None
+
+    if db_url and _DB_ENGINE is not None:
         conn = _DB_ENGINE.connect()
-        
         if not _DB_INITIALIZED:
             with _DB_INIT_LOCK:
                 if not _DB_INITIALIZED:
-                    # Postgres-compatible schema creation
                     try:
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS memory (
-                                            ticker TEXT PRIMARY KEY,
-                                            first_seen TEXT,
-                                            times_flagged INTEGER,
-                                            last_score REAL
-                                        )"""))
+                            ticker TEXT PRIMARY KEY, first_seen TEXT,
+                            times_flagged INTEGER, last_score REAL)"""))
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS journal (
-                                            timestamp TEXT,
-                                            ticker TEXT,
-                                            action TEXT,
-                                            scan_date TEXT,
-                                            entry_price REAL,
-                                            position_size_pct REAL,
-                                            shares REAL,
-                                            stop_loss_pct REAL,
-                                            take_profit_pct REAL,
-                                            notes TEXT
-                                        )"""))
+                            timestamp TEXT, ticker TEXT, action TEXT, scan_date TEXT,
+                            entry_price REAL, position_size_pct REAL, shares REAL,
+                            stop_loss_pct REAL, take_profit_pct REAL, notes TEXT)"""))
                         conn.commit()
                     except Exception as e:
                         logger.warning(f"Concurrent DB init safely skipped (Phase 1): {e}")
                         conn.rollback()
-                    
                     try:
                         conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN shares REAL"))
                         conn.commit()
-                    except:
-                        conn.rollback()
-
+                    except: conn.rollback()
                     try:
                         conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN journal_name TEXT DEFAULT 'Default'"))
                         conn.commit()
-                    except:
-                        conn.rollback()
-                        
+                    except: conn.rollback()
                     try:
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS features (
-                                            id SERIAL PRIMARY KEY,
-                                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                            tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
-                                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                                        )"""))
+                            id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
+                            f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                            tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
+                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT)"""))
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS results (
-                                            id SERIAL PRIMARY KEY,
-                                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                            tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
-                                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                                        )"""))
+                            id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
+                            f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                            tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
+                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT)"""))
                         conn.commit()
                     except Exception as e:
                         logger.warning(f"Concurrent DB init safely skipped (Phase 2): {e}")
                         conn.rollback()
-                        
                     _DB_INITIALIZED = True
-            
         return conn
-        
-    else:
-        # Fallback to local SQLite if cloud not configured
-        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 
-        if not _DB_INITIALIZED:
-            with _DB_INIT_LOCK:
-                if not _DB_INITIALIZED:
-                    # Ensure tables exist
-                    try:
-                        conn.execute("""CREATE TABLE IF NOT EXISTS memory (
-                                            ticker TEXT PRIMARY KEY,
-                                            first_seen TEXT,
-                                            times_flagged INTEGER,
-                                            last_score REAL
-                                        )""")
-                        conn.execute("""CREATE TABLE IF NOT EXISTS journal (
-                                            timestamp TEXT,
-                                            ticker TEXT,
-                                            action TEXT,
-                                            scan_date TEXT,
-                                            entry_price REAL,
-                                            position_size_pct REAL,
-                                            shares REAL,
-                                            stop_loss_pct REAL,
-                                            take_profit_pct REAL,
-                                            notes TEXT
-                                        )""")
-                        conn.commit()
-                    except Exception as e:
-                        logger.warning(f"Concurrent local DB init safely skipped (Phase 1): {e}")
-                        
-                    try:
-                        conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
-                        conn.commit()
-                    except:
-                        pass
-
-                    try:
-                        conn.execute("ALTER TABLE journal ADD COLUMN journal_name TEXT DEFAULT 'Default'")
-                        conn.commit()
-                    except:
-                        pass
-                        
-                    try:
-                        conn.execute("""CREATE TABLE IF NOT EXISTS features (
-                                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                            tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
-                                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                                        )""")
-                        conn.execute("""CREATE TABLE IF NOT EXISTS results (
-                                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                            ticker TEXT, sector TEXT, score REAL, f_score REAL,
-                                            v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                                            tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
-                                            scan_date TEXT, scan_timestamp TEXT, run_type TEXT
-                                        )""")
-                        conn.commit()
-                    except Exception as e:
-                        logger.warning(f"Concurrent local DB init safely skipped (Phase 2): {e}")
-
-                    _DB_INITIALIZED = True
-            
-        return conn
+    # ── SQLite fallback ───────────────────────────────────────────────────────
+    if _SQLITE_CONN is None:
+        _SQLITE_CONN = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn = _SQLITE_CONN
+    if not _DB_INITIALIZED:
+        with _DB_INIT_LOCK:
+            if not _DB_INITIALIZED:
+                try:
+                    conn.execute("""CREATE TABLE IF NOT EXISTS memory (
+                        ticker TEXT PRIMARY KEY, first_seen TEXT,
+                        times_flagged INTEGER, last_score REAL)""")
+                    conn.execute("""CREATE TABLE IF NOT EXISTS journal (
+                        timestamp TEXT, ticker TEXT, action TEXT, scan_date TEXT,
+                        entry_price REAL, position_size_pct REAL, shares REAL,
+                        stop_loss_pct REAL, take_profit_pct REAL, notes TEXT)""")
+                    conn.commit()
+                except Exception as e:
+                    logger.warning(f"Concurrent local DB init safely skipped (Phase 1): {e}")
+                try:
+                    conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
+                    conn.commit()
+                except: pass
+                try:
+                    conn.execute("ALTER TABLE journal ADD COLUMN journal_name TEXT DEFAULT 'Default'")
+                    conn.commit()
+                except: pass
+                try:
+                    conn.execute("""CREATE TABLE IF NOT EXISTS features (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, sector TEXT, score REAL,
+                        f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                        tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
+                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT)""")
+                    conn.execute("""CREATE TABLE IF NOT EXISTS results (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, sector TEXT, score REAL,
+                        f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                        tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
+                        scan_date TEXT, scan_timestamp TEXT, run_type TEXT)""")
+                    conn.commit()
+                except Exception as e:
+                    logger.warning(f"Concurrent local DB init safely skipped (Phase 2): {e}")
+                _DB_INITIALIZED = True
+    return conn
 
 def migrate_csv_to_sqlite():
     """One-time migration script. Safe to call multiple times."""
