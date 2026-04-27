@@ -557,6 +557,18 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
 
     _append_feature_rows(results, scan_date, scan_timestamp, run_type)
 
+def sync_journal_to_csv(journal_file):
+    """Write the full journal DB table back to the CSV so git tracks latest state."""
+    try:
+        df = load_journal()
+        df = df[df["ticker"] != "_INIT_"]
+        if "journal_name" not in df.columns:
+            df["journal_name"] = "Default"
+        df.to_csv(journal_file, index=False)
+    except Exception as e:
+        logger.warning(f"sync_journal_to_csv failed: {e}")
+
+
 def save_journal_entry(journal_file, entry, journal_name="Default"):
     row = pd.DataFrame([{
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -574,6 +586,7 @@ def save_journal_entry(journal_file, entry, journal_name="Default"):
     conn = get_db_connection()
     row.to_sql("journal", conn, if_exists="append", index=False)
     conn.close()
+    sync_journal_to_csv(journal_file)
 
 def load_journal(journal_file=None, journal_name=None):
     try:
@@ -616,7 +629,7 @@ def list_journals():
         return ["Default"]
 
 
-def delete_journal(journal_name):
+def delete_journal(journal_name, journal_file=None):
     """Delete all entries for a given journal name."""
     if not journal_name or journal_name == "Default":
         return False
@@ -629,6 +642,8 @@ def delete_journal(journal_name):
             conn.execute("DELETE FROM journal WHERE journal_name = ?", (journal_name,))
         conn.commit()
         conn.close()
+        if journal_file:
+            sync_journal_to_csv(journal_file)
         return True
     except Exception as e:
         logger.error(f"Failed to delete journal '{journal_name}': {e}")

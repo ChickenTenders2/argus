@@ -1,2 +1,1 @@
-timestamp,ticker,action,scan_date,entry_price,position_size_pct,stop_loss_pct,take_profit_pct,notes
-2026-04-12 12:20:33,YUYGYU,BUY,2026-04-12,0.0,0.0,8.0,25.0,jklhj
+timestamp,ticker,action,scan_date,entry_price,position_size_pct,shares,stop_loss_pct,take_profit_pct,notes,journal_name

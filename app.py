@@ -12,6 +12,7 @@ from engine import (
     load_journal,
     list_journals,
     delete_journal,
+    sync_journal_to_csv,
     get_market_regime,
     get_db_connection,
     generate_telegram_message,
@@ -1199,7 +1200,7 @@ if active_tab == "Journal":
                 st.warning(f"'{_nj}' already exists.")
     with jm_col4:
         if active_journal not in ("All", "Default") and st.button("🗑️ Delete Portfolio", use_container_width=True, help="Permanently deletes all entries in this portfolio."):
-            if delete_journal(active_journal):
+            if delete_journal(active_journal, journal_file=config.JOURNAL_FILE):
                 st.success(f"Portfolio '{active_journal}' deleted.")
                 st.rerun()
             else:
@@ -1255,6 +1256,7 @@ if active_tab == "Journal":
                             conn = get_db_connection()
                             _import_df.to_sql("journal", conn, if_exists="append", index=False)
                             conn.close()
+                            sync_journal_to_csv(config.JOURNAL_FILE)
                             st.success(f"Imported {len(_import_df)} entries into '{_target_j}'.")
                             st.rerun()
                 except Exception as _csv_err:
@@ -1291,6 +1293,7 @@ if active_tab == "Journal":
                 else:
                     edited_df.to_sql("journal", conn, if_exists="replace", index=False)
                 conn.close()
+                sync_journal_to_csv(config.JOURNAL_FILE)
                 st.success("Log updated successfully!")
                 st.rerun()
         
@@ -1416,6 +1419,7 @@ if active_tab == "Journal":
                         conn.execute("DELETE FROM journal WHERE ticker = ?", (ticker_to_delete,))
                     conn.commit()
                     conn.close()
+                    sync_journal_to_csv(config.JOURNAL_FILE)
                     st.success(f"Successfully deleted {ticker_to_delete} from the Journal!")
                     st.rerun()
                 else:
