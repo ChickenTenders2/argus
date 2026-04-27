@@ -39,6 +39,9 @@ def get_db_connection():
             # Neon/Supabase often require this exact schema protocol for psycopg2:
             if db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql://", 1)
+            # Supabase and most managed Postgres require SSL — add if not already present
+            if "sslmode" not in db_url:
+                db_url += ("&" if "?" in db_url else "?") + "sslmode=require"
             # Add pool sizing for Streamlit multithreading optimization
             _DB_ENGINE = sqlalchemy.create_engine(db_url, pool_size=5, max_overflow=10, pool_pre_ping=True)
             
