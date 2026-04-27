@@ -295,32 +295,50 @@ def fetch_financial_snapshot(ticker):
         return {}
 
 @st.cache_data(ttl=300)
+def _fetch_gbpusd():
+    """Fetch live GBP/USD exchange rate. Returns float (e.g. 1.27)."""
+    try:
+        fx = yf.download("GBPUSD=X", period="2d", progress=False, auto_adjust=True)
+        if not fx.empty:
+            col = fx["Close"] if "Close" in fx.columns else fx.iloc[:, 0]
+            return float(col.dropna().iloc[-1])
+    except Exception:
+        pass
+    return 1.27  # safe fallback
+
+@st.cache_data(ttl=300)
 def fetch_current_prices(tickers):
-    """Bulk fetch current prices to calculate historical return."""
+    """Bulk fetch current prices converted to GBP.
+    - US/other tickers: yfinance USD price ÷ GBPUSD rate
+    - UK (.L) tickers:  yfinance pence price ÷ 100
+    """
     if not tickers: return {}
     prices = {}
+    gbpusd = _fetch_gbpusd()
     try:
         data = yf.download(list(tickers), period="2d", progress=False, auto_adjust=True)
         if data.empty:
             return prices
+        raw = {}
         if isinstance(data.columns, pd.MultiIndex):
-            # yfinance 1.x multi-ticker: columns are (Price, Ticker)
             top_level = data.columns.get_level_values(0)
-            price_col = "Close" if "Close" in top_level else None
-            if price_col is None:
+            if "Close" not in top_level:
                 return prices
-            close_df = data[price_col]
+            close_df = data["Close"]
             for t in tickers:
                 if t in close_df.columns:
                     val = close_df[t].dropna()
                     if not val.empty:
-                        prices[t] = float(val.iloc[-1])
+                        raw[t] = float(val.iloc[-1])
         else:
-            # Single ticker — flat columns
             t = tickers[0]
-            col = "Close" if "Close" in data.columns else None
-            if col and not data[col].dropna().empty:
-                prices[t] = float(data[col].dropna().iloc[-1])
+            if "Close" in data.columns and not data["Close"].dropna().empty:
+                raw[t] = float(data["Close"].dropna().iloc[-1])
+        for t, price in raw.items():
+            if t.upper().endswith(".L"):
+                prices[t] = round(price / 100, 4)   # pence → GBP
+            else:
+                prices[t] = round(price / gbpusd, 4)  # USD → GBP
     except Exception:
         pass
     return prices
@@ -1339,8 +1357,8 @@ if active_tab == "Journal":
                     "Ticker": _ht,
                     "Transactions": _hd["txns"],
                     "Shares Held": round(_hd["shares"], 4),
-                    "Avg Entry ($)": round(_avg_p, 2),
-                    "Total Cost ($)": round(_hd["shares"] * _avg_p, 2),
+                    "Avg Entry (£)": round(_avg_p, 2),
+                    "Total Cost (£)": round(_hd["shares"] * _avg_p, 2),
                 })
 
             if _hold_rows:
@@ -1349,22 +1367,22 @@ if active_tab == "Journal":
                 if not _open_hold.empty:
                     with st.spinner("Fetching live prices..."):
                         _live_p = fetch_current_prices(_open_hold["Ticker"].tolist())
-                    _open_hold["Current ($)"] = _open_hold["Ticker"].map(_live_p).round(2)
-                    _open_hold["Mkt Value ($)"] = (_open_hold["Shares Held"] * _open_hold["Current ($)"]).round(2)
-                    _open_hold["P&L ($)"] = (_open_hold["Mkt Value ($)"] - _open_hold["Total Cost ($)"]).round(2)
+                    _open_hold["Current (£)"] = _open_hold["Ticker"].map(_live_p).round(2)
+                    _open_hold["Mkt Value (£)"] = (_open_hold["Shares Held"] * _open_hold["Current (£)"]).round(2)
+                    _open_hold["P&L (£)"] = (_open_hold["Mkt Value (£)"] - _open_hold["Total Cost (£)"]).round(2)
                     _open_hold["P&L (%)"] = (
-                        (_open_hold["Current ($)"] - _open_hold["Avg Entry ($)"]) /
-                        _open_hold["Avg Entry ($)"].replace(0, float("nan")) * 100
+                        (_open_hold["Current (£)"] - _open_hold["Avg Entry (£)"]) /
+                        _open_hold["Avg Entry (£)"].replace(0, float("nan")) * 100
                     ).round(2)
-                    _tc = _open_hold["Total Cost ($)"].sum()
-                    _tv = _open_hold["Mkt Value ($)"].sum()
-                    _tp = _open_hold["P&L ($)"].sum()
+                    _tc = _open_hold["Total Cost (£)"].sum()
+                    _tv = _open_hold["Mkt Value (£)"].sum()
+                    _tp = _open_hold["P&L (£)"].sum()
                     _tpp = (_tp / _tc * 100) if _tc > 0 else 0
                     hc1, hc2, hc3, hc4 = st.columns(4)
                     hc1.metric("Open Positions", len(_open_hold))
-                    hc2.metric("Total Cost", f"${_tc:,.2f}")
-                    hc3.metric("Market Value", f"${_tv:,.2f}")
-                    hc4.metric("Total P&L", f"${_tp:+,.2f}", delta=f"{_tpp:+.1f}%")
+                    hc2.metric("Total Cost", f"£{_tc:,.2f}")
+                    hc3.metric("Market Value", f"£{_tv:,.2f}")
+                    hc4.metric("Total P&L", f"£{_tp:+,.2f}", delta=f"{_tpp:+.1f}%")
                     st.dataframe(
                         _open_hold.style.background_gradient(subset=["P&L (%)"], cmap="RdYlGn"),
                         use_container_width=True, hide_index=True
@@ -1438,13 +1456,13 @@ if active_tab == "Journal":
                 with st.spinner("Fetching live prices for open positions..."):
                     current_prices = fetch_current_prices(open_df["Ticker"].tolist())
                 
-                open_df["Current Price"] = open_df["Ticker"].map(current_prices).round(2)
-                open_df["Cost Basis ($)"] = (open_df["Shares"] * open_df["Avg Buy"]).round(2)
-                open_df["Current Value ($)"] = (open_df["Shares"] * open_df["Current Price"]).round(2)
-                open_df["Unrealized (%)"] = (((open_df["Current Price"] - open_df["Avg Buy"]) / open_df["Avg Buy"]) * 100).round(2)
+                open_df["Current Price (£)"] = open_df["Ticker"].map(current_prices).round(2)
+                open_df["Cost Basis (£)"] = (open_df["Shares"] * open_df["Avg Buy"]).round(2)
+                open_df["Current Value (£)"] = (open_df["Shares"] * open_df["Current Price (£)"]).round(2)
+                open_df["Unrealized (%)"] = (((open_df["Current Price (£)"] - open_df["Avg Buy"]) / open_df["Avg Buy"]) * 100).round(2)
                 
-                total_invested = open_df["Cost Basis ($)"].sum()
-                total_current = open_df["Current Value ($)"].sum()
+                total_invested = open_df["Cost Basis (£)"].sum()
+                total_current = open_df["Current Value (£)"].sum()
                 net_return_pct = ((total_current - total_invested) / total_invested * 100) if total_invested > 0 else 0
                 
                 first_entry_date = open_df["First Date"].min()
@@ -1452,8 +1470,8 @@ if active_tab == "Journal":
                 
                 st.markdown("### 📊 Portfolio Analytics")
                 m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Total Invested", f"${total_invested:,.2f}")
-                m2.metric("Current Value", f"${total_current:,.2f}")
+                m1.metric("Total Invested", f"£{total_invested:,.2f}")
+                m2.metric("Current Value", f"£{total_current:,.2f}")
                 m3.metric("Net Return", f"{net_return_pct:+.2f}%")
                 m4.metric("SPY Benchmark", f"{spy_return:+.2f}%", help=f"S&P 500 Return since earliest active entry ({first_entry_date})")
                 
@@ -1463,8 +1481,8 @@ if active_tab == "Journal":
                     with st.spinner("Mapping sectors..."):
                         open_df["Sector"] = open_df["Ticker"].apply(get_cached_sector)
                     
-                    sector_totals = open_df.groupby("Sector")["Current Value ($)"].sum().reset_index()
-                    fig = px.pie(sector_totals, values='Current Value ($)', names='Sector', title="Sector Exposure by Dollar Value", hole=0.3)
+                    sector_totals = open_df.groupby("Sector")["Current Value (£)"].sum().reset_index()
+                    fig = px.pie(sector_totals, values='Current Value (£)', names='Sector', title="Sector Exposure by Value (£)", hole=0.3)
                     
                     ui_col1, ui_col2 = st.columns([1, 1])
                     with ui_col1:
