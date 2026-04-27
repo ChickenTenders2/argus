@@ -888,39 +888,40 @@ if active_tab == "History":
 if active_tab == "Ticker Detail":
     st.subheader("🔎 Ticker Detail")
 
-    with st.expander("🔍 Search Any Ticker (Manual Lookup)", expanded=False):
+    with st.container(border=True):
+        st.markdown("**🔍 Search Any Ticker — Manual Lookup**")
         st.caption("Analyse any stock not in your scan history. Fetches live data and runs the full Argus scoring engine.")
         _mt_col1, _mt_col2 = st.columns([3, 1])
         _manual_ticker_input = _mt_col1.text_input("Enter ticker symbol", placeholder="e.g. PLTR, NVDA, AAPL", label_visibility="collapsed", key="manual_ticker_input").upper().strip()
         _run_manual = _mt_col2.button("🔍 Analyse", key="btn_manual_ticker_analyze", use_container_width=True)
-        if _run_manual and _manual_ticker_input:
-            with st.spinner(f"Fetching and scoring {_manual_ticker_input}..."):
-                try:
-                    from engine import score_stock, load_memory
-                    _mem_df = load_memory()
-                    _manual_result = score_stock(_manual_ticker_input, _mem_df, config, None)
-                    if _manual_result:
-                        _mr_df = pd.DataFrame([_manual_result])
-                        _mr_df = add_predictions(_mr_df, model)
-                        _mr_df = add_risk_guidance(_mr_df, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
-                        _sig_lbl, _sig_col = get_signal_label(_manual_result.get("score", 0))
-                        st.success(f"**{_manual_ticker_input}** — Score: **{_manual_result['score']}/100** | **:{_sig_col}[{_sig_lbl}]**")
-                        display_cards(_mr_df)
-                        with st.expander("Full Data"):
-                            st.dataframe(_mr_df.T, use_container_width=True)
-                    else:
-                        st.warning(f"{_manual_ticker_input} did not pass Argus filters (score too low, invalid ticker, or red flags detected).")
-                        try:
-                            _info = yf.Ticker(_manual_ticker_input).info
-                            if _info and _info.get("symbol"):
-                                snap = fetch_financial_snapshot(_manual_ticker_input)
-                                if snap:
-                                    st.markdown("##### Basic Financial Snapshot")
-                                    st.dataframe(pd.DataFrame(list(snap.items()), columns=["Metric", "Value"]).set_index("Metric"), use_container_width=True)
-                        except Exception:
-                            pass
-                except Exception as _e:
-                    st.error(f"Error analysing {_manual_ticker_input}: {_e}")
+    if _run_manual and _manual_ticker_input:
+        with st.spinner(f"Fetching and scoring {_manual_ticker_input}..."):
+            try:
+                from engine import score_stock, load_memory
+                _mem_df = load_memory()
+                _manual_result = score_stock(_manual_ticker_input, _mem_df, config, None)
+                if _manual_result:
+                    _mr_df = pd.DataFrame([_manual_result])
+                    _mr_df = add_predictions(_mr_df, model)
+                    _mr_df = add_risk_guidance(_mr_df, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
+                    _sig_lbl, _sig_col = get_signal_label(_manual_result.get("score", 0))
+                    st.success(f"**{_manual_ticker_input}** — Score: **{_manual_result['score']}/100** | **:{_sig_col}[{_sig_lbl}]**")
+                    display_cards(_mr_df)
+                    st.dataframe(_mr_df.T, use_container_width=True)
+                else:
+                    st.warning(f"{_manual_ticker_input} did not pass Argus filters (score too low, invalid ticker, or red flags detected).")
+                    try:
+                        _info = yf.Ticker(_manual_ticker_input).info
+                        if _info and _info.get("symbol"):
+                            snap = fetch_financial_snapshot(_manual_ticker_input)
+                            if snap:
+                                st.markdown("##### Basic Financial Snapshot")
+                                st.dataframe(pd.DataFrame(list(snap.items()), columns=["Metric", "Value"]).set_index("Metric"), use_container_width=True)
+                    except Exception:
+                        pass
+            except Exception as _e:
+                st.error(f"Error analysing {_manual_ticker_input}: {_e}")
+    st.divider()
 
     if history_df.empty:
         st.info("No history available yet.")
@@ -1171,7 +1172,7 @@ if active_tab == "Journal":
     all_journals = list_journals()
     journal_options = ["All"] + all_journals
 
-    jm_col1, jm_col2, jm_col3, jm_col4 = st.columns([3, 2, 2, 2])
+    jm_col1, jm_col2, jm_col3, jm_col4 = st.columns([3, 2, 2, 2], vertical_alignment="bottom")
     with jm_col1:
         active_journal = st.selectbox(
             "Active Portfolio",
@@ -1216,30 +1217,41 @@ if active_tab == "Journal":
     with _csv_col:
         with st.expander("📥 Import from CSV"):
             st.caption(
-                "**Required CSV columns (headers must match exactly):**  \n"
-                "`ticker` · `action` · `scan_date` (YYYY-MM-DD) · `entry_price` · `shares` · "
-                "`stop_loss_pct` · `take_profit_pct` · `notes`  \n"
-                "Optional: `position_size_pct`  \n"
-                "The file will be imported into the currently selected portfolio."
+                "**Only `ticker` and `action` are required.** All other columns are optional — "
+                "missing values will be filled with blanks/zeros so you can edit them later.  \n"
+                "**Full column list (case-insensitive):** "
+                "`ticker` · `action` *(BUY/SELL/PASS/SCALE_IN/TRIM)* · `scan_date` *(YYYY-MM-DD)* · "
+                "`entry_price` · `shares` · `stop_loss_pct` · `take_profit_pct` · `position_size_pct` · `notes`  \n"
+                "File will be imported into the currently selected portfolio."
             )
             _uploaded_csv = st.file_uploader("Upload journal CSV", type=["csv"], label_visibility="collapsed", key="journal_csv_uploader")
             if _uploaded_csv is not None:
                 try:
                     _import_df = pd.read_csv(_uploaded_csv)
-                    _required_cols = {"ticker", "action", "scan_date", "entry_price", "shares", "stop_loss_pct", "take_profit_pct"}
-                    _missing = _required_cols - set(_import_df.columns.str.lower())
+                    _required_cols = {"ticker", "action"}
+                    _import_df.columns = [c.lower() for c in _import_df.columns]
+                    _missing = _required_cols - set(_import_df.columns)
                     if _missing:
-                        st.error(f"Missing required columns: {', '.join(_missing)}")
+                        st.error(f"Missing required columns: {', '.join(_missing)}. Only 'ticker' and 'action' are mandatory.")
                     else:
-                        _import_df.columns = [c.lower() for c in _import_df.columns]
+                        _optional_defaults = {
+                            "scan_date": datetime.now().strftime("%Y-%m-%d"),
+                            "entry_price": 0.0,
+                            "shares": 0.0,
+                            "stop_loss_pct": None,
+                            "take_profit_pct": None,
+                            "position_size_pct": None,
+                            "notes": "",
+                        }
+                        for _col, _default in _optional_defaults.items():
+                            if _col not in _import_df.columns:
+                                _import_df[_col] = _default
+                        _import_df["ticker"] = _import_df["ticker"].astype(str).str.upper().str.strip()
                         st.dataframe(_import_df.head(5), use_container_width=True)
                         _target_j = active_journal if active_journal != "All" else "Default"
                         if st.button(f"✅ Confirm Import ({len(_import_df)} rows) → {_target_j}", key="btn_confirm_csv_import"):
                             _import_df["journal_name"] = _target_j
                             _import_df["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            _import_df["position_size_pct"] = _import_df.get("position_size_pct", 0)
-                            _import_df["notes"] = _import_df.get("notes", "")
-                            _import_df["ticker"] = _import_df["ticker"].astype(str).str.upper().str.strip()
                             conn = get_db_connection()
                             _import_df.to_sql("journal", conn, if_exists="append", index=False)
                             conn.close()
