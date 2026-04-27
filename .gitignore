@@ -18,6 +18,9 @@ argus.db-journal
 # Local database — never overwrite with GitHub Action copy
 argus.db
 
+# Logs
+argus_alerts_log.txt
+
 # OS Files
 .DS_Store
 
