@@ -1230,7 +1230,7 @@ if active_tab == "Journal":
                 try:
                     _import_df = pd.read_csv(_uploaded_csv)
                     _required_cols = {"ticker", "action"}
-                    _import_df.columns = [c.lower() for c in _import_df.columns]
+                    _import_df.columns = [c.lower().replace(" ", "_") for c in _import_df.columns]
                     _missing = _required_cols - set(_import_df.columns)
                     if _missing:
                         st.error(f"Missing required columns: {', '.join(_missing)}. Only 'ticker' and 'action' are mandatory.")
