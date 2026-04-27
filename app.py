@@ -10,6 +10,8 @@ from engine import (
     add_risk_guidance,
     save_journal_entry,
     load_journal,
+    list_journals,
+    delete_journal,
     get_market_regime,
     get_db_connection,
     generate_telegram_message,
@@ -65,6 +67,96 @@ def format_reasons(r):
     return str(r) if r else ""
 
 
+METRIC_TOOLTIPS = {
+    "peg": "Price/Earnings-to-Growth ratio. Below 1.0 suggests the stock may be undervalued relative to its earnings growth rate. The lower, the better.",
+    "gross margin": "Gross profit as a % of revenue. Margins above 60% indicate strong pricing power and a durable competitive moat.",
+    "rev growth": "Year-over-year revenue growth. ≥30% signals a high-growth business with strong momentum.",
+    "fcf positive": "Free Cash Flow is positive — the company generates real cash after capital expenditures, a key sign of financial health and sustainability.",
+    "roce": "Return on Capital Employed. Above 20% indicates the business is deploying capital very efficiently — a hallmark of quality compounders.",
+    "p/s": "Price-to-Sales ratio. Below 4x suggests the stock is reasonably priced relative to its revenue — a useful valuation check for growth companies.",
+    "6mo momentum": "Price is at least 15% higher than 6 months ago. Sustained upward momentum is one of the strongest predictors of continued outperformance.",
+    "above 50ma": "Price is above the 50-day moving average. This is a bullish short-term trend signal, confirming buyers are in control.",
+    "above 200ma": "Price is above the 200-day moving average. This confirms a healthy long-term uptrend and institutional interest.",
+    "volume spike": "Today\u2019s volume is 2x the 30-day average. Unusual volume often signals institutional accumulation or a major catalyst driving breakout interest.",
+    "rs vs iwm": "Relative Strength vs the Russell 2000 (IWM). Outperforming by 20%+ over 3 months signals this stock is a true market leader.",
+    "inst.": "Low institutional ownership (<40%) means large funds have room to accumulate. Rising institutional interest can be a powerful price catalyst.",
+    "cap ": "Market cap in the $50M\u2013$10B sweet spot — large enough to be stable, small enough for significant growth runway before institutional saturation.",
+    "persistence bonus": "Argus has flagged this stock 3+ consecutive scans. Repeated high scores across different market days signal consistently strong fundamentals and momentum.",
+    "ai sentiment": "AI-analysed news sentiment from Groq/Llama, ranging from -15 (very bearish) to +15 (very bullish). Reflects the qualitative news backdrop.",
+    "regime adj": "Score adjusted for the current macro market regime (Bull/Bear/Extreme Fear). Argus multiplies scores up in bull markets and penalises in bear markets.",
+}
+
+_METRIC_TOOLTIP_CSS = """
+<style>
+.argus-badge-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.argus-badge {
+    display: inline-block; position: relative;
+    background: #1a2e4a; color: #c9d6e8;
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 0.78rem; cursor: default; white-space: nowrap;
+}
+.argus-badge:hover { background: #1e3f68; }
+.argus-badge .argus-tip {
+    visibility: hidden; opacity: 0;
+    background: #1e2a3a; color: #e0e8f0;
+    border: 1px solid #334466;
+    text-align: left; border-radius: 6px;
+    padding: 7px 11px; position: absolute;
+    z-index: 9999; bottom: 130%; left: 50%;
+    transform: translateX(-50%);
+    min-width: 230px; max-width: 280px;
+    font-size: 0.73rem; line-height: 1.45;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    white-space: normal; pointer-events: none;
+    transition: opacity 0.15s;
+}
+.argus-badge:hover .argus-tip { visibility: visible; opacity: 1; }
+</style>
+"""
+
+def _find_metric_tooltip(reason_str):
+    """Return the tooltip text for a metric reason string by fuzzy-key lookup."""
+    r_lower = reason_str.lower()
+    for key, tip in METRIC_TOOLTIPS.items():
+        if key in r_lower:
+            return tip
+    return ""
+
+def render_metric_badges(reasons):
+    """Render metric reason badges with CSS hover tooltips."""
+    if not reasons:
+        return
+    st.markdown(_METRIC_TOOLTIP_CSS, unsafe_allow_html=True)
+    badges_html = '<div class="argus-badge-wrap">'
+    for r in reasons:
+        r = r.strip()
+        if not r:
+            continue
+        tip = _find_metric_tooltip(r)
+        tip_html = f'<span class="argus-tip">{tip}</span>' if tip else ''
+        badges_html += f'<span class="argus-badge">{r}{tip_html}</span>'
+    badges_html += '</div>'
+    st.markdown(badges_html, unsafe_allow_html=True)
+
+
+def get_signal_label(score):
+    """Return (label, color) conviction signal for a given Argus score."""
+    try:
+        score = float(score)
+    except (TypeError, ValueError):
+        return "🔵 Insufficient Data", "gray"
+    if score >= 85:
+        return "🟢 Strong Buy", "green"
+    elif score >= 75:
+        return "🔵 Buy", "blue"
+    elif score >= 65:
+        return "🟡 Moderate Buy", "orange"
+    elif score >= 55:
+        return "⚪ Hold / Watch", "gray"
+    else:
+        return "🔴 Avoid for Now", "red"
+
+
 @st.cache_data(ttl=1800)
 def cached_market_regime():
     """Cached wrapper — avoids two yfinance fetches on every Streamlit rerun."""
@@ -90,11 +182,17 @@ def _load_lottie(url: str):
         return None
 
 
-def show_aggrid(df, height=380, fit_columns=True):
+def show_aggrid(df, height=380, fit_columns=True, theme=None):
     """AgGrid table with fallback to st.dataframe when library is absent."""
     if not HAS_AGGRID or df.empty:
         st.dataframe(df, use_container_width=True)
         return
+    if theme is None:
+        try:
+            _base = st.get_option("theme.base") or "dark"
+        except Exception:
+            _base = "dark"
+        theme = "balham-dark" if _base == "dark" else "alpine"
     try:
         gb = GridOptionsBuilder.from_dataframe(df)
         gb.configure_default_column(sortable=True, filter=True, resizable=True, wrapText=True)
@@ -105,7 +203,7 @@ def show_aggrid(df, height=380, fit_columns=True):
             gridOptions=gb.build(),
             use_container_width=True,
             height=height,
-            theme="alpine",
+            theme=theme,
             update_mode=GridUpdateMode.NO_UPDATE,
             allow_unsafe_jscode=False,
             fit_columns_on_grid_load=fit_columns,
@@ -408,9 +506,11 @@ def display_cards(df):
             label = f"{tier_icon} {row['ticker']} · Score: {row['score']}/100"
             with st.expander(label, expanded=False):
                 if "tier" in row and pd.notna(row["tier"]):
-                    # Highlight 'High Conviction' with a different color if needed
                     color = "green" if "HIGH CONVICTION" in row["tier"] else "orange"
                     st.markdown(f"**:{color}[{row['tier']}]**")
+
+                sig_label, sig_color = get_signal_label(row.get("score", 0))
+                st.markdown(f"**:{sig_color}[{sig_label}]**")
                 
                 # Core Financials
                 m1, m2 = st.columns(2)
@@ -451,26 +551,9 @@ def display_cards(df):
                         reasons = []
 
                     if isinstance(reasons, list):
-                        if HAS_ANNOTATED:
-                            try:
-                                tier_str = row.get("tier", "")
-                                badge_bg = "#1a4731" if "HIGH CONVICTION" in str(tier_str) else "#1a2e4a"
-                                annotated_text(*[(r.strip(), "", badge_bg) for r in reasons if r.strip()])
-                            except Exception:
-                                st.markdown("  \n".join(f"• {r}" for r in reasons))
-                        else:
-                            bullets = ""
-                            for r in reasons:
-                                parts = r.split(" ")
-                                if len(parts) > 1 and parts[-1].replace('%', '').replace('.', '').replace('x', '').isdigit():
-                                    name = " ".join(parts[:-1])
-                                    val = parts[-1]
-                                    bullets += f"• {name} **{val}**  \n"
-                                else:
-                                    bullets += f"• {r}  \n"
-                            st.markdown(bullets)
+                        render_metric_badges(reasons)
                     else:
-                        st.markdown(f"• {reasons}")
+                        render_metric_badges([str(reasons)]) if reasons else None
                 
                 st.button(
                     "Deep Dive", 
@@ -517,17 +600,24 @@ with st.sidebar:
     scan_limit = st.slider("Universe size (tickers to scan)", 50, 400, 200, step=50)
 
     with st.expander("Advanced Filters & Constraints"):
-        price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor")
-        price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling")
-        vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor")
+        price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor",
+            help="Minimum stock price to include. Filters out very cheap penny stocks that may have high volatility or low quality. Default: $2.00.")
+        price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling",
+            help="Maximum stock price to include. Set to 0 to disable. Useful for budget-constrained strategies (e.g. Penny Stock High Risk preset sets this to $10).")
+        vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor",
+            help="Minimum average daily trading volume. Higher values ensure you can enter/exit positions without slippage. Default: 500,000 shares/day.")
 
     with st.expander("ML Prediction Horizons"):
-        horizon_days = st.selectbox("Horizon days", [21, 42, 63, 84, 126], key="horizon_days")
-        target_return = st.slider("Target return (%)", 1, 100, key="target_return") / 100.0
+        horizon_days = st.selectbox("Horizon days", [21, 42, 63, 84, 126], key="horizon_days",
+            help="The future time window (in trading days) the ML model uses to assess whether a stock hit the target return. 63 days ≈ 1 quarter. Longer horizons capture slower trends; shorter ones target quick breakouts.")
+        target_return = st.slider("Target return (%)", 1, 100, key="target_return",
+            help="The minimum % gain the ML model considers a 'hit'. A stock is labeled a success if it returns ≥ this value within the Horizon Days. Higher targets are harder to hit but filter for stronger momentum.") / 100.0
 
     with st.expander("Advanced Risk Rules"):
-        risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct")
-        max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct")
+        risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct",
+            help="The maximum % of your total portfolio you are willing to lose if a position hits its stop-loss. Argus uses this to compute the suggested position size. Lower = more conservative. Default: 0.75%.")
+        max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
+            help="Hard cap on how large any single position can be as a % of your total portfolio. Prevents over-concentration even when the risk formula suggests a larger size. Default: 8.0%.")
 
     st.divider()
     send_to_telegram = st.checkbox(
@@ -786,13 +876,52 @@ if active_tab == "History":
                 if HAS_AGGRID:
                     show_aggrid(day_df, height=320)
                 else:
-                    style = day_df.style
-                    if "Return (%)" in day_df.columns:
-                        style = style.background_gradient(subset=["Return (%)"], cmap="RdYlGn")
-                    st.dataframe(style, use_container_width=True)
+                    try:
+                        _theme_base = st.get_option("theme.base") or "dark"
+                    except Exception:
+                        _theme_base = "dark"
+                    if "Return (%)" in day_df.columns and _theme_base == "light":
+                        st.dataframe(day_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
+                    else:
+                        st.dataframe(day_df, use_container_width=True)
 
 if active_tab == "Ticker Detail":
     st.subheader("🔎 Ticker Detail")
+
+    with st.expander("🔍 Search Any Ticker (Manual Lookup)", expanded=False):
+        st.caption("Analyse any stock not in your scan history. Fetches live data and runs the full Argus scoring engine.")
+        _mt_col1, _mt_col2 = st.columns([3, 1])
+        _manual_ticker_input = _mt_col1.text_input("Enter ticker symbol", placeholder="e.g. PLTR, NVDA, AAPL", label_visibility="collapsed", key="manual_ticker_input").upper().strip()
+        _run_manual = _mt_col2.button("🔍 Analyse", key="btn_manual_ticker_analyze", use_container_width=True)
+        if _run_manual and _manual_ticker_input:
+            with st.spinner(f"Fetching and scoring {_manual_ticker_input}..."):
+                try:
+                    from engine import score_stock, load_memory
+                    _mem_df = load_memory()
+                    _manual_result = score_stock(_manual_ticker_input, _mem_df, config, None)
+                    if _manual_result:
+                        _mr_df = pd.DataFrame([_manual_result])
+                        _mr_df = add_predictions(_mr_df, model)
+                        _mr_df = add_risk_guidance(_mr_df, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
+                        _sig_lbl, _sig_col = get_signal_label(_manual_result.get("score", 0))
+                        st.success(f"**{_manual_ticker_input}** — Score: **{_manual_result['score']}/100** | **:{_sig_col}[{_sig_lbl}]**")
+                        display_cards(_mr_df)
+                        with st.expander("Full Data"):
+                            st.dataframe(_mr_df.T, use_container_width=True)
+                    else:
+                        st.warning(f"{_manual_ticker_input} did not pass Argus filters (score too low, invalid ticker, or red flags detected).")
+                        try:
+                            _info = yf.Ticker(_manual_ticker_input).info
+                            if _info and _info.get("symbol"):
+                                snap = fetch_financial_snapshot(_manual_ticker_input)
+                                if snap:
+                                    st.markdown("##### Basic Financial Snapshot")
+                                    st.dataframe(pd.DataFrame(list(snap.items()), columns=["Metric", "Value"]).set_index("Metric"), use_container_width=True)
+                        except Exception:
+                            pass
+                except Exception as _e:
+                    st.error(f"Error analysing {_manual_ticker_input}: {_e}")
+
     if history_df.empty:
         st.info("No history available yet.")
     else:
@@ -836,6 +965,8 @@ if active_tab == "Ticker Detail":
                 tp_pct = latest_ticker_row.get("take_profit_pct", pd.Series([0])).iloc[0]
                 
                 prob_str = f"{upside_prob*100:.1f}%" if upside_prob is not None else "N/A"
+                _td_sig_lbl, _td_sig_col = get_signal_label(score_val)
+                st.markdown(f"**Signal: :{_td_sig_col}[{_td_sig_lbl}]**")
                 st.markdown(f"**Buy:** Score of **{score_val}** & Upside Prob **{prob_str}**. "
                             f"Entry style is **{entry}**.")
                 st.markdown(f"**Sell:** Stop loss at **-{sl_pct:.1f}%**. "
@@ -988,7 +1119,7 @@ if active_tab == "Ticker Detail":
                     st.dataframe(tdf, use_container_width=True)
 
 @st.dialog("Add Journal Entry")
-def add_journal_entry_dialog(cfg):
+def add_journal_entry_dialog(cfg, active_journal="Default"):
     with st.form("journal_form"):
         col1, col2, col3 = st.columns(3)
         journal_ticker = col1.text_input("Ticker").upper().strip()
@@ -1009,6 +1140,7 @@ def add_journal_entry_dialog(cfg):
             st.info("Tracking iterative entries and scale-outs is supported by selecting 'SCALE_IN' or 'TRIM' under actions.")
             
         notes = st.text_area("Notes")
+        st.caption(f"Saving to portfolio: **{active_journal}**")
         submitted = st.form_submit_button("Save Journal Entry")
         if submitted:
             if not journal_ticker:
@@ -1026,6 +1158,7 @@ def add_journal_entry_dialog(cfg):
                         "stop_loss_pct": stop_loss_pct,
                         "take_profit_pct": take_profit_pct,
                         "notes": notes,
+                        "journal_name": active_journal,
                     },
                 )
                 st.success("Journal entry saved.")
@@ -1033,19 +1166,98 @@ def add_journal_entry_dialog(cfg):
 
 if active_tab == "Journal":
     st.subheader("📝 Decision Journal")
-    
-    st.checkbox("Enable Advanced Tracking (Position sizing & Scan History)", key="enable_journal_advanced")
-    
-    if st.button("➕ Add New Entry"):
-        add_journal_entry_dialog(config)
 
-    journal_df = load_journal(config.JOURNAL_FILE)
+    # ── Portfolio (Journal) Management ──────────────────────────────────────
+    all_journals = list_journals()
+    journal_options = ["All"] + all_journals
+
+    jm_col1, jm_col2, jm_col3, jm_col4 = st.columns([3, 2, 2, 2])
+    with jm_col1:
+        active_journal = st.selectbox(
+            "Active Portfolio",
+            journal_options,
+            key="active_journal_selector",
+            help="Select which portfolio to view. 'All' shows every entry across all portfolios.",
+        )
+    with jm_col2:
+        new_journal_name = st.text_input("New portfolio name", placeholder="e.g. Robinhood", label_visibility="collapsed", key="new_journal_name_input")
+    with jm_col3:
+        if st.button("➕ Create Portfolio", use_container_width=True):
+            _nj = new_journal_name.strip()
+            if _nj and _nj not in all_journals:
+                save_journal_entry(config.JOURNAL_FILE, {
+                    "ticker": "_INIT_", "action": "PASS", "scan_date": datetime.now().strftime("%Y-%m-%d"),
+                    "entry_price": 0, "shares": 0, "stop_loss_pct": 0, "take_profit_pct": 0,
+                    "position_size_pct": 0, "notes": "Portfolio initialised", "journal_name": _nj,
+                }, journal_name=_nj)
+                st.success(f"Portfolio '{_nj}' created.")
+                st.rerun()
+            elif not _nj:
+                st.warning("Enter a name first.")
+            else:
+                st.warning(f"'{_nj}' already exists.")
+    with jm_col4:
+        if active_journal not in ("All", "Default") and st.button("🗑️ Delete Portfolio", use_container_width=True, help="Permanently deletes all entries in this portfolio."):
+            if delete_journal(active_journal):
+                st.success(f"Portfolio '{active_journal}' deleted.")
+                st.rerun()
+            else:
+                st.error("Could not delete portfolio.")
+
+    st.markdown("---")
+    st.checkbox("Enable Advanced Tracking (Position sizing & Scan History)", key="enable_journal_advanced")
+
+    _current_journal = active_journal if active_journal != "All" else None
+
+    _add_col, _csv_col = st.columns([1, 1])
+    with _add_col:
+        if st.button("➕ Add New Entry"):
+            add_journal_entry_dialog(config, active_journal=active_journal if active_journal != "All" else "Default")
+    with _csv_col:
+        with st.expander("📥 Import from CSV"):
+            st.caption(
+                "**Required CSV columns (headers must match exactly):**  \n"
+                "`ticker` · `action` · `scan_date` (YYYY-MM-DD) · `entry_price` · `shares` · "
+                "`stop_loss_pct` · `take_profit_pct` · `notes`  \n"
+                "Optional: `position_size_pct`  \n"
+                "The file will be imported into the currently selected portfolio."
+            )
+            _uploaded_csv = st.file_uploader("Upload journal CSV", type=["csv"], label_visibility="collapsed", key="journal_csv_uploader")
+            if _uploaded_csv is not None:
+                try:
+                    _import_df = pd.read_csv(_uploaded_csv)
+                    _required_cols = {"ticker", "action", "scan_date", "entry_price", "shares", "stop_loss_pct", "take_profit_pct"}
+                    _missing = _required_cols - set(_import_df.columns.str.lower())
+                    if _missing:
+                        st.error(f"Missing required columns: {', '.join(_missing)}")
+                    else:
+                        _import_df.columns = [c.lower() for c in _import_df.columns]
+                        st.dataframe(_import_df.head(5), use_container_width=True)
+                        _target_j = active_journal if active_journal != "All" else "Default"
+                        if st.button(f"✅ Confirm Import ({len(_import_df)} rows) → {_target_j}", key="btn_confirm_csv_import"):
+                            _import_df["journal_name"] = _target_j
+                            _import_df["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            _import_df["position_size_pct"] = _import_df.get("position_size_pct", 0)
+                            _import_df["notes"] = _import_df.get("notes", "")
+                            _import_df["ticker"] = _import_df["ticker"].astype(str).str.upper().str.strip()
+                            conn = get_db_connection()
+                            _import_df.to_sql("journal", conn, if_exists="append", index=False)
+                            conn.close()
+                            st.success(f"Imported {len(_import_df)} entries into '{_target_j}'.")
+                            st.rerun()
+                except Exception as _csv_err:
+                    st.error(f"Failed to parse CSV: {_csv_err}")
+
+    journal_df = load_journal(config.JOURNAL_FILE, journal_name=_current_journal)
+    if "journal_name" not in journal_df.columns:
+        journal_df["journal_name"] = "Default"
+    journal_df = journal_df[journal_df["ticker"] != "_INIT_"]
+
     if journal_df.empty:
         st.info("No journal entries yet.")
     else:
         st.markdown("### 📋 Logged Entries")
         
-        # Add deletion capability via data_editor
         edited_df = st.data_editor(
             journal_df.sort_values("timestamp", ascending=False),
             num_rows="dynamic",
@@ -1056,14 +1268,22 @@ if active_tab == "Journal":
         if not edited_df.equals(journal_df.sort_values("timestamp", ascending=False)):
             if st.button("💾 Save Edited Log"):
                 conn = get_db_connection()
-                edited_df.to_sql("journal", conn, if_exists="replace", index=False)
+                if _current_journal:
+                    try:
+                        from sqlalchemy import text as _sa_text
+                        conn.execute(_sa_text("DELETE FROM journal WHERE journal_name = :jn"), {"jn": _current_journal})
+                    except Exception:
+                        conn.execute("DELETE FROM journal WHERE journal_name = ?", (_current_journal,))
+                    conn.commit()
+                    edited_df.to_sql("journal", conn, if_exists="append", index=False)
+                else:
+                    edited_df.to_sql("journal", conn, if_exists="replace", index=False)
                 conn.close()
                 st.success("Log updated successfully!")
                 st.rerun()
         
         st.markdown("### 📊 Portfolio P&L Status")
         
-        # Calculate Realized and Unrealized P&L
         trades = []
         open_positions = []
         j_sorted = journal_df.sort_values("timestamp")
@@ -1083,20 +1303,17 @@ if active_tab == "Journal":
             sell_count = len(sells)
 
             if buy_count > 0:
-                # Shares-weighted average buy price (fall back to simple mean if shares absent)
                 if total_buy_shares > 0:
                     avg_buy = float((buys["entry_price"] * buy_shares).sum() / total_buy_shares)
                 else:
                     avg_buy = float(buys["entry_price"].mean())
 
-                # Check if position is open (net shares still held)
                 net_shares = max(0.0, total_buy_shares - total_sell_shares)
                 if net_shares > 0 or (buy_count > sell_count and total_buy_shares == 0):
                     first_buy_date = buys["timestamp"].min()
                     first_buy_date_str = str(first_buy_date)[:10] if pd.notnull(first_buy_date) else datetime.now().strftime("%Y-%m-%d")
                     open_positions.append({"Ticker": t, "Avg Buy": avg_buy, "Shares": net_shares, "First Date": first_buy_date_str})
 
-                # Track realized trades if any sells exist
                 if sell_count > 0:
                     if total_sell_shares > 0:
                         avg_sell = float((sells["entry_price"] * sell_shares).sum() / total_sell_shares)
@@ -1117,7 +1334,6 @@ if active_tab == "Journal":
                 mc1, mc2 = st.columns(2)
                 mc1.metric("Closed Trades", total_closed, help="Trades with both BUY and SELL logs.")
                 mc2.metric("Win Rate", f"{win_rate:.1f}%")
-                
                 st.dataframe(pnl_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
             else:
                 st.info("No closed trades found.")
@@ -1129,22 +1345,17 @@ if active_tab == "Journal":
                     current_prices = fetch_current_prices(open_df["Ticker"].tolist())
                 
                 open_df["Current Price"] = open_df["Ticker"].map(current_prices).round(2)
-                
-                # Portfolio Math
                 open_df["Cost Basis ($)"] = (open_df["Shares"] * open_df["Avg Buy"]).round(2)
                 open_df["Current Value ($)"] = (open_df["Shares"] * open_df["Current Price"]).round(2)
                 open_df["Unrealized (%)"] = (((open_df["Current Price"] - open_df["Avg Buy"]) / open_df["Avg Buy"]) * 100).round(2)
                 
-                # Top Level Analytics
                 total_invested = open_df["Cost Basis ($)"].sum()
                 total_current = open_df["Current Value ($)"].sum()
                 net_return_pct = ((total_current - total_invested) / total_invested * 100) if total_invested > 0 else 0
                 
-                # SPY Benchmark
                 first_entry_date = open_df["First Date"].min()
                 spy_return = get_spy_return(first_entry_date)
                 
-                # Scoreboard UI
                 st.markdown("### 📊 Portfolio Analytics")
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Total Invested", f"${total_invested:,.2f}")
@@ -1154,7 +1365,6 @@ if active_tab == "Journal":
                 
                 st.divider()
                 
-                # Sector mapping and visualization
                 if total_invested > 0:
                     with st.spinner("Mapping sectors..."):
                         open_df["Sector"] = open_df["Ticker"].apply(get_cached_sector)
@@ -1166,15 +1376,13 @@ if active_tab == "Journal":
                     with ui_col1:
                         st.plotly_chart(fig, use_container_width=True)
                     with ui_col2:
-                        st.markdown("<br><br>", unsafe_allow_html=True) # padding
+                        st.markdown("<br><br>", unsafe_allow_html=True)
                         st.markdown("#### Open Positions")
-                        # Drop some internal cols for cleaner table
                         display_df = open_df.drop(columns=["First Date", "Sector"])
                         st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True, hide_index=True)
                 else:
                     display_df = open_df.drop(columns=["First Date"])
                     st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True, hide_index=True)
-
             else:
                 st.info("No open positions found.")
                 
@@ -1193,7 +1401,6 @@ if active_tab == "Journal":
                         from sqlalchemy import text
                         conn.execute(text("DELETE FROM journal WHERE ticker = :ticker"), {"ticker": ticker_to_delete})
                     except:
-                        # Fallback for raw sqlite3
                         conn.execute("DELETE FROM journal WHERE ticker = ?", (ticker_to_delete,))
                     conn.commit()
                     conn.close()
@@ -1429,24 +1636,24 @@ if active_tab == "Alerts Log":
     st.subheader("🔔 Alerts Log")
     st.caption("A historical record of all Telegram push notifications generated by Argus.")
     try:
+        import re
         with open("argus_alerts_log.txt", "r", encoding="utf-8") as f:
             logs = f.read()
-            if logs.strip():
-                # Display newest first
-                blocks = [block.strip() for block in logs.split("---") if block.strip()]
-                # Reconstruct and reverse
-                reversed_logs = ""
-                for block in reversed(blocks):
-                    # check if the block starts with date (e.g. 2026-04-11)
-                    if len(block) >= 19 and block[4] == '-' and block[7] == '-':
-                        date_str = block[:19]
-                        msg = block[19:].strip()
+        if logs.strip():
+            entries = re.findall(
+                r'--- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ---\n(.*?)(?=--- \d{4}-\d{2}-\d{2}|\Z)',
+                logs, re.DOTALL
+            )
+            if entries:
+                for date_str, msg in reversed(entries):
+                    msg = msg.strip()
+                    if msg:
                         st.markdown(f"**{date_str}**")
                         st.info(msg)
-                    else:
-                        st.info(block)
             else:
                 st.info("No alerts logged yet.")
+        else:
+            st.info("No alerts logged yet.")
     except FileNotFoundError:
         st.info("No alerts logged yet.")
 
@@ -1556,6 +1763,10 @@ if active_tab == "Help":
 if active_tab == "Prompts":
     st.subheader("🤖 AI Prompts for Research")
     st.caption("Copy these templates and paste them into AI tools (Perplexity, ChatGPT, Claude, Grok) for deeper analysis. Replace bracketed placeholders with your data.")
+
+    st.markdown("### 💬 AI Chat Assistants")
+    st.caption("Quick links to AI chat platforms for researching your stocks.")
+    st.link_button("🔍 Ask Perplexity", "https://www.perplexity.ai/spaces/argus-AFO1vOM6R8mv1YzjC8vWzw", help="Opens your personal Argus Perplexity Space for in-depth stock research with live web search.")
 
     st.markdown("---")
     st.markdown("### 🌍 Market Condition Prompts")

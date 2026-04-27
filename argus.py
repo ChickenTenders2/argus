@@ -214,7 +214,7 @@ def main():
         alerts_block = "*🚨 PORTFOLIO ALERTS*\n" + "\n".join(alerts) + f"\n\n{'─'*30}\n"
         
     highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
-    high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
+    high_block = ("\n*📌 High scoring picks*\n" + "\n".join([format_pick(p, memory_df) for p in high])) if high else ""
     footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
     body = highest_block + high_block
     send_ok = send_telegram(header + alerts_block + body + footer)

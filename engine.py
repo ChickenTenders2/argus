@@ -77,6 +77,12 @@ def get_db_connection():
                         conn.commit()
                     except:
                         conn.rollback()
+
+                    try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN journal_name TEXT DEFAULT 'Default'"))
+                        conn.commit()
+                    except:
+                        conn.rollback()
                         
                     try:
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS features (
@@ -135,6 +141,12 @@ def get_db_connection():
                         
                     try:
                         conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
+                        conn.commit()
+                    except:
+                        pass
+
+                    try:
+                        conn.execute("ALTER TABLE journal ADD COLUMN journal_name TEXT DEFAULT 'Default'")
                         conn.commit()
                     except:
                         pass
@@ -448,7 +460,7 @@ def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", 
         alerts_block = "*🚨 PORTFOLIO ALERTS*\n" + "\n".join(alerts) + f"\n\n{'─'*30}\n"
         
     highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
-    high_block = "\n*📌 High scoring picks*\n" + ("\n".join([format_pick(p, memory_df) for p in high]) if high else "_None today_")
+    high_block = ("\n*📌 High scoring picks*\n" + "\n".join([format_pick(p, memory_df) for p in high])) if high else ""
     footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
     
     return header + alerts_block + highest_block + high_block + footer
@@ -545,7 +557,7 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
 
     _append_feature_rows(results, scan_date, scan_timestamp, run_type)
 
-def save_journal_entry(journal_file, entry):
+def save_journal_entry(journal_file, entry, journal_name="Default"):
     row = pd.DataFrame([{
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "ticker": entry.get("ticker", ""),
@@ -557,22 +569,70 @@ def save_journal_entry(journal_file, entry):
         "stop_loss_pct": entry.get("stop_loss_pct", ""),
         "take_profit_pct": entry.get("take_profit_pct", ""),
         "notes": entry.get("notes", ""),
+        "journal_name": entry.get("journal_name", journal_name),
     }])
     conn = get_db_connection()
     row.to_sql("journal", conn, if_exists="append", index=False)
     conn.close()
 
-def load_journal(journal_file=None):
+def load_journal(journal_file=None, journal_name=None):
     try:
         conn = get_db_connection()
-        df = pd.read_sql("SELECT * FROM journal", conn)
+        if journal_name and journal_name != "All":
+            try:
+                from sqlalchemy import text as sa_text
+                df = pd.read_sql(
+                    sa_text("SELECT * FROM journal WHERE journal_name = :jn"),
+                    conn, params={"jn": journal_name}
+                )
+            except Exception:
+                df = pd.read_sql(
+                    "SELECT * FROM journal WHERE journal_name = ?",
+                    conn, params=(journal_name,)
+                )
+        else:
+            df = pd.read_sql("SELECT * FROM journal", conn)
         conn.close()
+        if "journal_name" not in df.columns:
+            df["journal_name"] = "Default"
         return df
-    except:
+    except Exception:
         return pd.DataFrame(columns=[
             "timestamp", "ticker", "action", "scan_date", "entry_price",
-            "position_size_pct", "shares", "stop_loss_pct", "take_profit_pct", "notes",
+            "position_size_pct", "shares", "stop_loss_pct", "take_profit_pct",
+            "notes", "journal_name",
         ])
+
+
+def list_journals():
+    """Return sorted list of unique journal names from the journal table."""
+    try:
+        conn = get_db_connection()
+        df = pd.read_sql("SELECT DISTINCT journal_name FROM journal", conn)
+        conn.close()
+        names = df["journal_name"].dropna().unique().tolist()
+        return sorted([n for n in names if n]) or ["Default"]
+    except Exception:
+        return ["Default"]
+
+
+def delete_journal(journal_name):
+    """Delete all entries for a given journal name."""
+    if not journal_name or journal_name == "Default":
+        return False
+    try:
+        conn = get_db_connection()
+        try:
+            from sqlalchemy import text as sa_text
+            conn.execute(sa_text("DELETE FROM journal WHERE journal_name = :jn"), {"jn": journal_name})
+        except Exception:
+            conn.execute("DELETE FROM journal WHERE journal_name = ?", (journal_name,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete journal '{journal_name}': {e}")
+        return False
 
 def monitor_portfolio():
     """
