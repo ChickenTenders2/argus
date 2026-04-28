@@ -1383,8 +1383,9 @@ if active_tab == "Journal":
                     hc2.metric("Total Cost", f"£{_tc:,.2f}")
                     hc3.metric("Market Value", f"£{_tv:,.2f}")
                     hc4.metric("Total P&L", f"£{_tp:+,.2f}", delta=f"{_tpp:+.1f}%")
+                    _pnl_abs = _open_hold["P&L (%)"].abs().max() or 1
                     st.dataframe(
-                        _open_hold.style.background_gradient(subset=["P&L (%)"], cmap="RdYlGn"),
+                        _open_hold.style.background_gradient(subset=["P&L (%)"], cmap="RdYlGn", vmin=-_pnl_abs, vmax=_pnl_abs),
                         use_container_width=True, hide_index=True
                     )
                 _closed = _hold_df[_hold_df["Shares Held"] <= 0.001][["Ticker", "Transactions"]].copy()
@@ -1446,7 +1447,8 @@ if active_tab == "Journal":
                 mc1, mc2 = st.columns(2)
                 mc1.metric("Closed Trades", total_closed, help="Trades with both BUY and SELL logs.")
                 mc2.metric("Win Rate", f"{win_rate:.1f}%")
-                st.dataframe(pnl_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
+                _ret_abs = pnl_df["Return (%)"].abs().max() or 1
+                st.dataframe(pnl_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn", vmin=-_ret_abs, vmax=_ret_abs), use_container_width=True)
             else:
                 st.info("No closed trades found.")
                 
@@ -1491,10 +1493,12 @@ if active_tab == "Journal":
                         st.markdown("<br><br>", unsafe_allow_html=True)
                         st.markdown("#### Open Positions")
                         display_df = open_df.drop(columns=["First Date", "Sector"])
-                        st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True, hide_index=True)
+                        _unr_abs = display_df["Unrealized (%)"].abs().max() or 1
+                        st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn", vmin=-_unr_abs, vmax=_unr_abs), use_container_width=True, hide_index=True)
                 else:
                     display_df = open_df.drop(columns=["First Date"])
-                    st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn"), use_container_width=True, hide_index=True)
+                    _unr_abs = display_df["Unrealized (%)"].abs().max() or 1
+                    st.dataframe(display_df.style.background_gradient(subset=["Unrealized (%)"], cmap="RdYlGn", vmin=-_unr_abs, vmax=_unr_abs), use_container_width=True, hide_index=True)
             else:
                 st.info("No open positions found.")
                 
