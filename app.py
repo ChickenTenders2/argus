@@ -784,7 +784,12 @@ if active_tab == "Overview":
         
         # Display the visual card grid instead of a flat table
         display_cards(subset_view)
-        
+
+        with st.expander("📋 Copy Tickers"):
+            _ticker_str = ", ".join(subset_view["ticker"].tolist())
+            st.caption(f"{len(subset_view)} tickers — click the copy icon on the right →")
+            st.code(_ticker_str, language=None)
+
         with st.expander("Show Raw Data Table"):
             if "reasons" in subset_view.columns:
                 subset_view["reasons"] = subset_view["reasons"].apply(format_reasons)
@@ -1302,6 +1307,11 @@ if active_tab == "Journal":
     if journal_df.empty:
         st.info("No journal entries yet.")
     else:
+        _j_tickers = sorted(journal_df["ticker"].unique().tolist())
+        with st.expander("📋 Copy Tickers"):
+            st.caption(f"{len(_j_tickers)} tickers — click the copy icon on the right →")
+            st.code(", ".join(_j_tickers), language=None)
+
         _tx_tab, _hold_tab = st.tabs(["📋 All Transactions", "🏦 Holdings Summary"])
 
         with _tx_tab:
