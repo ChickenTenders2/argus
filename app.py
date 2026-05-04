@@ -343,6 +343,106 @@ def fetch_current_prices(tickers):
         pass
     return prices
 
+@st.cache_data(ttl=14400)
+def fetch_enrichment(ticker: str) -> dict:
+    """Fetch earnings date, analyst price target, and insider activity via yfinance (4-hour cache)."""
+    result = {"earnings_date": None, "analyst_target": None, "analyst_upside": None, "insider_net": None}
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info
+        # Analyst consensus target
+        target = info.get("targetMeanPrice")
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        if target and price:
+            result["analyst_target"] = round(float(target), 2)
+            result["analyst_upside"] = round(((float(target) - float(price)) / float(price)) * 100, 1)
+        # Next earnings date
+        try:
+            cal = t.calendar
+            if isinstance(cal, dict):
+                ed_list = cal.get("Earnings Date", [])
+                if ed_list:
+                    ed_first = ed_list[0] if isinstance(ed_list, list) else ed_list
+                    ed_ts = pd.Timestamp(ed_first)
+                    if ed_ts > pd.Timestamp.now():
+                        result["earnings_date"] = ed_ts.strftime("%d %b")
+            elif isinstance(cal, pd.DataFrame) and not cal.empty:
+                if "Earnings Date" in cal.index:
+                    ed_val = cal.loc["Earnings Date"].iloc[0]
+                    ed_ts = pd.Timestamp(ed_val)
+                    if ed_ts > pd.Timestamp.now():
+                        result["earnings_date"] = ed_ts.strftime("%d %b")
+        except Exception:
+            pass
+        # Insider net activity (last 90 days)
+        try:
+            ins_df = t.insider_transactions
+            if ins_df is not None and not ins_df.empty:
+                date_col = next((c for c in ins_df.columns if "date" in c.lower()), None)
+                tx_col = next((c for c in ins_df.columns if "transaction" in c.lower() or "type" in c.lower()), None)
+                if date_col:
+                    ins_df[date_col] = pd.to_datetime(ins_df[date_col], errors="coerce")
+                    cutoff = pd.Timestamp.now() - pd.Timedelta(days=90)
+                    recent = ins_df[ins_df[date_col] >= cutoff]
+                else:
+                    recent = ins_df.head(20)
+                if not recent.empty and tx_col:
+                    col_vals = recent[tx_col].astype(str)
+                    buys = col_vals.str.contains("Buy|Purchase|Acqui", case=False, na=False).sum()
+                    sells = col_vals.str.contains("Sell|Sale|Dispos", case=False, na=False).sum()
+                    if buys > sells and buys > 0:
+                        result["insider_net"] = "🟢 Insider Buyer"
+                    elif sells > buys and sells > 0:
+                        result["insider_net"] = "🔴 Insider Seller"
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return result
+
+
+@st.cache_data(ttl=3600)
+def fetch_ticker_news(ticker: str, max_items: int = 5) -> list:
+    """Fetch recent news headlines for a ticker via yfinance (1-hour cache)."""
+    items = []
+    try:
+        news_raw = yf.Ticker(ticker).news
+        if not news_raw:
+            return items
+        for item in (news_raw or [])[:max_items]:
+            if not isinstance(item, dict):
+                continue
+            title, link, publisher, pub_time = "", "", "", ""
+            if "content" in item:
+                c = item["content"]
+                title = c.get("title", "")
+                url_info = c.get("canonicalUrl", {})
+                link = url_info.get("url", "") if isinstance(url_info, dict) else str(url_info)
+                provider = c.get("provider", {})
+                publisher = provider.get("displayName", "") if isinstance(provider, dict) else str(provider)
+                pub_date = c.get("pubDate", "")
+                if pub_date:
+                    try:
+                        pub_time = pd.Timestamp(pub_date).strftime("%d %b")
+                    except Exception:
+                        pass
+            else:
+                title = item.get("title", "")
+                link = item.get("link", "")
+                publisher = item.get("publisher", "")
+                ts = item.get("providerPublishTime", 0)
+                if ts:
+                    try:
+                        pub_time = datetime.fromtimestamp(int(ts)).strftime("%d %b")
+                    except Exception:
+                        pass
+            if title:
+                items.append({"title": title, "link": link, "publisher": publisher, "pub_time": pub_time})
+    except Exception:
+        pass
+    return items
+
+
 def safe_line_chart(data, y_label="value"):
     """
     Renders an interactive line chart using Plotly Express for smooth zooming
@@ -520,6 +620,44 @@ def nav_to_ticker(t):
     st.session_state["selected_ticker"] = t
     st.session_state["main_tabs"] = "Ticker Detail"
 
+
+@st.dialog("⚡ Quick Log Trade")
+def quick_log_dialog(ticker, price, stop_loss_pct, take_profit_pct):
+    """Minimal 2-field dialog pre-filled from scan data."""
+    st.markdown(f"**{ticker}** — Entry price: **${price:.2f}**")
+    with st.form("quick_log_form"):
+        col1, col2 = st.columns(2)
+        action = col1.selectbox("Action", ["BUY", "SCALE_IN", "PASS"])
+        shares = col2.number_input("Shares", min_value=0.0, value=1.0, step=1.0)
+        notes = st.text_input("Notes (optional)", placeholder="e.g. Breakout entry")
+        st.caption(
+            f"Pre-filled from scan: Entry **${price:.2f}** · "
+            f"Stop-loss **-{stop_loss_pct:.1f}%** · Take-profit **+{take_profit_pct:.1f}%**"
+        )
+        submitted = st.form_submit_button("💾 Save Entry", use_container_width=True)
+        if submitted:
+            _active_j = st.session_state.get("active_journal_selector", "Default")
+            if _active_j == "All":
+                _active_j = "Default"
+            save_journal_entry(
+                Config().JOURNAL_FILE,
+                {
+                    "ticker": ticker,
+                    "action": action,
+                    "scan_date": datetime.now().strftime("%Y-%m-%d"),
+                    "entry_price": price,
+                    "shares": shares,
+                    "position_size_pct": 0.0,
+                    "stop_loss_pct": stop_loss_pct,
+                    "take_profit_pct": take_profit_pct,
+                    "notes": notes,
+                    "journal_name": _active_j,
+                },
+            )
+            st.success(f"Logged {action} {shares:.0f}× {ticker} → **{_active_j}** portfolio.")
+            st.rerun()
+
+
 def display_cards(df):
     """Render a DataFrame of picks as visual cards instead of a wide table."""
     if df.empty:
@@ -583,14 +721,46 @@ def display_cards(df):
                         render_metric_badges(reasons)
                     else:
                         render_metric_badges([str(reasons)]) if reasons else None
-                
-                st.button(
-                    "Deep Dive", 
-                    key=f"dd_{row['ticker']}_{i}_{row.get('scan_date', 'temp')}", 
-                    use_container_width=True,
-                    on_click=nav_to_ticker,
-                    args=(row["ticker"],)
-                )
+
+                # ── Enrichment: earnings, analyst target, insider ──
+                try:
+                    _enr = fetch_enrichment(row["ticker"])
+                    _enr_parts = []
+                    if _enr.get("earnings_date"):
+                        _enr_parts.append(f"📅 Earnings: {_enr['earnings_date']}")
+                    if _enr.get("analyst_target") and _enr.get("analyst_upside") is not None:
+                        _up_icon = "🟢" if _enr["analyst_upside"] > 0 else "🔴"
+                        _enr_parts.append(
+                            f"{_up_icon} Target: ${_enr['analyst_target']} ({_enr['analyst_upside']:+.1f}%)"
+                        )
+                    if _enr.get("insider_net"):
+                        _enr_parts.append(_enr["insider_net"])
+                    if _enr_parts:
+                        st.caption(" · ".join(_enr_parts))
+                except Exception:
+                    pass
+
+                _bc1, _bc2 = st.columns(2)
+                with _bc1:
+                    st.button(
+                        "Deep Dive",
+                        key=f"dd_{row['ticker']}_{i}_{row.get('scan_date', 'temp')}",
+                        use_container_width=True,
+                        on_click=nav_to_ticker,
+                        args=(row["ticker"],),
+                    )
+                with _bc2:
+                    if st.button(
+                        "⚡ Log Trade",
+                        key=f"ql_{row['ticker']}_{i}_{row.get('scan_date', 'temp')}",
+                        use_container_width=True,
+                    ):
+                        quick_log_dialog(
+                            ticker=row["ticker"],
+                            price=float(row.get("price") or 0),
+                            stop_loss_pct=float(row.get("stop_loss_pct") or 8.0),
+                            take_profit_pct=float(row.get("take_profit_pct") or 25.0),
+                        )
 
 if "horizon_days" not in st.session_state:
     st.session_state.horizon_days = 63
@@ -607,6 +777,27 @@ if "price_floor" not in st.session_state:
 if "preset_desc" not in st.session_state:
     st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
 
+# ── Auto-Preset: choose the best preset for today's regime once per session ──
+if "auto_preset_applied" not in st.session_state:
+    try:
+        _r0 = cached_market_regime()
+        _rn0 = _r0.get("regime", "Neutral")
+        _pmap0 = {
+            "Extreme Fear": "Capital Preservation",
+            "Bear": "Bear Market Defense",
+            "Neutral": "Default",
+            "Bull": "High Conviction",
+        }
+        _ap0 = _pmap0.get(_rn0, "Default")
+        st.session_state["preset_selector"] = _ap0
+        apply_preset()
+        st.session_state["auto_preset_label"] = (
+            f"🤖 Auto-selected **{_ap0}** based on current **{_rn0}** regime."
+        )
+    except Exception:
+        st.session_state["auto_preset_label"] = ""
+    st.session_state["auto_preset_applied"] = True
+
 with st.sidebar:
     st.header("Global Presets")
     
@@ -618,7 +809,9 @@ with st.sidebar:
         "Penny Stock High Risk ($1-$10)"
     ]
     st.selectbox("Select Preset", preset_options, key="preset_selector", on_change=apply_preset)
-    
+    if st.session_state.get("auto_preset_label"):
+        st.caption(st.session_state["auto_preset_label"])
+
     st.markdown(
         f"<div style='background:#2b2b2b;border-left:3px solid #888;border-radius:4px;padding:10px 14px;font-size:0.82rem;color:#ccc;margin-bottom:6px;'>{st.session_state.preset_desc}</div>",
         unsafe_allow_html=True,
@@ -677,6 +870,40 @@ if os.path.exists(config.RESULTS_FILE):
 else:
     latest_df = pd.DataFrame()
 
+# ── Auto-scan on load: fire once per session if no scan exists for today ──
+_today_str = datetime.now().strftime("%Y-%m-%d")
+_latest_scan_date = (
+    str(latest_df["scan_date"].iloc[0])[:10]
+    if not latest_df.empty and "scan_date" in latest_df.columns
+    else ""
+)
+_auto_scan_ran = False
+if _latest_scan_date != _today_str and not st.session_state.get("_auto_scan_done_today", False):
+    with st.status("🔄 Running today's auto-scan…", expanded=True) as _auto_st:
+        st.write(f"No scan found for today ({_today_str}). Starting automated scan…")
+        try:
+            _auto_payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True)
+            save_results(
+                results=_auto_payload["results"],
+                scan_date=_auto_payload["scan_date"],
+                scan_timestamp=_auto_payload["scan_timestamp"],
+                run_type="auto",
+                latest_file=config.RESULTS_FILE,
+                history_file=config.RESULTS_HISTORY_FILE,
+                write_latest=True,
+                feature_file=config.FEATURES_FILE,
+            )
+            st.session_state["_auto_scan_done_today"] = True
+            _n_auto = len(_auto_payload["results"])
+            _auto_st.update(label=f"✅ Auto-scan complete — {_n_auto} picks found.", state="complete")
+            _auto_scan_ran = True
+        except Exception as _ae:
+            st.session_state["_auto_scan_done_today"] = True
+            _auto_st.update(label=f"⚠️ Auto-scan failed: {_ae}", state="error")
+
+if _auto_scan_ran:
+    st.rerun()
+
 # To restore Portfolio Optimizer, add "Portfolio Optimizer" back to this array
 tab_options = ["Overview", "Ticker Detail", "Manual Run", "History", "Journal", "Prediction Model", "Alerts Log", "Help", "Prompts"]
 active_tab = st.radio("Navigation", tab_options, key="main_tabs", horizontal=True, label_visibility="collapsed")
@@ -685,52 +912,73 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 if active_tab == "Overview":
     st.subheader("📡 Latest Scheduled Scan")
-    
-    # Check Macro Market Regime
+
+    # ── Today's Briefing — 3-column card ─────────────────────────────────────
     regime = cached_market_regime()
     regime_color_map = {"Bull": "green", "Neutral": "blue", "Bear": "orange", "Extreme Fear": "red"}
     r_color = regime_color_map.get(regime["regime"], "white")
+    vix_val = regime.get("vix_level")
+    vix_trend = regime.get("vix_trend", "stable")
+    vix_arrow = "↑" if vix_trend == "rising" else ("↓" if vix_trend == "falling" else "→")
+    vix_color = "red" if vix_val and vix_val > 25 else ("orange" if vix_val and vix_val > 18 else "green")
+    vix_str = f"{vix_val:.1f} {vix_arrow}" if vix_val else "N/A"
+    gap = regime.get("spy_ma200_gap_pct")
+    gap_color = "green" if gap and gap > 3 else ("orange" if gap and gap > 0 else "red")
+    gap_label = f"{gap:+.1f}%" if gap is not None else "N/A"
+    scan_date_display = latest_df["scan_date"].iloc[0] if not latest_df.empty and "scan_date" in latest_df.columns else "N/A"
 
-    rc1, rc2, rc3 = st.columns([2, 1, 1])
-    with rc1:
-        st.markdown(f"**Current Market Regime:** :{r_color}[**{regime['regime']}**] — *{regime['reason']}* · Multiplier **{regime['multiplier']}x**")
-        scan_date_display = latest_df["scan_date"].iloc[0] if not latest_df.empty and "scan_date" in latest_df.columns else "N/A"
-        st.caption(f"Last scan: **{scan_date_display}** · Regime refreshes every hour")
-    with rc2:
-        vix_val = regime.get("vix_level")
-        vix_trend = regime.get("vix_trend", "stable")
-        vix_arrow = "↑" if vix_trend == "rising" else ("↓" if vix_trend == "falling" else "→")
-        vix_color = "red" if vix_val and vix_val > 25 else ("orange" if vix_val and vix_val > 18 else "green")
-        vix_str = f"{vix_val:.1f} {vix_arrow}" if vix_val else "N/A"
-        st.markdown(f"**VIX:** :{vix_color}[{vix_str}]")
-        st.caption("Fear gauge · >25 = elevated")
-    with rc3:
-        gap = regime.get("spy_ma200_gap_pct")
-        if gap is not None:
-            gap_color = "green" if gap > 3 else ("orange" if gap > 0 else "red")
-            gap_label = f"{gap:+.1f}%"
-            st.markdown(f"**SPY vs 200MA:** :{gap_color}[{gap_label}]")
-            if 0 < gap <= 4:
-                st.caption("⚠️ Near bear threshold — tighten risk")
-            elif gap <= 0:
-                st.caption("🔴 Below 200MA — bear confirmed")
+    try:
+        _briefing_alerts = monitor_portfolio()
+    except Exception:
+        _briefing_alerts = []
+
+    _bc1, _bc2, _bc3 = st.columns(3)
+
+    with _bc1:
+        with st.container(border=True):
+            st.markdown("**📡 Market Regime**")
+            st.markdown(f":{r_color}[**{regime['regime']}**] · *{regime['reason']}* · Mult **{regime['multiplier']}x**")
+            st.caption(
+                f"VIX: :{vix_color}[**{vix_str}**] · SPY vs 200MA: :{gap_color}[**{gap_label}**]"
+            )
+            st.caption(f"Last scan: **{scan_date_display}** · Refreshes every hour")
+
+    with _bc2:
+        with st.container(border=True):
+            st.markdown("**🏆 Top Picks Today**")
+            if not latest_df.empty:
+                _top3 = latest_df.sort_values("score", ascending=False).head(3)
+                for _, _tr in _top3.iterrows():
+                    _sig_lbl, _sig_col = get_signal_label(_tr.get("score", 0))
+                    _sig_icon = _sig_lbl.split()[0]
+                    st.markdown(
+                        f"**{_tr['ticker']}** &nbsp; :{_sig_col}[{_sig_icon} {_tr['score']:.0f}]"
+                        + (f" &nbsp; *{_tr.get('sector', '')}*" if _tr.get("sector") else ""),
+                        unsafe_allow_html=True,
+                    )
             else:
-                st.caption("Healthy buffer above 200MA")
-        else:
-            st.markdown("**SPY vs 200MA:** N/A")
-            st.caption("Insufficient data")
+                st.caption("No scan data yet — run a scan to see picks.")
 
-    # Bear turn prediction blurb
-    if regime.get("spy_ma200_gap_pct") is not None:
-        gap = regime["spy_ma200_gap_pct"]
-        vix_val = regime.get("vix_level") or 0
-        vix_trend = regime.get("vix_trend", "stable")
+    with _bc3:
+        with st.container(border=True):
+            st.markdown("**⚠️ Portfolio Alerts**")
+            if _briefing_alerts:
+                for _a in _briefing_alerts[:3]:
+                    st.warning(_a, icon="🚨")
+                if len(_briefing_alerts) > 3:
+                    st.caption(f"…and {len(_briefing_alerts) - 3} more. Check Journal tab.")
+            else:
+                st.success("All positions within bounds ✅", icon="✅")
+
+    # Bear-transition inline warnings
+    if gap is not None:
+        _vix_num = vix_val or 0
         if gap <= 0:
-            st.warning("🐻 **Bear Market Active.** SPY has crossed below its 200-day MA. Consider switching to **Capital Preservation** or **Bear Market Defense** preset.")
+            st.warning("🐻 **Bear Market Active.** SPY crossed below its 200-day MA. Consider switching to **Capital Preservation** or **Bear Market Defense** preset.")
         elif gap <= 4 and vix_trend == "rising":
-            st.warning(f"⚠️ **Bear Transition Risk:** SPY is only {gap:.1f}% above its 200-day MA and VIX is rising. A further SPY pullback of ~{gap:.1f}% would trigger a regime shift to Bear. Reduce position sizes.")
-        elif gap <= 8 and vix_val > 20:
-            st.info(f"📊 **Caution zone:** SPY is {gap:.1f}% above its 200-day MA with VIX at {vix_val:.1f}. Market is not yet bearish, but elevated volatility warrants attention.")
+            st.warning(f"⚠️ **Bear Transition Risk:** SPY is only {gap:.1f}% above its 200-day MA with VIX rising. A ~{gap:.1f}% pullback would trigger regime shift. Reduce position sizes.")
+        elif gap <= 8 and _vix_num > 20:
+            st.info(f"📊 **Caution zone:** SPY {gap:.1f}% above 200MA with VIX at {_vix_num:.1f}. Not yet bearish, but elevated volatility warrants attention.")
     st.markdown("---")
 
     if latest_df.empty:
@@ -1008,37 +1256,43 @@ if active_tab == "Ticker Detail":
                             f"Target taking profits around **+{tp_pct:.1f}%**.")
             
                 st.markdown("#### Groq Investment Thesis")
-                if st.button("Generate Qualitative Analysis", key=f"btn_ai_{ticker}"):
-                    with st.spinner(f"Analyzing {ticker} news and factors with Llama 3..."):
-                        import os
-                        from engine import Config
-                        try:
-                            from llm import generate_ai_thesis
-                            
-                            cfg = Config()
-                            api_key = cfg.GROQ_API_KEY
-                            if not api_key:
-                                st.error("GROQ_API_KEY is not set in your environment variables. Please set it to use the AI analysis feature.")
+                _thesis_key = f"thesis_{ticker}"
+                _thesis_err_key = f"thesis_err_{ticker}"
+                _groq_avail = bool(Config().GROQ_API_KEY)
+
+                if _groq_avail and _thesis_key not in st.session_state and _thesis_err_key not in st.session_state:
+                    try:
+                        from llm import generate_ai_thesis as _gen_thesis
+                        _api_key = Config().GROQ_API_KEY
+                        _reasons_raw = latest_ticker_row["reasons"].iloc[0]
+                        if isinstance(_reasons_raw, str):
+                            if _reasons_raw.startswith("["):
+                                try:
+                                    _reasons_raw = json.loads(_reasons_raw)
+                                except (json.JSONDecodeError, ValueError):
+                                    _reasons_raw = [_reasons_raw]
                             else:
-                                reasons = latest_ticker_row["reasons"].iloc[0]
-                                if isinstance(reasons, str):
-                                    if reasons.startswith("["):
-                                        try:
-                                            reasons = json.loads(reasons)
-                                        except (json.JSONDecodeError, ValueError):
-                                            reasons = [reasons]
-                                    else:
-                                        reasons = [reasons]
-                                elif not isinstance(reasons, list):
-                                    reasons = []
-                                
-                                thesis = generate_ai_thesis(ticker, score_val, reasons, api_key)
-                                st.success("Analysis Complete!")
-                                st.info(thesis)
-                        except ImportError:
-                            st.error("llm module not found. Make sure llm.py is properly set up.")
-                        except Exception as e:
-                            st.error(f"Error generating thesis: {e}")
+                                _reasons_raw = [_reasons_raw]
+                        elif not isinstance(_reasons_raw, list):
+                            _reasons_raw = []
+                        with st.spinner(f"Generating AI thesis for {ticker}…"):
+                            st.session_state[_thesis_key] = _gen_thesis(ticker, score_val, _reasons_raw, _api_key)
+                    except Exception as _te:
+                        st.session_state[_thesis_err_key] = str(_te)
+
+                if st.session_state.get(_thesis_key):
+                    st.info(st.session_state[_thesis_key])
+                    if st.button("🔄 Regenerate", key=f"btn_regen_{ticker}"):
+                        for _k in [_thesis_key, _thesis_err_key]:
+                            st.session_state.pop(_k, None)
+                        st.rerun()
+                elif st.session_state.get(_thesis_err_key):
+                    st.error(f"Thesis error: {st.session_state[_thesis_err_key]}")
+                    if st.button("🔄 Retry", key=f"btn_retry_{ticker}"):
+                        st.session_state.pop(_thesis_err_key, None)
+                        st.rerun()
+                elif not _groq_avail:
+                    st.info("Set `GROQ_API_KEY` environment variable to enable auto AI thesis.")
 
             st.markdown("#### Execution Guidance")
             
@@ -1128,9 +1382,42 @@ if active_tab == "Ticker Detail":
                     st.dataframe(snap_df, use_container_width=True)
                 else:
                     st.info("Snapshot data unavailable.")
+
+                # ── Enrichment: earnings date, analyst target, insider ──
+                try:
+                    _td_enr = fetch_enrichment(ticker)
+                    _enr_lines = []
+                    if _td_enr.get("earnings_date"):
+                        _enr_lines.append(f"📅 **Next Earnings:** {_td_enr['earnings_date']}")
+                    if _td_enr.get("analyst_target") and _td_enr.get("analyst_upside") is not None:
+                        _u_icon = "🟢" if _td_enr["analyst_upside"] > 0 else "🔴"
+                        _enr_lines.append(
+                            f"{_u_icon} **Analyst Target:** ${_td_enr['analyst_target']} "
+                            f"({_td_enr['analyst_upside']:+.1f}% upside)"
+                        )
+                    if _td_enr.get("insider_net"):
+                        _enr_lines.append(f"👤 **Insider Activity:** {_td_enr['insider_net']}")
+                    for _el in _enr_lines:
+                        st.markdown(_el)
+                except Exception:
+                    pass
             
             st.markdown("---")
-            
+
+            # ── Recent News Headlines ─────────────────────────────────────────
+            with st.expander("📰 Recent News Headlines"):
+                _news_items = fetch_ticker_news(ticker, max_items=5)
+                if _news_items:
+                    for _ni in _news_items:
+                        _pub_str = f" · *{_ni['publisher']}*" if _ni.get("publisher") else ""
+                        _ts_str = f" · {_ni['pub_time']}" if _ni.get("pub_time") else ""
+                        if _ni.get("link"):
+                            st.markdown(f"- [{_ni['title']}]({_ni['link']}){_pub_str}{_ts_str}")
+                        else:
+                            st.markdown(f"- **{_ni['title']}**{_pub_str}{_ts_str}")
+                else:
+                    st.caption("No recent news available.")
+
             # --- BOTTOM SECTION: Data view & AI ---
             with st.expander("View Raw Scan History Table"):
                 if "reasons" in tdf.columns:
