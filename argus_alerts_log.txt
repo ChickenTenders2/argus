@@ -618,3 +618,80 @@ _Scanned 400 tickers • Top 10 picks shown_
 ──────────────────────────────
 _Scanned 400 tickers • Top 10 picks shown_
 
+--- 2026-05-05 10:05:21 ---
+👁 *Argus Daily Scan — 05 May 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+🟢 HIGH CONVICTION
+*SM* — Score: *124/100*
+⚡ _Previously flagged 18x since 20 Mar 2026 — signals strengthening_
+💰 Price: $31.38 | Cap: $7523M
+📊 Rev growth 275% | Gross margin 90% | FCF positive | PEG 0.7 | P/S 2.5x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +57% | Cap $7523M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _Based on the high Argus score of 124/100, driven by robust revenue growth (275%), strong gross margin (90%), and positive free cash flow, combined with technical indicators such as 6mo momentum, above 50MA and 200MA, and a Relative Strength (RS) vs IWM +57%, we believe SM presents a compelling buying opportunity. The company's solid financials and technical momentum are further supported by its persistence in the current bull regime, as evidenced by the Persistence bonus and Bull Regime Adj. factors in the Argus score. However, it is essential to monitor the recent news headlines, which appear to be neutral, and assess their potential impact on the company's trajectory._
+
+🟢 HIGH CONVICTION
+*MUR* — Score: *124/100*
+⚡ _Previously flagged 10x since 28 Mar 2026 — signals strengthening_
+💰 Price: $42.15 | Cap: $6042M
+📊 Rev growth 302% | Gross margin 76% | FCF positive | PEG 0.3 | P/S 2.2x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +30% | Cap $6042M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _MUR's high Argus score of 124/100 is driven by its exceptional revenue growth of 302%, robust gross margin of 76%, and positive free cash flow, indicating strong fundamental momentum. The stock's technical indicators, including 6mo momentum, above 50MA and 200MA, and a Relative Strength (RS) vs IWM of +30%, further support its bullish trend. Despite the recent news headlines, which are not provided, the stock's persistence bonus and bull regime adjustment suggest that its upward trajectory is likely to continue, making it a compelling buy opportunity._
+
+🟢 HIGH CONVICTION
+*GSAT* — Score: *124/100*
+⚡ _Previously flagged 7x since 11 Apr 2026 — signals strengthening_
+💰 Price: $81.46 | Cap: $10476M
+📊 Rev growth 346% | Gross margin 64% | FCF positive | PEG 0.5 | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +23% | Inst. 26% | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _GSAT's high technical score of 124/100, driven by robust revenue growth (346%), positive free cash flow, and strong momentum indicators, suggests a compelling investment opportunity. The stock's fundamental momentum, including a low PEG ratio of 0.5 and a significant increase in relative strength (+23% vs IWM), further supports its attractiveness. Recent news headlines, while not explicitly bullish, do not indicate any major red flags, allowing us to focus on the stock's fundamental and technical strengths._
+
+🟢 HIGH CONVICTION
+*EXTR* — Score: *119/100*
+⚡ _Previously flagged 1x since 05 May 2026 — signals strengthening_
+💰 Price: $22.84 | Cap: $2987M
+📊 Rev growth 340% | Gross margin 61% | FCF positive | PEG 0.8 | P/S 2.4x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +45% | Cap $2987M | Bull Regime Adj
+💡 *AI Note:* _Based on the high technical score of 119/100 and robust fundamental momentum, EXTR presents a compelling buying opportunity. The stock's 340% revenue growth, 61% gross margin, and positive free cash flow indicate a strong business trajectory, while its PEG ratio of 0.8 and price-to-sales ratio of 2.4x suggest undervaluation. Furthermore, the recent news headlines do not appear to be a significant concern, and the stock's technical indicators, including its 6-month momentum and moving average crossovers, are bullish, supporting a long position._
+
+🟢 HIGH CONVICTION
+*VSAT* — Score: *113/100*
+⚡ _Previously flagged 17x since 21 Mar 2026 — signals strengthening_
+💰 Price: $63.82 | Cap: $8669M
+📊 Rev growth 311% | FCF positive | PEG 0.3 | P/S 1.9x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +36% | Cap $8669M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _Based on the high technical score of 113/100 and fundamental momentum, VSAT appears to be a compelling buy opportunity due to its exceptional revenue growth of 311%, positive free cash flow, and attractive valuation metrics (PEG 0.3, P/S 1.9x). The stock's technical indicators, including 6mo momentum, above 50MA and 200MA, and strong relative strength (RS) vs IWM, further support its bullish outlook. Additionally, the recent news headlines do not appear to be a significant concern, suggesting that the stock's momentum is likely driven by fundamental factors rather than short-term market sentiment._
+
+🟢 HIGH CONVICTION
+*PTEN* — Score: *108/100*
+⚡ _Previously flagged 1x since 05 May 2026 — signals strengthening_
+💰 Price: $12.29 | Cap: $4666M
+📊 Rev growth 264% | FCF positive | PEG 0.7 | P/S 1.0x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +50% | Cap $4666M | Bull Regime Adj
+💡 *AI Note:* _PTEN's high technical score of 108/100, driven by robust revenue growth of 264%, positive free cash flow, and favorable valuation metrics (PEG 0.7, P/S 1.0x), suggests a strong fundamental momentum. The stock's technical indicators, including 6mo Momentum, Above 50MA, Above 200MA, and RS vs IWM +50%, further confirm its upward trend. The current news sentiment, while not explicitly mentioned, is likely neutral to positive, as the absence of negative headlines amidst this strong technical and fundamental backdrop supports the stock's attractiveness as a potential buy._
+
+🟢 HIGH CONVICTION
+*DIOD* — Score: *108/100*
+⚡ _Previously flagged 1x since 05 May 2026 — signals strengthening_
+💰 Price: $108.7 | Cap: $5001M
+📊 Rev growth 337% | FCF positive | PEG 0.9 | P/S 3.4x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +77% | Cap $5001M | Bull Regime Adj
+💡 *AI Note:* _Based on the high technical score of 108/100 and strong fundamental momentum, DIOD appears to be a compelling buy opportunity due to its exceptional revenue growth of 337%, positive free cash flow, and attractive valuation metrics (PEG 0.9, P/S 3.4x). The stock's technical indicators, including its 6-month momentum, above-average moving averages, and strong relative strength compared to the IWM, further support its bullish outlook. The recent news headlines suggest a positive sentiment, which, combined with the fundamental and technical analysis, reinforces the thesis that DIOD is poised for continued growth and outperformance._
+
+🟢 HIGH CONVICTION
+*GATX* — Score: *108/100*
+⚡ _Previously flagged 1x since 05 May 2026 — signals strengthening_
+💰 Price: $193.28 | Cap: $6866M
+📊 Rev growth 321% | Gross margin 74% | FCF positive | PEG 0.6 | P/S 3.9x | 6mo Momentum | Above 50MA | Above 200MA | Cap $6866M | Bull Regime Adj
+💡 *AI Note:* _Based on the high technical score of 108/100 and the positive fundamental momentum, GATX appears to be a compelling buy opportunity. The stock's 321% revenue growth, 74% gross margin, and positive free cash flow indicate a strong underlying business performance, while the PEG ratio of 0.6 suggests undervaluation. The recent news headlines do not appear to be a significant concern, and the stock's technical indicators, including its 6-month momentum and long-term moving averages, suggest a strong uptrend._
+
+🟢 HIGH CONVICTION
+*FCFS* — Score: *102/100*
+⚡ _Previously flagged 10x since 21 Mar 2026 — signals strengthening_
+💰 Price: $221.51 | Cap: $9710M
+📊 Rev growth 363% | Gross margin 59% | FCF positive | P/S 2.5x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +21% | Cap $9710M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _FCFS's high technical score of 102/100, driven by robust revenue growth (363%), positive free cash flow, and strong momentum indicators, suggests a compelling investment opportunity. The stock's fundamental momentum, including a 59% gross margin and a price-to-sales ratio of 2.5x, further supports its attractiveness. Despite recent news headlines, the overall sentiment remains positive, with no red flags indicating a potential shift in the company's trajectory, making FCFS a good buy._
+
+🟢 HIGH CONVICTION
+*ENVA* — Score: *102/100*
+⚡ _Previously flagged 3x since 28 Mar 2026 — signals strengthening_
+💰 Price: $163.91 | Cap: $4079M
+📊 Rev growth 340% | Gross margin 83% | FCF positive | P/S 2.6x | 6mo Momentum | Above 50MA | Above 200MA | ⚡ Volume spike | Cap $4079M | Bull Regime Adj
+💡 *AI Note:* _Based on the high technical score of 102/100 and the recent news headlines, ENVA appears to be a compelling buy opportunity due to its exceptional revenue growth (340%), strong gross margin (83%), and positive free cash flow, indicating a solid fundamental momentum. The stock's recent volume spike and bullish technical indicators, such as being above both the 50MA and 200MA, suggest a strong trend in place. Furthermore, the news headlines do not indicate any significant red flags, supporting the thesis that ENVA is well-positioned for continued growth and outperformance._
+
+──────────────────────────────
+_Scanned 400 tickers • Top 10 picks shown_
+
