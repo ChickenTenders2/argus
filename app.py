@@ -882,7 +882,7 @@ if _latest_scan_date != _today_str and not st.session_state.get("_auto_scan_done
     with st.status("🔄 Running today's auto-scan…", expanded=True) as _auto_st:
         st.write(f"No scan found for today ({_today_str}). Starting automated scan…")
         try:
-            _auto_payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True)
+            _auto_payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, run_type="auto")
             save_results(
                 results=_auto_payload["results"],
                 scan_date=_auto_payload["scan_date"],
@@ -915,7 +915,7 @@ if active_tab == "Overview":
 
     # ── Today's Briefing — 3-column card ─────────────────────────────────────
     regime = cached_market_regime()
-    regime_color_map = {"Bull": "green", "Neutral": "blue", "Bear": "orange", "Extreme Fear": "red"}
+    regime_color_map = {"Bull": "green", "Neutral": "blue", "Bear": "orange", "Extreme Fear": "red", "Stagflation": "violet"}
     r_color = regime_color_map.get(regime["regime"], "white")
     vix_val = regime.get("vix_level")
     vix_trend = regime.get("vix_trend", "stable")
@@ -969,6 +969,60 @@ if active_tab == "Overview":
                     st.caption(f"…and {len(_briefing_alerts) - 3} more. Check Journal tab.")
             else:
                 st.success("All positions within bounds ✅", icon="✅")
+
+    # ── FRED Macro Signal Cards ───────────────────────────────────────────────
+    _macro = regime.get("macro", {})
+    if _macro:
+        _fm1, _fm2, _fm3, _fm4 = st.columns(4)
+        _yc = _macro.get("yield_curve", {})
+        _cpi = _macro.get("cpi", {})
+        _ff = _macro.get("fed_funds", {})
+        _fg = _macro.get("fear_greed", {})
+        with _fm1:
+            with st.container(border=True):
+                _yc_val = _yc.get("value")
+                _yc_sig = _yc.get("signal", "N/A")
+                st.metric(
+                    "📈 Yield Curve (10Y-2Y)",
+                    f"{_yc_val:+.2f}%" if _yc_val is not None else "N/A",
+                    delta=_yc_sig,
+                    delta_color="off",
+                    help="Negative = inverted yield curve (recession signal). Source: FRED T10Y2Y.",
+                )
+        with _fm2:
+            with st.container(border=True):
+                _cpi_val = _cpi.get("value")
+                _cpi_sig = _cpi.get("signal", "N/A")
+                st.metric(
+                    "💹 CPI Trend (ann.)",
+                    f"{_cpi_val:.1f}%" if _cpi_val is not None else "N/A",
+                    delta=_cpi_sig,
+                    delta_color="off",
+                    help="Annualised 3-month CPI change. Above 3.5% = inflation accelerating. Source: FRED CPIAUCSL.",
+                )
+        with _fm3:
+            with st.container(border=True):
+                _ff_val = _ff.get("value")
+                _ff_sig = _ff.get("signal", "N/A")
+                st.metric(
+                    "🏦 Fed Funds Rate",
+                    f"{_ff_val:.2f}%" if _ff_val is not None else "N/A",
+                    delta=_ff_sig,
+                    delta_color="off",
+                    help="Effective Federal Funds Rate. ≥5% = tight monetary conditions. Source: FRED FEDFUNDS.",
+                )
+        with _fm4:
+            with st.container(border=True):
+                _fg_val = _fg.get("value")
+                _fg_label = _fg.get("label", "N/A")
+                _fg_trend = _fg.get("trend", "stable")
+                st.metric(
+                    "😱 Fear & Greed",
+                    f"{_fg_val}/100" if _fg_val is not None else "N/A",
+                    delta=f"{_fg_label} · {_fg_trend}",
+                    delta_color="off",
+                    help="Alternative.me Fear & Greed Index. <25 = Extreme Fear (contrarian buy zone).",
+                )
 
     # Bear-transition inline warnings
     if gap is not None:
@@ -1846,7 +1900,7 @@ if active_tab == "Manual Run":
             status_text.text(f"Scanning {ticker}... ({idx + 1}/{total})")
 
         with st.spinner("Scanning tickers..."):
-            payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, progress_callback=scan_progress_cb)
+            payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, progress_callback=scan_progress_cb, run_type="manual")
             status_text.text("Scan complete!")
             results = payload["results"]
             scan_date = payload["scan_date"]

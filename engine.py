@@ -365,15 +365,15 @@ def _apply_sector_diversity(results, top_n, max_per_sector=3):
     return final_picks[:top_n]
 
 def get_market_regime():
-    """Phase 3: Macroeconomic & Market Regime Filter"""
+    """Phase 3: Macroeconomic & Market Regime Filter — enhanced with FRED macro data."""
     try:
         spy = yf.Ticker("SPY").history(period="1y")
         vix = yf.Ticker("^VIX").history(period="1mo")
-        
+
         if spy.empty or vix.empty or len(spy) < 200:
             return {"regime": "Neutral", "multiplier": 1.0, "reason": "Insufficient data",
-                    "spy_ma200_gap_pct": None, "vix_level": None, "vix_trend": None}
-            
+                    "spy_ma200_gap_pct": None, "vix_level": None, "vix_trend": None, "macro": {}}
+
         spy_price = spy["Close"].iloc[-1]
         spy_ma50 = spy["Close"].rolling(50).mean().iloc[-1]
         spy_ma200 = spy["Close"].rolling(200).mean().iloc[-1]
@@ -382,21 +382,54 @@ def get_market_regime():
         spy_ma200_gap_pct = ((spy_price - spy_ma200) / spy_ma200) * 100
         vix_week_ago = vix["Close"].iloc[-5] if len(vix) >= 5 else vix["Close"].iloc[0]
         vix_trend = "rising" if vix_price > vix_week_ago * 1.05 else ("falling" if vix_price < vix_week_ago * 0.95 else "stable")
-
         extra = {"spy_ma200_gap_pct": spy_ma200_gap_pct, "vix_level": vix_price, "vix_trend": vix_trend}
 
+        # ── Base regime from SPY/VIX ──────────────────────────────────────────
         if vix_price > 30:
-            return {"regime": "Extreme Fear", "multiplier": 0.7, "reason": f"VIX elevated at {vix_price:.1f}", **extra}
+            regime, multiplier, reason = "Extreme Fear", 0.7, f"VIX elevated at {vix_price:.1f}"
         elif spy_price < spy_ma200:
-            return {"regime": "Bear", "multiplier": 0.8, "reason": "SPY below 200-day MA", **extra}
+            regime, multiplier, reason = "Bear", 0.8, "SPY below 200-day MA"
         elif spy_price > spy_ma50 and spy_price > spy_ma200:
-            return {"regime": "Bull", "multiplier": 1.1, "reason": "SPY above 50-day and 200-day MA", **extra}
+            regime, multiplier, reason = "Bull", 1.1, "SPY above 50-day and 200-day MA"
         else:
-            return {"regime": "Neutral", "multiplier": 1.0, "reason": "SPY consolidating between moving averages", **extra}
+            regime, multiplier, reason = "Neutral", 1.0, "SPY consolidating between moving averages"
+
+        # ── FRED macro overlay ────────────────────────────────────────────────
+        macro = {}
+        try:
+            from macro_data import build_macro_context
+            macro = build_macro_context()
+        except Exception as _me:
+            logger.debug(f"Macro context unavailable: {_me}")
+
+        yield_inverted = macro.get("yield_curve", {}).get("inverted", False)
+        cpi_hot = macro.get("cpi", {}).get("accelerating", False)
+        fg_val = macro.get("fear_greed", {}).get("value", 50)
+
+        # Stagflation: bear + hot CPI + inverted yield curve (takes priority over Bear)
+        if yield_inverted and cpi_hot and spy_price < spy_ma200 and regime not in ("Extreme Fear",):
+            regime = "Stagflation"
+            multiplier = 0.65
+            reason = "Inverted yield curve + accelerating CPI + SPY below 200MA"
+        else:
+            # Incremental adjustments: max -0.15 combined penalty
+            adj = 0.0
+            if yield_inverted:
+                adj -= 0.05
+            if cpi_hot:
+                adj -= 0.05
+            if fg_val < 25:
+                adj -= 0.05
+            if adj != 0.0:
+                multiplier = max(0.50, round(multiplier + adj, 2))
+                reason += f" (macro adj {adj:+.2f})"
+
+        return {"regime": regime, "multiplier": multiplier, "reason": reason, **extra, "macro": macro}
+
     except Exception as e:
         logger.warning(f"Market regime check failed: {e}")
         return {"regime": "Neutral", "multiplier": 1.0, "reason": "Data fetch error",
-                "spy_ma200_gap_pct": None, "vix_level": None, "vix_trend": None}
+                "spy_ma200_gap_pct": None, "vix_level": None, "vix_trend": None, "macro": {}}
 
 def format_pick(pick, memory_df):
     ticker = pick["ticker"]
@@ -439,7 +472,7 @@ def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", 
     
     return header + alerts_block + highest_block + high_block + footer
 
-def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None):
+def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None, run_type: str = "manual"):
     """
     Execute Argus scan and return standardized payload.
     This is used by both scheduled runs and Streamlit manual runs.
@@ -480,6 +513,7 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None)
                 results.append(pick)
 
     results.sort(key=lambda x: x["score"], reverse=True)
+    _append_feature_rows(results, scan_date, scan_timestamp, run_type)
     results = _apply_sector_diversity(results, top_n=config.TOP_N, max_per_sector=3)
 
     if update_memory and results:
@@ -529,7 +563,6 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
             df.to_csv(latest_file, index=False)
     conn.close()
 
-    _append_feature_rows(results, scan_date, scan_timestamp, run_type)
 
 def sync_journal_to_csv(journal_file):
     """Write the full journal DB table back to the CSV so git tracks latest state."""
@@ -914,6 +947,10 @@ _vol_cache: dict = {}
 _vol_cache_ts: dict = {}
 _VOL_CACHE_TTL = 3600
 
+_iwm_cache: dict = {}
+_iwm_cache_ts: float = 0.0
+_IWM_CACHE_TTL = 3600
+
 def _volatility_proxy(ticker: str) -> float:
     """Return approximate 1-month volatility (%). Cached per ticker for 1 hour."""
     import time
@@ -1115,10 +1152,17 @@ def _score_momentum(hist, ticker):
     try:
         # Use the last ~63 trading days as a proxy for 3 months
         if len(hist) >= 63:
+            import time as _time
             stock_3mo_return = (price_now / hist["Close"].iloc[-63]) - 1
 
-            iwm_hist = yf.Ticker("IWM").history(period="3mo")
-            if not iwm_hist.empty:
+            global _iwm_cache, _iwm_cache_ts
+            _now = _time.time()
+            if not _iwm_cache or (_now - _iwm_cache_ts) > _IWM_CACHE_TTL:
+                _iwm_cache = {"hist": yf.Ticker("IWM").history(period="3mo")}
+                _iwm_cache_ts = _now
+            iwm_hist = _iwm_cache.get("hist")
+
+            if iwm_hist is not None and not iwm_hist.empty:
                 iwm_return = (iwm_hist["Close"].iloc[-1] / iwm_hist["Close"].iloc[0]) - 1
                 rs_delta   = stock_3mo_return - iwm_return
                 if rs_delta >= 0.20:
@@ -1188,6 +1232,8 @@ def score_stock(ticker, memory_df, config, regime_info=None):
             if sentiment != 0:
                 score += sentiment
                 reasons.append(f"AI Sentiment {sentiment:+d}")
+
+        score = min(100, score)
 
         if score < config.MIN_SCORE:
             return None

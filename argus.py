@@ -4,6 +4,7 @@ import requests
 import logging
 from datetime import datetime
 from fmp_fetch import run_fmp_enrichment
+from edgar_fetch import run_edgar_enrichment
 from engine import Config, run_scan, save_results, load_memory, monitor_portfolio
 
 try:
@@ -144,8 +145,20 @@ def main():
         logger.error("Telegram credentials missing. Exiting.")
         return
 
+    try:
+        _run()
+    except Exception as e:
+        logger.error(f"Fatal scan error: {e}")
+        send_telegram(
+            f"\U0001f6a8 *Argus Scan FAILED \u2014 {datetime.now().strftime('%d %b %Y')}*\n"
+            f"Error: `{str(e)[:300]}`\nCheck GitHub Actions for details."
+        )
+        raise
+
+
+def _run():
     logger.info("Argus scan starting...")
-    scan_payload = run_scan(config=config, scan_limit=400, update_memory=True)
+    scan_payload = run_scan(config=config, scan_limit=400, update_memory=True, run_type="scheduled")
     results = scan_payload["results"]
     scan_date = scan_payload["scan_date"]
     scan_timestamp = scan_payload["scan_timestamp"]
@@ -221,9 +234,8 @@ def main():
     if not send_ok:
         raise RuntimeError("Failed to deliver daily Telegram message.")
     
-    # FMP enrichment is intentionally disabled — enrichment runs separately
-    # via fmp_fetch.py to avoid blocking the nightly scan Action.
-    # run_fmp_enrichment(results, send_telegram)
+    run_fmp_enrichment(results, send_telegram)
+    run_edgar_enrichment(results, send_telegram)
 
     # ── Watchlist monitor ──
     run_watchlist_monitor()

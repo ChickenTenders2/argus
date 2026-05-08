@@ -43,6 +43,8 @@ The project is designed to run automatically via local chron or GitHub Actions, 
 *   **`argus.py`**: A lightweight, headless script designed for executing the scan programmatically via GitHub Actions cron scheduling. It bridges results to Telegram using `llm.py`.
 *   **`llm.py`**: Integrated Groq API client to process generative AI summaries based on fresh news URLs and technical data.
 *   **`fmp_fetch.py`**: (Optional) Fetches deeper fundamental company data using Financial Modeling Prep if available.
+*   **`macro_data.py`**: Fetches FRED macro indicators (yield curve, CPI, Fed Funds Rate) and the Alternative.me Fear & Greed Index to power the enhanced regime filter.
+*   **`edgar_fetch.py`**: Fetches SEC EDGAR Form 4 insider trading data (open-market purchases) for HIGH CONVICTION picks after each scan. No API key required.
 
 ---
 
@@ -66,7 +68,12 @@ export GROQ_API_KEY="gsk_your_key_here"              # Required for Phase 2 Llam
 export TELEGRAM_TOKEN="bot_token_from_botfather"     # Required for Phase 1/4 push alerts 
 export TELEGRAM_CHAT_ID="your_telegram_id"           # Required for Phase 1/4 push alerts
 export FMP_API_KEY="fmp_api_key_here"                # Optional for deeper fundamental reads
+export FRED_API_KEY="your_fred_key_here"             # Optional — free at fred.stlouisfed.org (instant signup)
 ```
+
+> **FRED API Key:** Free registration at [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html). When set, Argus adds yield curve, CPI trend, and Fed Funds Rate signals to the macro regime filter, and displays them as metric cards in the Overview dashboard. Without the key, all existing features continue to work unchanged.
+>
+> **SEC EDGAR** (insider trading): No API key required. Argus automatically fetches Form 4 insider purchase data from `data.sec.gov` for HIGH CONVICTION picks after each scan.
 
 ### 3. Running Argus Locally
 
