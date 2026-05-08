@@ -10,13 +10,13 @@ __pycache__/
 
 # Local App Settings
 argus_prefs.json
-metadata_cache.json
-argus.db-shm
-argus.db-wal
-argus.db-journal
+data/metadata_cache.json
+data/argus.db-shm
+data/argus.db-wal
+data/argus.db-journal
 
 # Local database — never overwrite with GitHub Action copy
-argus.db
+data/argus.db
 
 # Logs
 argus_alerts_log.txt

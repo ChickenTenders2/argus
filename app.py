@@ -784,6 +784,7 @@ if "auto_preset_applied" not in st.session_state:
         _rn0 = _r0.get("regime", "Neutral")
         _pmap0 = {
             "Extreme Fear": "Capital Preservation",
+            "Stagflation": "Capital Preservation",
             "Bear": "Bear Market Defense",
             "Neutral": "Default",
             "Bull": "High Conviction",
@@ -799,6 +800,14 @@ if "auto_preset_applied" not in st.session_state:
     st.session_state["auto_preset_applied"] = True
 
 with st.sidebar:
+    st.markdown("### 👁 Navigate")
+    active_tab = st.radio(
+        "Navigate",
+        ["Overview", "Ticker Detail", "Scans", "Journal", "Prediction Model", "Help"],
+        key="main_tabs",
+        label_visibility="collapsed",
+    )
+    st.divider()
     st.header("Global Presets")
     
     preset_options = [
@@ -904,9 +913,6 @@ if _latest_scan_date != _today_str and not st.session_state.get("_auto_scan_done
 if _auto_scan_ran:
     st.rerun()
 
-# To restore Portfolio Optimizer, add "Portfolio Optimizer" back to this array
-tab_options = ["Overview", "Ticker Detail", "Manual Run", "History", "Journal", "Prediction Model", "Alerts Log", "Help", "Prompts"]
-active_tab = st.radio("Navigation", tab_options, key="main_tabs", horizontal=True, label_visibility="collapsed")
 st.markdown("<br>", unsafe_allow_html=True)
 
 
@@ -1134,8 +1140,32 @@ if active_tab == "Overview":
                 args=(st.session_state.get("deep_dive_selectbox", ""),)
             )
 
-if active_tab == "History":
-    st.subheader("🗂 History")
+    st.markdown("---")
+    with st.expander("🔔 Alerts Log — Telegram Notification History"):
+        st.caption("Historical record of all push notifications sent by Argus.")
+        try:
+            with open("argus_alerts_log.txt", "r", encoding="utf-8") as _alf:
+                _logs = _alf.read()
+            if _logs.strip():
+                _entries = re.findall(
+                    r'--- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ---\n(.*?)(?=--- \d{4}-\d{2}-\d{2}|\Z)',
+                    _logs, re.DOTALL
+                )
+                if _entries:
+                    for _ds, _msg in reversed(_entries[:20]):
+                        _msg = _msg.strip()
+                        if _msg:
+                            st.markdown(f"**{_ds}**")
+                            st.info(_msg)
+                else:
+                    st.caption("No alerts logged yet.")
+            else:
+                st.caption("No alerts logged yet.")
+        except FileNotFoundError:
+            st.caption("No alerts logged yet.")
+
+if active_tab == "Scans":
+    st.subheader("🗂 Scan History")
     if history_df.empty:
         st.info("No history file yet.")
     else:
@@ -1220,6 +1250,91 @@ if active_tab == "History":
                         st.dataframe(day_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
                     else:
                         st.dataframe(day_df, use_container_width=True)
+
+    st.divider()
+    st.subheader("⚙️ Manual Scan")
+    st.caption("Use this for weekend/on-demand runs. Results are written to history + feature store.")
+    if st.button("🚀 Run Global Scan", key="btn_run_scan"):
+        st.info(f"Scan executing using preset: **{st.session_state.preset_selector}**")
+        _lottie_ph = st.empty()
+        if HAS_LOTTIE:
+            _anim = _load_lottie("https://assets5.lottiefiles.com/packages/lf20_qp1q7mct.json")
+            if _anim:
+                with _lottie_ph:
+                    st_lottie(_anim, height=130, key="scan_lottie", speed=1, loop=True)
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        def scan_progress_cb(ticker, idx, total):
+            progress = (idx + 1) / total
+            progress_bar.progress(progress)
+            status_text.text(f"Scanning {ticker}... ({idx + 1}/{total})")
+
+        with st.spinner("Scanning tickers..."):
+            payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, progress_callback=scan_progress_cb, run_type="manual")
+            status_text.text("Scan complete!")
+            results = payload["results"]
+            scan_date = payload["scan_date"]
+            scan_timestamp = payload["scan_timestamp"]
+            scanned_count = payload["scanned_count"]
+
+            save_results(
+                results=results,
+                scan_date=scan_date,
+                scan_timestamp=scan_timestamp,
+                run_type="manual",
+                latest_file=config.RESULTS_FILE,
+                history_file=config.RESULTS_HISTORY_FILE,
+                write_latest=False,
+                feature_file=config.FEATURES_FILE,
+            )
+
+        _lottie_ph.empty()
+        st.caption(f"Scanned {scanned_count} tickers")
+        if results:
+            regime = cached_market_regime()
+            st.success(f"{len(results)} picks met requirements in {regime['regime']} regime.")
+            df_res = pd.DataFrame(results).sort_values("score", ascending=False)
+            df_res = add_predictions(df_res, model)
+            df_res = add_risk_guidance(df_res, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
+            df_res = format_pct_columns(df_res, ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"])
+            if "reasons" in df_res.columns:
+                df_res["reasons"] = df_res["reasons"].apply(format_reasons)
+            display_cards(df_res)
+            with st.expander("Show Raw Discovery Table"):
+                st.dataframe(df_res, use_container_width=True)
+            st.subheader("High Conviction Charts (Score >= 80)")
+            high_conviction = df_res[df_res["tier"] == "🟢 HIGH CONVICTION"]
+            if not high_conviction.empty:
+                cols = st.columns(3)
+                for idx, row in high_conviction.reset_index(drop=True).iterrows():
+                    with cols[idx % 3]:
+                        st.write(f"**{row['ticker']}** - Score: {row['score']}")
+                        hist = fetch_ticker_history(row["ticker"], period="6mo")
+                        if not hist.empty:
+                            safe_line_chart(hist["Close"], y_label="close")
+                        else:
+                            st.write("No history available")
+            else:
+                st.info("No high conviction picks found in this run.")
+        else:
+            st.warning("No tickers met the current criteria.")
+
+        if send_to_telegram:
+            alerts = monitor_portfolio()
+            message = generate_telegram_message(
+                results,
+                scanned_count,
+                title="Argus Manual Scan",
+                date_str=datetime.now().strftime('%d %b %Y %H:%M'),
+                alerts=alerts
+            )
+            delivered = send_telegram_message(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID, message)
+            if delivered:
+                st.success("Manual run sent to Telegram.")
+            else:
+                st.error("Could not send to Telegram. Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.")
 
 if active_tab == "Ticker Detail":
     st.subheader("🔎 Ticker Detail")
@@ -1877,104 +1992,56 @@ if active_tab == "Journal":
                 else:
                     st.error("Please select a ticker.")
 
-if active_tab == "Manual Run":
-    st.subheader("⚙️ Manual Scan")
-    st.caption("Use this for weekend/on-demand runs. Results are written to history + feature store.")
-    if st.button("🚀 Run Global Scan", key="btn_run_scan"):
-        
-        st.info(f"Scan executing using preset: **{st.session_state.preset_selector}**")
-        
-        _lottie_ph = st.empty()
-        if HAS_LOTTIE:
-            _anim = _load_lottie("https://assets5.lottiefiles.com/packages/lf20_qp1q7mct.json")
-            if _anim:
-                with _lottie_ph:
-                    st_lottie(_anim, height=130, key="scan_lottie", speed=1, loop=True)
-
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        def scan_progress_cb(ticker, idx, total):
-            progress = (idx + 1) / total
-            progress_bar.progress(progress)
-            status_text.text(f"Scanning {ticker}... ({idx + 1}/{total})")
-
-        with st.spinner("Scanning tickers..."):
-            payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, progress_callback=scan_progress_cb, run_type="manual")
-            status_text.text("Scan complete!")
-            results = payload["results"]
-            scan_date = payload["scan_date"]
-            scan_timestamp = payload["scan_timestamp"]
-            scanned_count = payload["scanned_count"]
-
-            save_results(
-                results=results,
-                scan_date=scan_date,
-                scan_timestamp=scan_timestamp,
-                run_type="manual",
-                latest_file=config.RESULTS_FILE,
-                history_file=config.RESULTS_HISTORY_FILE,
-                write_latest=False,
-                feature_file=config.FEATURES_FILE,
-            )
-
-        _lottie_ph.empty()
-        st.caption(f"Scanned {scanned_count} tickers")
-        if results:
-            regime = cached_market_regime()
-            st.success(f"{len(results)} picks met requirements in {regime['regime']} regime.")
-            df_res = pd.DataFrame(results).sort_values("score", ascending=False)
-            df_res = add_predictions(df_res, model)
-            df_res = add_risk_guidance(
-                df_res,
-                model,
-                risk_per_trade_pct=risk_per_trade_pct,
-                max_position_pct=max_position_pct,
-            )
-            df_res = format_pct_columns(
-                df_res,
-                ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"],
-            )
-            
-            if "reasons" in df_res.columns:
-                df_res["reasons"] = df_res["reasons"].apply(format_reasons)
-                
-            display_cards(df_res)
-            
-            with st.expander("Show Raw Discovery Table"):
-                st.dataframe(df_res, use_container_width=True)
-
-            st.subheader("High Conviction Charts (Score >= 80)")
-            high_conviction = df_res[df_res["tier"] == "🟢 HIGH CONVICTION"]
-            if not high_conviction.empty:
-                cols = st.columns(3)
-                for idx, row in high_conviction.reset_index(drop=True).iterrows():
-                    with cols[idx % 3]:
-                        st.write(f"**{row['ticker']}** - Score: {row['score']}")
-                        hist = fetch_ticker_history(row["ticker"], period="6mo")
-                        if not hist.empty:
-                            safe_line_chart(hist["Close"], y_label="close")
-                        else:
-                            st.write("No history available")
-            else:
-                st.info("No high conviction picks found in this run.")
+    st.divider()
+    with st.expander("⚖️ Portfolio Optimizer"):
+        st.markdown("Phase 4: Uses efficient frontier logic to dynamically calculate the best weightings.")
+        st.write("Select tickers to include in the optimization:")
+        if not latest_df.empty:
+            _default_tickers = latest_df.head(5)["ticker"].tolist()
         else:
-            st.warning("No tickers met the current criteria.")
-
-        if send_to_telegram:
-            alerts = monitor_portfolio()
-            message = generate_telegram_message(
-                results, 
-                scanned_count, 
-                title="Argus Manual Scan", 
-                date_str=datetime.now().strftime('%d %b %Y %H:%M'),
-                alerts=alerts
-            )
-            delivered = send_telegram_message(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID, message)
-            if delivered:
-                st.success("Manual run sent to Telegram.")
+            _default_tickers = ["AAPL", "MSFT", "GOOG", "AMZN"]
+        _opt_tickers = st.multiselect(
+            "Optimization Tickers",
+            latest_df["ticker"].tolist() if not latest_df.empty else _default_tickers,
+            default=_default_tickers,
+            key="jrn_opt_tickers",
+        )
+        if st.button("⚡ Optimize Portfolio", key="btn_jrn_opt"):
+            if len(_opt_tickers) < 2:
+                st.error("Please select at least 2 tickers.")
             else:
-                st.error("Could not send to Telegram. Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.")
+                with st.spinner("Downloading 1-year history and optimizing..."):
+                    from engine import optimize_portfolio
+                    _opt_result = optimize_portfolio(_opt_tickers)
+                    if "error" in _opt_result:
+                        st.error(_opt_result["error"])
+                    else:
+                        _ms = _opt_result["max_sharpe"]
+                        _mv = _opt_result["min_volatility"]
+                        st.success("Optimization Complete!")
+                        st.markdown("**Max Sharpe Ratio Portfolio**")
+                        _oc1, _oc2, _oc3 = st.columns(3)
+                        with _oc1:
+                            with st.container(border=True): st.metric("Annual Return", f"{_ms['return']*100:.1f}%")
+                        with _oc2:
+                            with st.container(border=True): st.metric("Volatility", f"{_ms['volatility']*100:.1f}%")
+                        with _oc3:
+                            with st.container(border=True): st.metric("Sharpe Ratio", f"{_ms['sharpe']:.2f}")
+                        _wd = pd.DataFrame(list(_ms["weights"].items()), columns=["Ticker", "Weight"])
+                        _wd["Weight"] = _wd["Weight"].apply(lambda x: f"{x*100:.1f}%")
+                        st.dataframe(_wd, use_container_width=True)
+                        st.divider()
+                        st.markdown("**Minimum Volatility Portfolio**")
+                        _oc4, _oc5, _oc6 = st.columns(3)
+                        with _oc4:
+                            with st.container(border=True): st.metric("Annual Return", f"{_mv['return']*100:.1f}%")
+                        with _oc5:
+                            with st.container(border=True): st.metric("Volatility", f"{_mv['volatility']*100:.1f}%")
+                        with _oc6:
+                            with st.container(border=True): st.metric("Sharpe Ratio", f"{_mv['sharpe']:.2f}")
+                        _wd2 = pd.DataFrame(list(_mv["weights"].items()), columns=["Ticker", "Weight"])
+                        _wd2["Weight"] = _wd2["Weight"].apply(lambda x: f"{x*100:.1f}%")
+                        st.dataframe(_wd2, use_container_width=True)
 
 if active_tab == "Prediction Model":
     st.subheader("📈 ML Prediction Model Quality")
@@ -2100,31 +2167,6 @@ if active_tab == "Portfolio Optimizer":
                     weights_df2['Weight'] = weights_df2['Weight'].apply(lambda x: f"{x*100:.1f}%")
                     st.dataframe(weights_df2, use_container_width=True)
 
-if active_tab == "Alerts Log":
-    st.subheader("🔔 Alerts Log")
-    st.caption("A historical record of all Telegram push notifications generated by Argus.")
-    try:
-        import re
-        with open("argus_alerts_log.txt", "r", encoding="utf-8") as f:
-            logs = f.read()
-        if logs.strip():
-            entries = re.findall(
-                r'--- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ---\n(.*?)(?=--- \d{4}-\d{2}-\d{2}|\Z)',
-                logs, re.DOTALL
-            )
-            if entries:
-                for date_str, msg in reversed(entries):
-                    msg = msg.strip()
-                    if msg:
-                        st.markdown(f"**{date_str}**")
-                        st.info(msg)
-            else:
-                st.info("No alerts logged yet.")
-        else:
-            st.info("No alerts logged yet.")
-    except FileNotFoundError:
-        st.info("No alerts logged yet.")
-
 if active_tab == "Help":
     st.subheader("❓ Help & Documentation")
     st.markdown('''
@@ -2138,15 +2180,12 @@ if active_tab == "Help":
     
     ---
     ### Pages Overview
-    * **Overview:** Snapshot of the latest scan results with interactive visual metric cards. View the current macro Market Regime, last scan date, VIX level, and SPY vs 200-day MA proximity. Bear transition warnings appear automatically when conditions deteriorate.
+    * **Overview:** Snapshot of the latest scan results with interactive visual metric cards. View the current macro Market Regime, FRED macro signals (yield curve, CPI, Fed Funds), last scan date, VIX level, and SPY vs 200-day MA proximity. Bear transition warnings appear automatically when conditions deteriorate. Alerts Log is accessible via expander at the bottom.
     * **Ticker Detail:** Deep dive into specific tickers. Evaluate a two-panel Plotly chart (price on top, Argus score with colour bands on bottom — 🟢 ≥75, 🟡 50–75, 🔴 <50), quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq).
-    * **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate the statistically optimal portfolio sizing using the efficient frontier.
-    * **Manual Run:** Instantly run a new global scan based on your sidebar settings. Includes Telegram notification support and Auto-Pilot portfolio monitoring.
-    * **History:** Browse historical database scans with interactive sortable tables. Select any scan day to view a visual card grid of its scoring reasons.
-    * **Journal:** Personal logbook featuring a **Live Portfolio Analytics Dashboard**. Track Total Invested, Current Value, Net Return %, and visualize Sector Diversification via interactive pie charts. Benchmarks portfolio performance against the S&P 500 (SPY). Powered by the Auto-Pilot monitor for live SL/TP tracking.
-    * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, and calibration accuracy across different market conditions.
-    * **Alerts Log:** Record of all automated Telegram push notifications generated by both local manual runs and the GitHub Actions daily scan.
-    * **Prompts:** Curated LLM prompts for deeper external research, plus market condition templates.
+    * **Scans:** Browse historical database scans with interactive sortable tables and score trend charts. Trigger an on-demand Manual Scan (with optional Telegram delivery) in the bottom section.
+    * **Journal:** Personal logbook featuring a **Live Portfolio Analytics Dashboard**. Track Total Invested, Current Value, Net Return %, and visualize Sector Diversification via interactive pie charts. Benchmarks portfolio performance against the S&P 500 (SPY). Portfolio Optimizer accessible via expander at the bottom.
+    * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, confusion matrix, feature importance, and calibration accuracy across different market conditions.
+    * **Help:** Full documentation, sidebar settings reference, and curated LLM research prompts for AI-assisted stock analysis.
 
     ---
     ### 🤖 ML Prediction Model — When Does It Activate?
@@ -2228,7 +2267,7 @@ if active_tab == "Help":
     * **Max Position Size:** Maximum portfolio allocation allowed in a single stock, forcing diversification (Default: 8.0%).
     ''')
 
-if active_tab == "Prompts":
+    st.divider()
     st.subheader("🤖 AI Prompts for Research")
     st.caption("Copy these templates and paste them into AI tools (Perplexity, ChatGPT, Claude, Grok) for deeper analysis. Replace bracketed placeholders with your data.")
 

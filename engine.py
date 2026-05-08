@@ -19,8 +19,10 @@ from llm import get_sentiment_score
 
 logger = logging.getLogger("Argus.Engine")
 
-CACHE_FILE = "metadata_cache.json"
-DB_FILE = "argus.db"
+os.makedirs("data", exist_ok=True)
+
+CACHE_FILE = "data/metadata_cache.json"
+DB_FILE = "data/argus.db"
 
 _DB_ENGINE = None
 _DB_INITIALIZED = False
@@ -240,17 +242,17 @@ class Config:
     TELEGRAM_TOKEN: str = os.environ.get("TELEGRAM_TOKEN", "")
     TELEGRAM_CHAT_ID: str = os.environ.get("TELEGRAM_CHAT_ID", "")
     GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
-    MEMORY_FILE: str = "argus_memory.csv"
-    WATCHLIST_FILE: str = "argus_watchlist.csv"
+    MEMORY_FILE: str = "data/argus_memory.csv"
+    WATCHLIST_FILE: str = "data/argus_watchlist.csv"
     MIN_SCORE: int = 65
     TOP_N: int = 10
     PRICE_FLOOR: float = 2.0
     PRICE_CEILING: float = None
     VOL_FLOOR: int = 200000
-    RESULTS_FILE: str = "argus_results.csv"
-    RESULTS_HISTORY_FILE: str = "argus_results_history.csv"
-    FEATURES_FILE: str = "argus_feature_history.csv"
-    JOURNAL_FILE: str = "argus_journal.csv"
+    RESULTS_FILE: str = "data/argus_results.csv"
+    RESULTS_HISTORY_FILE: str = "data/argus_results_history.csv"
+    FEATURES_FILE: str = "data/argus_feature_history.csv"
+    JOURNAL_FILE: str = "data/argus_journal.csv"
 
 # Always ensure migration happens when engine starts (now safely below Config definition)
 migrate_csv_to_sqlite()
