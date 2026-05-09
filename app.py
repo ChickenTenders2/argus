@@ -443,6 +443,77 @@ def fetch_ticker_news(ticker: str, max_items: int = 5) -> list:
     return items
 
 
+def _compute_display_rank(df):
+    """Sort df and assign a sequential rank; within tied scores rank by prob_upside, m_score, f_score."""
+    df = df.copy()
+    sort_cols, ascending = ["score"], [False]
+    for col in ("prob_upside", "m_score", "f_score"):
+        if col in df.columns:
+            sort_cols.append(col)
+            ascending.append(False)
+    df = df.sort_values(sort_cols, ascending=ascending, na_position="last").reset_index(drop=True)
+    df["_rank"] = range(1, len(df) + 1)
+    return df
+
+
+@st.cache_data(ttl=86400)
+def fetch_company_description(ticker: str) -> str:
+    """Return a short 2-sentence company description from yfinance."""
+    try:
+        summary = yf.Ticker(ticker).info.get("longBusinessSummary", "")
+        if summary:
+            sentences = summary.split(". ")
+            short = ". ".join(sentences[:2]).strip()
+            if not short.endswith("."):
+                short += "."
+            return short[:420] if len(short) > 420 else short
+    except Exception:
+        pass
+    return ""
+
+
+def _generate_buy_sell_text(ticker, score_val, prob_str, entry, sl_pct, tp_pct):
+    """Return (buy_text, sell_text) with actual price levels where possible."""
+    try:
+        hist = fetch_ticker_history(ticker, period="1y")
+        if hist.empty:
+            raise ValueError("no history")
+        price = float(hist["Close"].iloc[-1])
+        ma50 = float(hist["Close"].rolling(50).mean().iloc[-1])
+        ma200 = float(hist["Close"].rolling(200).mean().iloc[-1]) if len(hist) >= 200 else None
+        week52_high = float(hist["Close"].max())
+        sl_price = round(price * (1 - sl_pct / 100), 2)
+        tp_price = round(price * (1 + tp_pct / 100), 2)
+
+        if price > ma50:
+            buy_txt = (
+                f"Price (${price:.2f}) is trading above the 50MA (${ma50:.2f}), confirming near-term strength. "
+                f"Preferred entry on a pullback toward ${ma50:.2f} or on a confirmed breakout above the "
+                f"52-week high (${week52_high:.2f})."
+            )
+        elif ma200 and price > ma200:
+            buy_txt = (
+                f"Price (${price:.2f}) is above the 200MA (${ma200:.2f}) — long-term uptrend intact. "
+                f"Watch for a reclaim of the 50MA (${ma50:.2f}) as the next entry trigger."
+            )
+        else:
+            buy_txt = (
+                f"Current price ${price:.2f} is below key moving averages (50MA: ${ma50:.2f}). "
+                f"{entry} Wait for trend confirmation before sizing in."
+            )
+
+        sell_parts = [f"Hard stop loss at **${sl_price}** (\u2212{sl_pct:.1f}% from ${price:.2f})."]
+        sell_parts.append(f"First profit target: **${tp_price}** (+{tp_pct:.1f}%).")
+        if ma50:
+            sell_parts.append(f"Also exit on a daily close below the 50MA (${ma50:.2f}).")
+        sell_txt = " ".join(sell_parts)
+        return buy_txt, sell_txt
+    except Exception:
+        buy_txt = f"Score **{score_val}** \u00b7 Upside Prob **{prob_str}**. {entry}."
+        sell_txt = f"Stop loss at **\u2212{sl_pct:.1f}%**. Profit target around **+{tp_pct:.1f}%**."
+        return buy_txt, sell_txt
+
+
 def safe_line_chart(data, y_label="value"):
     """
     Renders an interactive line chart using Plotly Express for smooth zooming
@@ -658,19 +729,23 @@ def quick_log_dialog(ticker, price, stop_loss_pct, take_profit_pct):
             st.rerun()
 
 
-def display_cards(df):
+def display_cards(df, show_copy_button=True):
     """Render a DataFrame of picks as visual cards instead of a wide table."""
     if df.empty:
         st.info("No picks to display.")
         return
-        
+
+    df = _compute_display_rank(df)
+    n = len(df)
+    remainder = n % 3
+
     cols = st.columns(3)
     for i, (_, row) in enumerate(df.iterrows()):
         with cols[i % 3]:
-            # Instead of a static container, use an expander collapsed by default
+            rank = int(row.get("_rank", i + 1))
             tier_str = row.get("tier", "")
             tier_icon = "🟢" if "HIGH CONVICTION" in str(tier_str) else "🟡" if tier_str else ""
-            label = f"{tier_icon} {row['ticker']} · Score: {row['score']}/100"
+            label = f"#{rank} {tier_icon} {row['ticker']} · Score: {row['score']}/100"
             with st.expander(label, expanded=False):
                 if "tier" in row and pd.notna(row["tier"]):
                     color = "green" if "HIGH CONVICTION" in row["tier"] else "orange"
@@ -761,6 +836,25 @@ def display_cards(df):
                             stop_loss_pct=float(row.get("stop_loss_pct") or 8.0),
                             take_profit_pct=float(row.get("take_profit_pct") or 25.0),
                         )
+
+    if show_copy_button and "ticker" in df.columns:
+        _ticker_str = ", ".join(df["ticker"].tolist())
+        _caption = f"{n} tickers \u00b7 click copy icon \u2192"
+        if remainder == 0:
+            with st.expander("\U0001f4cb Copy Tickers"):
+                st.caption(_caption)
+                st.code(_ticker_str, language=None)
+        elif remainder == 1:
+            with cols[1]:
+                st.markdown("**\U0001f4cb Copy Tickers**")
+                st.caption(_caption)
+                st.code(_ticker_str, language=None)
+        else:
+            with cols[2]:
+                st.markdown("**\U0001f4cb Copy Tickers**")
+                st.caption(_caption)
+                st.code(_ticker_str, language=None)
+
 
 if "horizon_days" not in st.session_state:
     st.session_state.horizon_days = 63
@@ -1093,11 +1187,6 @@ if active_tab == "Overview":
         # Display the visual card grid instead of a flat table
         display_cards(subset_view)
 
-        with st.expander("📋 Copy Tickers"):
-            _ticker_str = ", ".join(subset_view["ticker"].tolist())
-            st.caption(f"{len(subset_view)} tickers — click the copy icon on the right →")
-            st.code(_ticker_str, language=None)
-
         with st.expander("Show Raw Data Table"):
             if "reasons" in subset_view.columns:
                 subset_view["reasons"] = subset_view["reasons"].apply(format_reasons)
@@ -1190,7 +1279,8 @@ if active_tab == "Scans":
             daily["scan_day"] = daily["scan_day"].astype(str)
             daily["avg_score"] = daily["avg_score"].round(1)
             daily["top_score"] = daily["top_score"].round(1)
-            show_aggrid(daily, height=280)
+            with st.expander("\U0001f4cb Scan History Table", expanded=False):
+                show_aggrid(daily, height=280)
 
             st.caption("Score trend")
             trend = (
@@ -1401,71 +1491,29 @@ if active_tab == "Ticker Detail":
                 max_position_pct=max_position_pct,
             )
             
-            # --- TOP SECTION: Score History & Strategy ---
-            colA, colB = st.columns([2, 1])
-            with colA:
-                st.markdown("#### Argus Score History")
-                safe_line_chart(tdf.set_index("scan_date")["score"], y_label="score")
-                
-            with colB:
-                st.markdown("#### Buy & Sell Strategy")
-                st.info("Actionable execution plan based on the latest signal.")
-                score_val = latest_ticker_row["score"].iloc[0]
-                upside_prob = latest_ticker_row.get("prob_upside", pd.Series([0])).iloc[0]
-                entry = latest_ticker_row.get("entry_style", pd.Series([""])).iloc[0]
-                sl_pct = latest_ticker_row.get("stop_loss_pct", pd.Series([0])).iloc[0]
-                tp_pct = latest_ticker_row.get("take_profit_pct", pd.Series([0])).iloc[0]
-                
-                prob_str = f"{upside_prob*100:.1f}%" if upside_prob is not None else "N/A"
-                _td_sig_lbl, _td_sig_col = get_signal_label(score_val)
-                st.markdown(f"**Signal: :{_td_sig_col}[{_td_sig_lbl}]**")
-                st.markdown(f"**Buy:** Score of **{score_val}** & Upside Prob **{prob_str}**. "
-                            f"Entry style is **{entry}**.")
-                st.markdown(f"**Sell:** Stop loss at **-{sl_pct:.1f}%**. "
-                            f"Target taking profits around **+{tp_pct:.1f}%**.")
-            
-                st.markdown("#### Groq Investment Thesis")
-                _thesis_key = f"thesis_{ticker}"
-                _thesis_err_key = f"thesis_err_{ticker}"
-                _groq_avail = bool(Config().GROQ_API_KEY)
+            # ── Recent News (TOP) ─────────────────────────────────────────────
+            with st.expander("📰 Recent News Headlines", expanded=True):
+                _news_items = fetch_ticker_news(ticker, max_items=5)
+                if _news_items:
+                    for _ni in _news_items:
+                        _pub_str = f" · *{_ni['publisher']}*" if _ni.get("publisher") else ""
+                        _ts_str = f" · {_ni['pub_time']}" if _ni.get("pub_time") else ""
+                        if _ni.get("link"):
+                            st.markdown(f"- [{_ni['title']}]({_ni['link']}){_pub_str}{_ts_str}")
+                        else:
+                            st.markdown(f"- **{_ni['title']}**{_pub_str}{_ts_str}")
+                else:
+                    st.caption("No recent news available.")
 
-                if _groq_avail and _thesis_key not in st.session_state and _thesis_err_key not in st.session_state:
-                    try:
-                        from llm import generate_ai_thesis as _gen_thesis
-                        _api_key = Config().GROQ_API_KEY
-                        _reasons_raw = latest_ticker_row["reasons"].iloc[0]
-                        if isinstance(_reasons_raw, str):
-                            if _reasons_raw.startswith("["):
-                                try:
-                                    _reasons_raw = json.loads(_reasons_raw)
-                                except (json.JSONDecodeError, ValueError):
-                                    _reasons_raw = [_reasons_raw]
-                            else:
-                                _reasons_raw = [_reasons_raw]
-                        elif not isinstance(_reasons_raw, list):
-                            _reasons_raw = []
-                        with st.spinner(f"Generating AI thesis for {ticker}…"):
-                            st.session_state[_thesis_key] = _gen_thesis(ticker, score_val, _reasons_raw, _api_key)
-                    except Exception as _te:
-                        st.session_state[_thesis_err_key] = str(_te)
-
-                if st.session_state.get(_thesis_key):
-                    st.info(st.session_state[_thesis_key])
-                    if st.button("🔄 Regenerate", key=f"btn_regen_{ticker}"):
-                        for _k in [_thesis_key, _thesis_err_key]:
-                            st.session_state.pop(_k, None)
-                        st.rerun()
-                elif st.session_state.get(_thesis_err_key):
-                    st.error(f"Thesis error: {st.session_state[_thesis_err_key]}")
-                    if st.button("🔄 Retry", key=f"btn_retry_{ticker}"):
-                        st.session_state.pop(_thesis_err_key, None)
-                        st.rerun()
-                elif not _groq_avail:
-                    st.info("Set `GROQ_API_KEY` environment variable to enable auto AI thesis.")
+            # ── Company Description ───────────────────────────────────────────
+            _desc = fetch_company_description(ticker)
+            if _desc:
+                with st.container(border=True):
+                    st.markdown(f"**About {ticker}:** {_desc}")
 
             st.markdown("#### Execution Guidance")
-            
-            # --- MIDDLE SECTION: Price History & Detailed Snapshot ---
+
+            # ── Price History & Execution Guidance ────────────────────────────
             colC, colD = st.columns([2, 1])
             with colC:
                 st.markdown("#### Price & Score History (1 Year)")
@@ -1527,8 +1575,8 @@ if active_tab == "Ticker Detail":
                         safe_line_chart(hist["Close"], y_label="close price")
                     else:
                         st.info("No market price data available for chart.")
-                    
-            with colD:                            
+
+            with colD:
                 st.markdown("#### Execution Guidance")
                 st.dataframe(
                     latest_ticker_row[
@@ -1543,7 +1591,7 @@ if active_tab == "Ticker Detail":
                     ].T,
                     use_container_width=True,
                 )
-                
+
                 st.markdown("#### Financial Snapshot")
                 snap = fetch_financial_snapshot(ticker)
                 if snap:
@@ -1570,43 +1618,92 @@ if active_tab == "Ticker Detail":
                         st.markdown(_el)
                 except Exception:
                     pass
-            
+
             st.markdown("---")
 
-            # ── Recent News Headlines ─────────────────────────────────────────
-            with st.expander("📰 Recent News Headlines"):
-                _news_items = fetch_ticker_news(ticker, max_items=5)
-                if _news_items:
-                    for _ni in _news_items:
-                        _pub_str = f" · *{_ni['publisher']}*" if _ni.get("publisher") else ""
-                        _ts_str = f" · {_ni['pub_time']}" if _ni.get("pub_time") else ""
-                        if _ni.get("link"):
-                            st.markdown(f"- [{_ni['title']}]({_ni['link']}){_pub_str}{_ts_str}")
-                        else:
-                            st.markdown(f"- **{_ni['title']}**{_pub_str}{_ts_str}")
-                else:
-                    st.caption("No recent news available.")
+            # ── Argus Score History (collapsed by default) ────────────────────
+            with st.expander("📊 Argus Score History", expanded=False):
+                safe_line_chart(tdf.set_index("scan_date")["score"], y_label="score")
 
-            # --- BOTTOM SECTION: Data view & AI ---
+            # ── Buy & Sell Strategy + Groq Investment Thesis (bottom) ─────────
+            score_val = latest_ticker_row["score"].iloc[0]
+            upside_prob = latest_ticker_row.get("prob_upside", pd.Series([0])).iloc[0]
+            entry = latest_ticker_row.get("entry_style", pd.Series([""])).iloc[0]
+            sl_pct = latest_ticker_row.get("stop_loss_pct", pd.Series([0])).iloc[0]
+            tp_pct = latest_ticker_row.get("take_profit_pct", pd.Series([0])).iloc[0]
+            prob_str = f"{upside_prob*100:.1f}%" if upside_prob is not None else "N/A"
+
+            _bs_col, _gt_col = st.columns([1, 1])
+            with _bs_col:
+                st.markdown("#### Buy & Sell Strategy")
+                st.info("Actionable execution plan based on the latest signal.")
+                _td_sig_lbl, _td_sig_col = get_signal_label(score_val)
+                st.markdown(f"**Signal: :{_td_sig_col}[{_td_sig_lbl}]**")
+                _buy_txt, _sell_txt = _generate_buy_sell_text(
+                    ticker, score_val, prob_str, entry,
+                    float(sl_pct or 8.0), float(tp_pct or 20.0)
+                )
+                st.markdown(f"**🟢 Buy:** {_buy_txt}")
+                st.markdown(f"**🔴 Sell:** {_sell_txt}")
+
+            with _gt_col:
+                st.markdown("#### Groq Investment Thesis")
+                _thesis_key = f"thesis_{ticker}"
+                _thesis_err_key = f"thesis_err_{ticker}"
+                _groq_avail = bool(Config().GROQ_API_KEY)
+
+                if _groq_avail and _thesis_key not in st.session_state and _thesis_err_key not in st.session_state:
+                    try:
+                        from llm import generate_ai_thesis as _gen_thesis
+                        _api_key = Config().GROQ_API_KEY
+                        _reasons_raw = latest_ticker_row["reasons"].iloc[0]
+                        if isinstance(_reasons_raw, str):
+                            if _reasons_raw.startswith("["):
+                                try:
+                                    _reasons_raw = json.loads(_reasons_raw)
+                                except (json.JSONDecodeError, ValueError):
+                                    _reasons_raw = [_reasons_raw]
+                            else:
+                                _reasons_raw = [_reasons_raw]
+                        elif not isinstance(_reasons_raw, list):
+                            _reasons_raw = []
+                        with st.spinner(f"Generating AI thesis for {ticker}…"):
+                            st.session_state[_thesis_key] = _gen_thesis(ticker, score_val, _reasons_raw, _api_key)
+                    except Exception as _te:
+                        st.session_state[_thesis_err_key] = str(_te)
+
+                if st.session_state.get(_thesis_key):
+                    st.info(st.session_state[_thesis_key])
+                    if st.button("🔄 Regenerate", key=f"btn_regen_{ticker}"):
+                        for _k in [_thesis_key, _thesis_err_key]:
+                            st.session_state.pop(_k, None)
+                        st.rerun()
+                elif st.session_state.get(_thesis_err_key):
+                    st.error(f"Thesis error: {st.session_state[_thesis_err_key]}")
+                    if st.button("🔄 Retry", key=f"btn_retry_{ticker}"):
+                        st.session_state.pop(_thesis_err_key, None)
+                        st.rerun()
+                elif not _groq_avail:
+                    st.info("Set `GROQ_API_KEY` environment variable to enable auto AI thesis.")
+
+            # ── Raw Scan History ──────────────────────────────────────────────
             with st.expander("View Raw Scan History Table"):
                 if "reasons" in tdf.columns:
                     tdf["reasons"] = tdf["reasons"].apply(format_reasons)
-                
+
                 try:
-                    # Streamlit 1.35+ supports selection events
                     selection_event = st.dataframe(
-                        tdf, 
-                        use_container_width=True, 
-                        on_select="rerun", 
+                        tdf,
+                        use_container_width=True,
+                        on_select="rerun",
                         selection_mode="single-row"
                     )
                     if selection_event and hasattr(selection_event, "selection") and selection_event.selection.rows:
                         selected_idx = selection_event.selection.rows[0]
                         selected_row = tdf.iloc[[selected_idx]].copy()
                         st.markdown("##### 📝 Details for Selected Scan")
-                        display_cards(selected_row)
+                        display_cards(selected_row, show_copy_button=False)
                 except TypeError:
-                    # Fallback for older Streamlit versions
                     st.dataframe(tdf, use_container_width=True)
 
 @st.dialog("Add Journal Entry")
