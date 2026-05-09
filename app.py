@@ -755,7 +755,10 @@ def display_cards(df, show_copy_button=True):
 
                 sig_label, sig_color = get_signal_label(row.get("score", 0))
                 st.markdown(f"**:{sig_color}[{sig_label}]**")
-                
+
+                if "scan_count" in row and pd.notna(row["scan_count"]) and int(row["scan_count"]) > 1:
+                    st.caption(f"🔁 Scanned {int(row['scan_count'])} times today")
+
                 # Core Financials
                 m1, m2 = st.columns(2)
                 price = row.get("price", 0)
@@ -1305,7 +1308,12 @@ if active_tab == "Scans":
                         st.error(f"Error deleting: {e}")
 
             day_df = filtered[filtered["scan_date"].dt.strftime("%Y-%m-%d") == selected_day].sort_values("score", ascending=False).copy()
-            
+
+            # Deduplicate: count scans per ticker, keep the highest-score row
+            _scan_counts = day_df.groupby("ticker").size().rename("scan_count")
+            day_df = day_df.drop_duplicates(subset=["ticker"], keep="first").copy()
+            day_df = day_df.merge(_scan_counts, on="ticker", how="left")
+
             with st.spinner("Fetching current prices to calculate return..."):
                 current_prices = fetch_current_prices(day_df["ticker"].dropna().unique().tolist())
                 if current_prices and "price" in day_df.columns:
