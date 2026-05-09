@@ -487,25 +487,25 @@ def _generate_buy_sell_text(ticker, score_val, prob_str, entry, sl_pct, tp_pct):
 
         if price > ma50:
             buy_txt = (
-                f"Price (${price:.2f}) is trading above the 50MA (${ma50:.2f}), confirming near-term strength. "
-                f"Preferred entry on a pullback toward ${ma50:.2f} or on a confirmed breakout above the "
-                f"52-week high (${week52_high:.2f})."
+                f"Price (\\${price:.2f}) is trading above the 50MA (\\${ma50:.2f}), confirming near-term strength. "
+                f"Preferred entry on a pullback toward \\${ma50:.2f} or on a confirmed breakout above the "
+                f"52-week high (\\${week52_high:.2f})."
             )
         elif ma200 and price > ma200:
             buy_txt = (
-                f"Price (${price:.2f}) is above the 200MA (${ma200:.2f}) — long-term uptrend intact. "
-                f"Watch for a reclaim of the 50MA (${ma50:.2f}) as the next entry trigger."
+                f"Price (\\${price:.2f}) is above the 200MA (\\${ma200:.2f}) \u2014 long-term uptrend intact. "
+                f"Watch for a reclaim of the 50MA (\\${ma50:.2f}) as the next entry trigger."
             )
         else:
             buy_txt = (
-                f"Current price ${price:.2f} is below key moving averages (50MA: ${ma50:.2f}). "
+                f"Current price \\${price:.2f} is below key moving averages (50MA: \\${ma50:.2f}). "
                 f"{entry} Wait for trend confirmation before sizing in."
             )
 
-        sell_parts = [f"Hard stop loss at **${sl_price}** (\u2212{sl_pct:.1f}% from ${price:.2f})."]
-        sell_parts.append(f"First profit target: **${tp_price}** (+{tp_pct:.1f}%).")
+        sell_parts = [f"Hard stop loss at **\\${sl_price}** (\u2212{sl_pct:.1f}% from \\${price:.2f})."]
+        sell_parts.append(f"First profit target: **\\${tp_price}** (+{tp_pct:.1f}%).")
         if ma50:
-            sell_parts.append(f"Also exit on a daily close below the 50MA (${ma50:.2f}).")
+            sell_parts.append(f"Also exit on a daily close below the 50MA (\\${ma50:.2f}).")
         sell_txt = " ".join(sell_parts)
         return buy_txt, sell_txt
     except Exception:
@@ -739,9 +739,11 @@ def display_cards(df, show_copy_button=True):
     n = len(df)
     remainder = n % 3
 
-    cols = st.columns(3)
+    row_cols = None
     for i, (_, row) in enumerate(df.iterrows()):
-        with cols[i % 3]:
+        if i % 3 == 0:
+            row_cols = st.columns(3)
+        with row_cols[i % 3]:
             rank = int(row.get("_rank", i + 1))
             tier_str = row.get("tier", "")
             tier_icon = "🟢" if "HIGH CONVICTION" in str(tier_str) else "🟡" if tier_str else ""
@@ -840,19 +842,17 @@ def display_cards(df, show_copy_button=True):
     if show_copy_button and "ticker" in df.columns:
         _ticker_str = ", ".join(df["ticker"].tolist())
         _caption = f"{n} tickers \u00b7 click copy icon \u2192"
-        if remainder == 0:
+        if remainder == 0 or row_cols is None:
             with st.expander("\U0001f4cb Copy Tickers"):
                 st.caption(_caption)
                 st.code(_ticker_str, language=None)
         elif remainder == 1:
-            _spacer, _copy_area = st.columns([1, 2])
-            with _copy_area:
+            with row_cols[1]:
                 st.markdown("**\U0001f4cb Copy Tickers**")
                 st.caption(_caption)
                 st.code(_ticker_str, language=None)
         else:
-            _s1, _s2, _copy_area = st.columns(3)
-            with _copy_area:
+            with row_cols[2]:
                 st.markdown("**\U0001f4cb Copy Tickers**")
                 st.caption(_caption)
                 st.code(_ticker_str, language=None)
@@ -1284,13 +1284,13 @@ if active_tab == "Scans":
             with st.expander("\U0001f4cb Scan History Table", expanded=False):
                 show_aggrid(daily, height=280)
 
-            st.caption("Score trend")
-            trend = (
-                filtered.groupby("scan_day", as_index=False)
-                .agg(avg_score=("score", "mean"))
-                .sort_values("scan_day")
-            )
-            safe_line_chart(trend.set_index("scan_day")["avg_score"], y_label="avg_score")
+            with st.expander("📈 Score Trend", expanded=False):
+                trend = (
+                    filtered.groupby("scan_day", as_index=False)
+                    .agg(avg_score=("score", "mean"))
+                    .sort_values("scan_day")
+                )
+                safe_line_chart(trend.set_index("scan_day")["avg_score"], y_label="avg_score")
 
             date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_day"].unique(), reverse=True)]
             
