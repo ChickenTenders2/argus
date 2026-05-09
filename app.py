@@ -841,21 +841,9 @@ def display_cards(df, show_copy_button=True):
 
     if show_copy_button and "ticker" in df.columns:
         _ticker_str = ", ".join(df["ticker"].tolist())
-        _caption = f"{n} tickers \u00b7 click copy icon \u2192"
-        if remainder == 0 or row_cols is None:
-            with st.expander("\U0001f4cb Copy Tickers"):
-                st.caption(_caption)
-                st.code(_ticker_str, language=None)
-        elif remainder == 1:
-            with row_cols[1]:
-                st.markdown("**\U0001f4cb Copy Tickers**")
-                st.caption(_caption)
-                st.code(_ticker_str, language=None)
-        else:
-            with row_cols[2]:
-                st.markdown("**\U0001f4cb Copy Tickers**")
-                st.caption(_caption)
-                st.code(_ticker_str, language=None)
+        with st.expander("\U0001f4cb Copy Tickers"):
+            st.caption(f"{n} tickers \u00b7 click copy icon \u2192")
+            st.code(_ticker_str, language=None)
 
 
 if "horizon_days" not in st.session_state:
