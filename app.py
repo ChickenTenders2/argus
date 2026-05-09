@@ -473,7 +473,7 @@ def fetch_company_description(ticker: str) -> str:
 
 
 def _generate_buy_sell_text(ticker, score_val, prob_str, entry, sl_pct, tp_pct):
-    """Return (buy_text, sell_text) with actual price levels where possible."""
+    """Return (buy_text, sell_text) with ATR-derived price levels unique to each stock."""
     try:
         hist = fetch_ticker_history(ticker, period="1y")
         if hist.empty:
@@ -482,8 +482,20 @@ def _generate_buy_sell_text(ticker, score_val, prob_str, entry, sl_pct, tp_pct):
         ma50 = float(hist["Close"].rolling(50).mean().iloc[-1])
         ma200 = float(hist["Close"].rolling(200).mean().iloc[-1]) if len(hist) >= 200 else None
         week52_high = float(hist["Close"].max())
-        sl_price = round(price * (1 - sl_pct / 100), 2)
-        tp_price = round(price * (1 + tp_pct / 100), 2)
+        week52_low = float(hist["Close"].min())
+
+        # ATR-based stop/target (14-day true range average)
+        high_low = hist["High"] - hist["Low"]
+        high_pc = (hist["High"] - hist["Close"].shift()).abs()
+        low_pc = (hist["Low"] - hist["Close"].shift()).abs()
+        atr14 = pd.concat([high_low, high_pc, low_pc], axis=1).max(axis=1).rolling(14).mean().iloc[-1]
+
+        sl_multiplier = 1.5 if score_val >= 80 else 2.0
+        tp_multiplier = 3.0 if score_val >= 80 else 2.5
+        sl_price = round(price - sl_multiplier * atr14, 2)
+        tp_price = round(price + tp_multiplier * atr14, 2)
+        sl_pct_actual = round((price - sl_price) / price * 100, 1)
+        tp_pct_actual = round((tp_price - price) / price * 100, 1)
 
         if price > ma50:
             buy_txt = (
@@ -494,16 +506,18 @@ def _generate_buy_sell_text(ticker, score_val, prob_str, entry, sl_pct, tp_pct):
         elif ma200 and price > ma200:
             buy_txt = (
                 f"Price (\\${price:.2f}) is above the 200MA (\\${ma200:.2f}) \u2014 long-term uptrend intact. "
-                f"Watch for a reclaim of the 50MA (\\${ma50:.2f}) as the next entry trigger."
+                f"Watch for a reclaim of the 50MA (\\${ma50:.2f}) as the next entry trigger. "
+                f"52-week range: \\${week52_low:.2f}\u2013\\${week52_high:.2f}."
             )
         else:
             buy_txt = (
                 f"Current price \\${price:.2f} is below key moving averages (50MA: \\${ma50:.2f}). "
-                f"{entry} Wait for trend confirmation before sizing in."
+                f"{entry} Wait for trend confirmation before sizing in. "
+                f"52-week low support at \\${week52_low:.2f}."
             )
 
-        sell_parts = [f"Hard stop loss at **\\${sl_price}** (\u2212{sl_pct:.1f}% from \\${price:.2f})."]
-        sell_parts.append(f"First profit target: **\\${tp_price}** (+{tp_pct:.1f}%).")
+        sell_parts = [f"ATR-based hard stop at **\\${sl_price}** (\u2212{sl_pct_actual:.1f}% · {sl_multiplier}×ATR)."]
+        sell_parts.append(f"Primary profit target: **\\${tp_price}** (+{tp_pct_actual:.1f}% · {tp_multiplier}×ATR).")
         if ma50:
             sell_parts.append(f"Also exit on a daily close below the 50MA (\\${ma50:.2f}).")
         sell_txt = " ".join(sell_parts)
