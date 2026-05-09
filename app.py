@@ -845,12 +845,14 @@ def display_cards(df, show_copy_button=True):
                 st.caption(_caption)
                 st.code(_ticker_str, language=None)
         elif remainder == 1:
-            with cols[1]:
+            _spacer, _copy_area = st.columns([1, 2])
+            with _copy_area:
                 st.markdown("**\U0001f4cb Copy Tickers**")
                 st.caption(_caption)
                 st.code(_ticker_str, language=None)
         else:
-            with cols[2]:
+            _s1, _s2, _copy_area = st.columns(3)
+            with _copy_area:
                 st.markdown("**\U0001f4cb Copy Tickers**")
                 st.caption(_caption)
                 st.code(_ticker_str, language=None)
