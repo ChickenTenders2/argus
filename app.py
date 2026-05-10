@@ -253,9 +253,12 @@ def get_spy_return(start_date_str, end_date_str=None):
 def load_prefs():
     try:
         with open(PREFS_FILE, "r") as f:
-            return json.load(f)
+            prefs = json.load(f)
+        if "unit_value" not in prefs:
+            prefs["unit_value"] = 250
+        return prefs
     except:
-        return {"send_to_telegram": False}
+        return {"send_to_telegram": False, "unit_value": 250}
 
 def save_prefs(prefs):
     with open(PREFS_FILE, "w") as f:
@@ -266,6 +269,10 @@ if "prefs" not in st.session_state:
 
 def update_telegram_pref():
     st.session_state.prefs["send_to_telegram"] = st.session_state.send_to_telegram_cb
+    save_prefs(st.session_state.prefs)
+
+def update_unit_value_pref():
+    st.session_state.prefs["unit_value"] = st.session_state.unit_value_input
     save_prefs(st.session_state.prefs)
 
 st.set_page_config(page_title="Argus Dashboard", layout="wide")
@@ -454,6 +461,146 @@ def _compute_display_rank(df):
     df = df.sort_values(sort_cols, ascending=ascending, na_position="last").reset_index(drop=True)
     df["_rank"] = range(1, len(df) + 1)
     return df
+
+
+# ── Unit Sizing Constants ──────────────────────────────────────────────────
+UNIT_DAILY_CAP = 12
+UNIT_CEILING = 5
+UNIT_FLOOR = 0
+
+def _is_overextended(ticker: str) -> bool:
+    """Return True if the last 10 days moved >2.5× the average 10-day pace over 63 days."""
+    try:
+        hist = fetch_ticker_history(ticker, period="1y")
+        if hist.empty or len(hist) < 63:
+            return False
+        closes = hist["Close"]
+        price_now = float(closes.iloc[-1])
+        price_10d = float(closes.iloc[-10])
+        price_63d = float(closes.iloc[-63])
+        pace_10d = (price_now - price_10d) / price_10d
+        avg_pace = ((price_now - price_63d) / price_63d) / 63 * 10
+        if avg_pace <= 0:
+            return False
+        return pace_10d > avg_pace * 2.5
+    except Exception:
+        return False
+
+
+def compute_unit_sizing(df: pd.DataFrame, unit_value: int = 250) -> pd.DataFrame:
+    """
+    Compute rank-based unit buying suggestions for each ticker.
+
+    Rules:
+      - Only 🟢 HIGH CONVICTION tickers are eligible (WATCHLIST → 0 units).
+      - Base units from rank: #1→4, #2-3→3, #4-5→2, #6+→1.
+      - Modifiers: +1 insider buying, -1 insider selling,
+                   -1 overextended (10-day pace > 2.5× avg), +1 persistence (p_score>0).
+      - Floor 0, ceiling 5.
+      - Daily hard cap: 12 units total; trim from lowest-ranked tickers first.
+
+    Returns df with columns: units_base, units_modifiers, units_final, units_capital, units_timing.
+    """
+    if df.empty:
+        return df
+    out = df.copy()
+    if "_rank" not in out.columns:
+        out = _compute_display_rank(out)
+
+    def _base_from_rank(rank):
+        if rank == 1:
+            return 4
+        elif rank <= 3:
+            return 3
+        elif rank <= 5:
+            return 2
+        else:
+            return 1
+
+    base_list, modifiers_list, final_list, capital_list, timing_list = [], [], [], [], []
+
+    for _, row in out.iterrows():
+        tier = str(row.get("tier", ""))
+        rank = int(row.get("_rank", 99))
+        ticker = row.get("ticker", "")
+
+        if "HIGH CONVICTION" not in tier:
+            base_list.append(0)
+            modifiers_list.append([])
+            final_list.append(0)
+            capital_list.append(f"£0")
+            timing_list.append("—")
+            continue
+
+        base = _base_from_rank(rank)
+        mods = []
+
+        enrichment = {}
+        try:
+            enrichment = fetch_enrichment(ticker)
+        except Exception:
+            pass
+        insider = enrichment.get("insider_net", "")
+        if "Insider Buyer" in str(insider):
+            mods.append("+1 Insider Buying")
+        elif "Insider Seller" in str(insider):
+            mods.append("-1 Insider Selling")
+
+        overextended = _is_overextended(ticker)
+        if overextended:
+            mods.append("-1 Overextended")
+
+        p_score = float(row.get("p_score", 0) or 0)
+        if p_score > 0:
+            mods.append("+1 Persistence")
+
+        mod_total = sum(
+            1 if m.startswith("+") else -1
+            for m in mods
+        )
+        final = max(UNIT_FLOOR, min(UNIT_CEILING, base + mod_total))
+
+        base_list.append(base)
+        modifiers_list.append(mods)
+        final_list.append(final)
+        capital_list.append(f"£{final * unit_value:,}")
+
+        if final >= 3 and not overextended and "Insider Seller" not in str(insider):
+            timing = "Deploy now"
+        elif overextended or (final < base):
+            timing = "Wait for pullback"
+        else:
+            timing = "Wait for catalyst"
+        timing_list.append(timing)
+
+    out["units_base"] = base_list
+    out["units_modifiers"] = modifiers_list
+    out["units_final"] = final_list
+    out["units_capital"] = capital_list
+    out["units_timing"] = timing_list
+
+    total_units = sum(final_list)
+    if total_units > UNIT_DAILY_CAP:
+        excess = total_units - UNIT_DAILY_CAP
+        for idx in out.sort_values("_rank", ascending=False).index:
+            if excess <= 0:
+                break
+            if out.at[idx, "units_final"] > 0:
+                cut = min(out.at[idx, "units_final"], excess)
+                out.at[idx, "units_final"] -= cut
+                out.at[idx, "units_capital"] = f"£{out.at[idx, 'units_final'] * unit_value:,}"
+                excess -= cut
+                _trim_note = f"−{cut} Daily cap trim"
+                _existing_mods = out.at[idx, "units_modifiers"]
+                out.at[idx, "units_modifiers"] = (
+                    _existing_mods + [_trim_note]
+                    if isinstance(_existing_mods, list)
+                    else [_trim_note]
+                )
+                if out.at[idx, "units_final"] == 0:
+                    out.at[idx, "units_timing"] = "—"
+
+    return out
 
 
 @st.cache_data(ttl=86400)
@@ -834,6 +981,29 @@ def display_cards(df, show_copy_button=True):
                 except Exception:
                     pass
 
+                # ── Unit Sizing block (rendered if compute_unit_sizing was called) ──
+                if "units_final" in row and pd.notna(row.get("units_final")):
+                    _uf = int(row["units_final"])
+                    _ub = int(row.get("units_base", 0))
+                    _umods = row.get("units_modifiers", [])
+                    if isinstance(_umods, str):
+                        try:
+                            _umods = json.loads(_umods)
+                        except Exception:
+                            _umods = [_umods] if _umods else []
+                    _ucap = row.get("units_capital", "£0")
+                    _utim = row.get("units_timing", "—")
+                    with st.container(border=True):
+                        st.markdown("**💷 Unit Sizing**")
+                        _um1, _um2, _um3 = st.columns(3)
+                        _um1.metric("Base Units", _ub)
+                        _um2.metric("Final Units", _uf)
+                        _um3.metric("Capital to Deploy", _ucap)
+                        if _umods:
+                            st.caption("Modifiers: " + "  ·  ".join(_umods))
+                        _tim_icon = "🟢" if _utim == "Deploy now" else ("🟡" if _utim == "Wait for pullback" else ("🔵" if _utim == "Wait for catalyst" else "⚫"))
+                        st.caption(f"⏱ Timing: {_tim_icon} {_utim}")
+
                 _bc1, _bc2 = st.columns(2)
                 with _bc1:
                     st.button(
@@ -950,6 +1120,15 @@ with st.sidebar:
             help="The maximum % of your total portfolio you are willing to lose if a position hits its stop-loss. Argus uses this to compute the suggested position size. Lower = more conservative. Default: 0.75%.")
         max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
             help="Hard cap on how large any single position can be as a % of your total portfolio. Prevents over-concentration even when the risk formula suggests a larger size. Default: 8.0%.")
+        unit_value = st.number_input(
+            "Unit Value (£)",
+            min_value=50, max_value=2000,
+            value=st.session_state.prefs.get("unit_value", 250),
+            step=50,
+            key="unit_value_input",
+            on_change=update_unit_value_pref,
+            help="1 unit = this £ amount. Used for unit-based buying suggestions. Default: £250.",
+        )
 
     st.divider()
     send_to_telegram = st.checkbox(
@@ -1183,6 +1362,7 @@ if active_tab == "Overview":
             "ticker", "sector", "score", "tier", "reasons", "price", "mkt_cap",
             "prob_upside", "scenario_bear", "scenario_base", "scenario_bull",
             "confidence", "suggested_position_pct", "stop_loss_pct", "take_profit_pct", "entry_style",
+            "p_score",
         ]
         latest_view = format_pct_columns(
             latest_view,
@@ -1190,16 +1370,47 @@ if active_tab == "Overview":
         )
         
         subset_view = latest_view[[c for c in display_cols if c in latest_view.columns]].copy()
-        
+
+        # ── Unit Sizing ────────────────────────────────────────────────────────
+        _uv = st.session_state.prefs.get("unit_value", 250)
+        with st.spinner("Computing unit allocations…"):
+            subset_view = compute_unit_sizing(subset_view, unit_value=_uv)
+
+        _total_units = int(subset_view["units_final"].sum()) if "units_final" in subset_view.columns else 0
+        _total_capital = _total_units * _uv
+        _cap_pct = f"{(_total_capital / (UNIT_DAILY_CAP * _uv)) * 100:.0f}%" if UNIT_DAILY_CAP * _uv > 0 else "0%"
+        with st.container(border=True):
+            _su1, _su2, _su3 = st.columns(3)
+            _su1.metric(
+                "📦 Scan Total Units",
+                f"{_total_units} / {UNIT_DAILY_CAP}",
+                help=f"Total units allocated across all HIGH CONVICTION picks. Daily hard cap is {UNIT_DAILY_CAP} units.",
+            )
+            _su2.metric(
+                "💷 Capital to Deploy",
+                f"£{_total_capital:,}",
+                help=f"Total capital = total units × £{_uv} per unit.",
+            )
+            _su3.metric(
+                "📊 Cap Usage",
+                _cap_pct,
+                help=f"How much of the £{UNIT_DAILY_CAP * _uv:,} daily hard cap is being used.",
+            )
+
         # Display the visual card grid instead of a flat table
         display_cards(subset_view)
 
         with st.expander("Show Raw Data Table"):
-            if "reasons" in subset_view.columns:
-                subset_view["reasons"] = subset_view["reasons"].apply(format_reasons)
+            _export_view = subset_view.copy()
+            if "reasons" in _export_view.columns:
+                _export_view["reasons"] = _export_view["reasons"].apply(format_reasons)
+            if "units_modifiers" in _export_view.columns:
+                _export_view["units_modifiers"] = _export_view["units_modifiers"].apply(
+                    lambda x: " · ".join(x) if isinstance(x, list) else str(x)
+                )
             
             st.dataframe(
-                subset_view, 
+                _export_view, 
                 use_container_width=True,
                 column_config={
                     "score": st.column_config.ProgressColumn(
@@ -1222,6 +1433,14 @@ if active_tab == "Overview":
                         width="large"
                     )
                 }
+            )
+            _csv_export = _export_view.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Download Results CSV (with unit sizing)",
+                data=_csv_export,
+                file_name=f"argus_results_{scan_date}.csv",
+                mime="text/csv",
+                use_container_width=True,
             )
 
         st.markdown("### 🔍 Stock Deep Dive")
@@ -1401,11 +1620,34 @@ if active_tab == "Scans":
             df_res = add_predictions(df_res, model)
             df_res = add_risk_guidance(df_res, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
             df_res = format_pct_columns(df_res, ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"])
+            _uv_scan = st.session_state.prefs.get("unit_value", 250)
+            with st.spinner("Computing unit allocations…"):
+                df_res = compute_unit_sizing(df_res, unit_value=_uv_scan)
+            _scan_total_units = int(df_res["units_final"].sum()) if "units_final" in df_res.columns else 0
+            _scan_total_capital = _scan_total_units * _uv_scan
+            with st.container(border=True):
+                _ms1, _ms2, _ms3 = st.columns(3)
+                _ms1.metric("📦 Total Units", f"{_scan_total_units} / {UNIT_DAILY_CAP}")
+                _ms2.metric("💷 Capital to Deploy", f"£{_scan_total_capital:,}")
+                _ms3.metric("1 Unit =", f"£{_uv_scan:,}")
             if "reasons" in df_res.columns:
                 df_res["reasons"] = df_res["reasons"].apply(format_reasons)
             display_cards(df_res)
             with st.expander("Show Raw Discovery Table"):
-                st.dataframe(df_res, use_container_width=True)
+                _df_res_export = df_res.copy()
+                if "units_modifiers" in _df_res_export.columns:
+                    _df_res_export["units_modifiers"] = _df_res_export["units_modifiers"].apply(
+                        lambda x: " · ".join(x) if isinstance(x, list) else str(x)
+                    )
+                st.dataframe(_df_res_export, use_container_width=True)
+                _scan_csv = _df_res_export.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Scan CSV (with unit sizing)",
+                    data=_scan_csv,
+                    file_name=f"argus_manual_scan_{scan_date}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
             st.subheader("High Conviction Charts (Score >= 80)")
             high_conviction = df_res[df_res["tier"] == "🟢 HIGH CONVICTION"]
             if not high_conviction.empty:
@@ -1432,6 +1674,18 @@ if active_tab == "Scans":
                 date_str=datetime.now().strftime('%d %b %Y %H:%M'),
                 alerts=alerts
             )
+            if results and "units_final" in df_res.columns:
+                _tg_unit_parts = [
+                    f"{r['ticker']}={int(r['units_final'])}u (£{int(r['units_final']) * _uv_scan:,})"
+                    for _, r in df_res[df_res["units_final"] > 0].iterrows()
+                ]
+                if _tg_unit_parts:
+                    message += (
+                        f"\n{'─'*30}\n"
+                        f"💷 *Unit Sizing* (1u = £{_uv_scan:,})\n"
+                        + "\n".join(_tg_unit_parts)
+                        + f"\n_Total: {_scan_total_units}u / £{_scan_total_capital:,}_"
+                    )
             delivered = send_telegram_message(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID, message)
             if delivered:
                 st.success("Manual run sent to Telegram.")
