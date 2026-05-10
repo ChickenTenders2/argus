@@ -8,6 +8,12 @@ import yfinance as yf
 from sqlalchemy import create_engine, text
 
 try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
     import xgboost as xgb
     HAS_XGB = True
 except ImportError:

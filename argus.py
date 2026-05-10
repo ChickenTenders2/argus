@@ -3,6 +3,13 @@ import pandas as pd
 import requests
 import logging
 from datetime import datetime
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from fmp_fetch import run_fmp_enrichment
 from edgar_fetch import run_edgar_enrichment
 from engine import Config, run_scan, save_results, load_memory, monitor_portfolio

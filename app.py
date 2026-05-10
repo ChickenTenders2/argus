@@ -1071,6 +1071,11 @@ if "auto_preset_applied" not in st.session_state:
     st.session_state["auto_preset_applied"] = True
 
 with st.sidebar:
+    _db_url = os.environ.get("DATABASE_URL", "")
+    if _db_url:
+        st.success("🟢 Supabase connected", icon=None)
+    else:
+        st.warning("🟡 SQLite (local fallback) — set DATABASE_URL in .env to persist data to Supabase", icon=None)
     st.markdown("### 👁 Navigate")
     active_tab = st.radio(
         "Navigate",

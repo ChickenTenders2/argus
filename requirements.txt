@@ -1,4 +1,5 @@
 streamlit==1.41.0
+python-dotenv
 altair>=5.0.0,<6.0.0
 pandas
 yfinance>=1.2.0
