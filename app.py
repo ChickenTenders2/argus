@@ -2169,23 +2169,35 @@ if active_tab == "Journal":
                 use_container_width=True,
                 key="journal_editor"
             )
-            if not edited_df.equals(journal_df.sort_values("timestamp", ascending=False)):
-                if st.button("💾 Save Edited Log"):
-                    conn = get_db_connection()
-                    if _current_journal:
-                        try:
-                            from sqlalchemy import text as _sa_text
-                            conn.execute(_sa_text("DELETE FROM journal WHERE journal_name = :jn"), {"jn": _current_journal})
-                        except Exception:
-                            conn.execute("DELETE FROM journal WHERE journal_name = ?", (_current_journal,))
-                        conn.commit()
-                        edited_df.to_sql("journal", conn, if_exists="append", index=False)
-                    else:
-                        edited_df.to_sql("journal", conn, if_exists="replace", index=False)
-                    sync_journal_to_csv(config.JOURNAL_FILE)
-                    conn.close()
-                    st.success("Log updated successfully!")
-                    st.rerun()
+            _tx_save_col, _tx_dl_col = st.columns([1, 1])
+            with _tx_save_col:
+                if not edited_df.equals(journal_df.sort_values("timestamp", ascending=False)):
+                    if st.button("💾 Save Edited Log"):
+                        conn = get_db_connection()
+                        if _current_journal:
+                            try:
+                                from sqlalchemy import text as _sa_text
+                                conn.execute(_sa_text("DELETE FROM journal WHERE journal_name = :jn"), {"jn": _current_journal})
+                            except Exception:
+                                conn.execute("DELETE FROM journal WHERE journal_name = ?", (_current_journal,))
+                            conn.commit()
+                            edited_df.to_sql("journal", conn, if_exists="append", index=False)
+                        else:
+                            edited_df.to_sql("journal", conn, if_exists="replace", index=False)
+                        sync_journal_to_csv(config.JOURNAL_FILE)
+                        conn.close()
+                        st.success("Log updated successfully!")
+                        st.rerun()
+            with _tx_dl_col:
+                _tx_journal_label = active_journal.replace(" ", "_").lower()
+                _tx_csv_bytes = journal_df.sort_values("timestamp", ascending=False).to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Export Transactions CSV",
+                    data=_tx_csv_bytes,
+                    file_name=f"argus_transactions_{_tx_journal_label}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
         with _hold_tab:
             _hold_map = {}
@@ -2250,6 +2262,16 @@ if active_tab == "Journal":
                 if not _closed.empty:
                     with st.expander(f"Closed / Exited Positions ({len(_closed)})"):
                         st.dataframe(_closed, use_container_width=True, hide_index=True)
+                _hold_export = _open_hold.copy()
+                _hold_journal_label = active_journal.replace(" ", "_").lower()
+                _hold_csv_bytes = _hold_export.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Export Holdings CSV",
+                    data=_hold_csv_bytes,
+                    file_name=f"argus_holdings_{_hold_journal_label}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
             else:
                 st.info("No transactions to summarise yet.")
 
