@@ -1552,7 +1552,18 @@ if active_tab == "Scans":
                 if current_prices and "price" in day_df.columns:
                     day_df["Current Price"] = day_df["ticker"].map(current_prices).round(2)
                     day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
-                    
+
+            _uv_hist = st.session_state.prefs.get("unit_value", 250)
+            with st.spinner("Computing unit allocations…"):
+                day_df = compute_unit_sizing(day_df, unit_value=_uv_hist)
+            _hist_total_units = int(day_df["units_final"].sum()) if "units_final" in day_df.columns else 0
+            _hist_total_capital = _hist_total_units * _uv_hist
+            with st.container(border=True):
+                _hs1, _hs2, _hs3 = st.columns(3)
+                _hs1.metric("📦 Total Units", f"{_hist_total_units} / {UNIT_DAILY_CAP}")
+                _hs2.metric("💷 Capital to Deploy", f"£{_hist_total_capital:,}")
+                _hs3.metric("1 Unit =", f"£{_uv_hist:,}")
+
             if "reasons" in day_df.columns:
                 day_df["reasons"] = day_df["reasons"].apply(format_reasons)
             
@@ -1560,17 +1571,30 @@ if active_tab == "Scans":
             display_cards(day_df)
             
             with st.expander("Show History Table"):
+                _day_export = day_df.copy()
+                if "units_modifiers" in _day_export.columns:
+                    _day_export["units_modifiers"] = _day_export["units_modifiers"].apply(
+                        lambda x: " · ".join(x) if isinstance(x, list) else str(x)
+                    )
                 if HAS_AGGRID:
-                    show_aggrid(day_df, height=320)
+                    show_aggrid(_day_export, height=320)
                 else:
                     try:
                         _theme_base = st.get_option("theme.base") or "dark"
                     except Exception:
                         _theme_base = "dark"
-                    if "Return (%)" in day_df.columns and _theme_base == "light":
-                        st.dataframe(day_df.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
+                    if "Return (%)" in _day_export.columns and _theme_base == "light":
+                        st.dataframe(_day_export.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
                     else:
-                        st.dataframe(day_df, use_container_width=True)
+                        st.dataframe(_day_export, use_container_width=True)
+                _hist_csv = _day_export.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Scan CSV (with unit sizing)",
+                    data=_hist_csv,
+                    file_name=f"argus_scan_{selected_day}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
     st.divider()
     st.subheader("⚙️ Manual Scan")
