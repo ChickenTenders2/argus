@@ -2,7 +2,7 @@
 
 Argus is an advanced quantitative stock-screening and machine-learning-driven portfolio management system. It automatically scores, filters, and ranks U.S. equities based on fundamental, technical, and macroeconomic rules, applying an AI layer (XGBoost + LLM Qualitative Analysis) to assign upside probabilities and suggest actionable position sizes.
 
-The project is designed to run automatically via local chron or GitHub Actions, saving history over time to build out a robust, personalized prediction model and market regime analyzer.
+The project is designed to run automatically via local cron or GitHub Actions, saving history over time to build out a robust, personalized prediction model and market regime analyzer.
 
 ---
 
@@ -26,9 +26,10 @@ The project is designed to run automatically via local chron or GitHub Actions, 
 ## 🚀 Features
 
 *   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI, interactive AgGrid history tables, annotated metric badges, and styled metric cards for professional-grade navigation and data consumption.
-*   **Quantitative Scoring:** Ranks tickers (0-100) using a multi-factor `get_score()` algorithm focusing on revenue growth, margins, technical momentum (50MA, 200MA), and relative strength vs IWM/SPY.
+*   **Quantitative Scoring:** Ranks tickers (0-100) using a multi-factor `score_stock()` algorithm focusing on revenue growth, margins, technical momentum (50MA, 200MA), and relative strength vs IWM.
 *   **Market Regime Panel:** Overview tab displays the current regime (Bull/Bear/Neutral/Extreme Fear), live VIX level with trend arrow, SPY vs 200-day MA gap, last scan date, and automatic bear-transition warnings.
 *   **Two-Panel Price & Score Chart:** Ticker Detail tab shows a stacked Plotly chart — price on top, Argus score on bottom with colour-coded bands (🟢 ≥75, 🟡 50–75, 🔴 <50) so you immediately understand where a score sits in context.
+*   **Flexible Scan Universe:** Three universe modes — **Fixed Top** (same top-weighted R2000 names each run), **Random** (different subset each run for broader coverage over time), or **Full Universe** (all ~2000 R2000 tickers, ~5–10 min). Scheduled nightly scans always run the full universe. The scan engine shuffles tickers before prefiltering so no names are systematically skipped.
 *   **Deep Dive Integrations:** Seamlessly navigate to a specific ticker via table clicks and interactive callbacks to review technical setups, AI thesis, and execution guidance.
 *   **Portfolio Analytics Journal:** Built-in quantitative logbook tracking Total Invested, Net Returns, SPY Benchmark Comparisons, and Sector Exposure Pie Charts. Journal entries are stored locally and are **never overwritten** by GitHub Actions.
 *   **Telegram Alerts + Alerts Log:** Opt-in automated push notifications sending top 'High Conviction' tickers to your phone. The Alerts Log tab displays all historical messages, including those sent by the daily GitHub Action.
@@ -39,7 +40,7 @@ The project is designed to run automatically via local chron or GitHub Actions, 
 ## 📂 Project Structure
 
 *   **`engine.py`**: The core quantitative brain. Handles `yfinance` data fetching, XGBoost ML routing, the Macro Market Regime filter, the Portfolio Optimizer, and mathematical rules.
-*   **`app.py`**: The Streamlit user interface featuring 10 custom panels (Overview, Ticker Detail, Portfolio Optimizer, Manual Run, etc.).
+*   **`app.py`**: The Streamlit user interface featuring 6 tabs: Overview, Ticker Detail, Scans (Manual Scan + History), Journal (P&L analytics + Portfolio Optimizer), Prediction Model, and Help.
 *   **`argus.py`**: A lightweight, headless script designed for executing the scan programmatically via GitHub Actions cron scheduling. It bridges results to Telegram using `llm.py`.
 *   **`llm.py`**: Integrated Groq API client to process generative AI summaries based on fresh news URLs and technical data.
 *   **`fmp_fetch.py`**: (Optional) Fetches deeper fundamental company data using Financial Modeling Prep if available.
@@ -88,15 +89,12 @@ The workstation will launch in your browser at `http://localhost:8502`.
 
 ## 📚 Dashboard Navigation
 
-1. **Overview:** Daily snapshot of your most recent scan outputs, current Macro Market Regime (Bull/Bear/Neutral/Extreme Fear), live VIX level, SPY vs 200-day MA gap, last scan date, and automatic bear-transition risk alerts.
-2. **Ticker Detail:** Deep dive into a two-panel price+score chart, quantitative execution guidance, and generate qualitative AI investment thesis reports via `nav_to_ticker`.
-3. **Portfolio Optimizer:** Select multiple tickers from the recent scan to calculate Max Sharpe allocations using Markowitz efficient frontier logic.
-4. **Manual Run:** Instantly trigger a new global algorithmic scan across the market using your sidebar settings, and evaluate **Auto-Pilot** alerts.
-5. **History:** Review interactive sortable scan tables. Select any day to view a visual card grid with full scoring reasons.
-6. **Journal:** Personal logbook for swing trade tracking. Entries are stored locally in `argus.db` and are never overwritten by GitHub Actions.
-7. **Prediction Model:** ML diagnostics reviewing XGBoost hit rates. Activates automatically once 30+ matured samples exist (scans older than your configured Horizon Days). Typically active after 1–2 months of daily GitHub Action runs.
-8. **Alerts Log:** Historical record of all Telegram push notifications from both manual runs and the GitHub Actions daily scan. Populated by `argus_alerts_log.txt` which the Action commits back to the repository.
-9. **Prompts:** 5 market condition prompt templates (macro overview, bearish checklist, watchlist impact, sector rotation) plus 4 individual ticker research templates — paste into any AI tool.
+1. **Overview:** Daily snapshot of the latest scan results as interactive visual metric cards. Displays the current Macro Market Regime, FRED macro signals (yield curve, CPI, Fed Funds), live VIX level, SPY vs 200-day MA gap, last scan date, and automatic bear-transition warnings. Alerts Log (Telegram history) accessible via expander.
+2. **Ticker Detail:** Deep dive into a specific ticker — two-panel stacked Plotly chart (price + Argus score with 🟢/🟡/🔴 bands), quantitative execution guidance, financial snapshot, earnings date, analyst targets, insider activity, and auto-generated Groq AI investment thesis.
+3. **Scans:** On-demand **Manual Scan** at the top — choose Universe Mode (Fixed / Random / Full), set minimum score and universe size, then fire a scan with live progress. Below: full **Scan History** with run-type filter, interactive score trend chart, day-picker, and detailed card grids.
+4. **Journal:** Full portfolio management hub. Log BUY/SELL/SCALE_IN/TRIM transactions, import via CSV, track open holdings with live P&L and colour-coded unrealized returns, view realized win-rate, benchmark net return against SPY, and visualize sector exposure via interactive pie chart. **Portfolio Optimizer** (Markowitz Max Sharpe / Min Volatility) accessible via expander.
+5. **Prediction Model:** ML diagnostics — XGBoost hit rates, Brier score, confusion matrix, feature importance table, SHAP global impact plot, score-bucket outcome stats, and calibration table. Activates automatically once 30+ matured samples exist.
+6. **Help:** Full documentation, sidebar settings reference (presets, universe modes, risk rules), ML activation timeline, and curated AI research prompt templates for macro overview, bearish checklist, sector rotation, and individual ticker deep-dives.
 
 ---
 

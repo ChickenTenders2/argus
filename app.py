@@ -2661,8 +2661,8 @@ if active_tab == "Help":
     The XGBoost model trains on rows in the `features` table where the **future return is already known** (i.e., the scan happened at least `Horizon Days` ago — default 63 days). Each scan of N tickers produces up to N feature rows. Once those rows mature past the horizon, they become labeled training samples.
 
     **Practical timeline:**
-    * 1 scan of 200 tickers = up to 200 samples (but only usable after 63 days)
-    * After ~1–2 months of daily GitHub Action scans, you will likely have 1,000–4,000 labeled samples — well above the 30-sample minimum
+    * 1 scan of 400 tickers (default) = up to 400 samples (but only usable after 63 days)
+    * After ~1–2 months of daily GitHub Action scans (full ~2000-ticker universe each run), you will likely have 10,000+ labeled samples — well above the 30-sample minimum
     * The model activates automatically as soon as 30+ matured samples exist; it improves steadily thereafter
 
     The model is **100% free** — it uses `yfinance` price data (free) and trains locally with XGBoost. No paid data feed is required.
@@ -2685,7 +2685,7 @@ if active_tab == "Help":
     The **Alerts Log** tab reads from `argus_alerts_log.txt`, which is updated in two ways:
 
     1. **GitHub Actions daily scan:** `argus.py` writes the full message to `argus_alerts_log.txt` and then commits it back to the repository. When you pull the latest code, the log file is updated with every automated run.
-    2. **Local manual runs:** Running the scan via the Manual Run tab also appends to the same file on your local machine.
+    2. **Local manual runs:** Running the scan via the Scans tab also appends to the same file on your local machine.
 
     > **Note:** The Alerts Log shows what was *sent* to Telegram. If a run failed to deliver to Telegram (bad token, rate limit, etc.), the log entry is still written so you can diagnose the issue.
 
