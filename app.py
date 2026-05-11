@@ -1580,123 +1580,6 @@ if active_tab == "Overview":
             st.caption("No alerts logged yet.")
 
 if active_tab == "Scans":
-    st.subheader("🗂 Scan History")
-    if history_df.empty:
-        st.info("No history file yet.")
-    else:
-        history_df["scan_date"] = pd.to_datetime(history_df["scan_date"], errors="coerce")
-        run_type_opts = ["all"] + sorted(history_df["run_type"].dropna().unique().tolist())
-        selected_run_type = st.selectbox("Run type", run_type_opts)
-        if selected_run_type != "all":
-            filtered = history_df[history_df["run_type"] == selected_run_type].copy()
-        else:
-            filtered = history_df.copy()
-
-        filtered = filtered.dropna(subset=["scan_date"])
-        if filtered.empty:
-            st.warning("No rows after filters.")
-        else:
-            filtered["scan_day"] = filtered["scan_date"].dt.date
-            daily = (
-                filtered.groupby("scan_day", as_index=False)
-                .agg(picks=("ticker", "count"), top_score=("score", "max"), avg_score=("score", "mean"))
-                .sort_values("scan_day", ascending=False)
-            )
-            daily["scan_day"] = daily["scan_day"].astype(str)
-            daily["avg_score"] = daily["avg_score"].round(1)
-            daily["top_score"] = daily["top_score"].round(1)
-            with st.expander("\U0001f4cb Scan History Table", expanded=False):
-                show_aggrid(daily, height=280)
-
-            with st.expander("📈 Score Trend", expanded=False):
-                trend = (
-                    filtered.groupby("scan_day", as_index=False)
-                    .agg(avg_score=("score", "mean"))
-                    .sort_values("scan_day")
-                )
-                safe_line_chart(trend.set_index("scan_day")["avg_score"], y_label="avg_score")
-
-            date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_day"].unique(), reverse=True)]
-            
-            hc1, hc2 = st.columns([5, 1], vertical_alignment="bottom")
-            with hc1:
-                selected_day = st.selectbox("Day details", date_options)
-            with hc2:
-                if st.button("🗑️ Delete Day", help="Delete all scan history for the selected day", use_container_width=True):
-                    try:
-                        conn = get_db_connection()
-                        # delete from results and features tables for that specific scan_date starting with selected_day
-                        try:
-                            from sqlalchemy import text
-                            conn.execute(text("DELETE FROM results WHERE scan_date LIKE :sd"), {"sd": selected_day + "%"})
-                            conn.execute(text("DELETE FROM features WHERE scan_date LIKE :sd"), {"sd": selected_day + "%"})
-                        except:
-                            conn.execute("DELETE FROM results WHERE scan_date LIKE ?", (selected_day + "%",))
-                            conn.execute("DELETE FROM features WHERE scan_date LIKE ?", (selected_day + "%",))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"Deleted history for {selected_day}")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error deleting: {e}")
-
-            day_df = filtered[filtered["scan_date"].dt.strftime("%Y-%m-%d") == selected_day].sort_values("score", ascending=False).copy()
-
-            # Deduplicate: count scans per ticker, keep the highest-score row
-            _scan_counts = day_df.groupby("ticker").size().rename("scan_count")
-            day_df = day_df.drop_duplicates(subset=["ticker"], keep="first").copy()
-            day_df = day_df.merge(_scan_counts, on="ticker", how="left")
-
-            with st.spinner("Fetching current prices to calculate return..."):
-                _raw_prices = fetch_current_prices_usd(day_df["ticker"].dropna().unique().tolist())
-                if _raw_prices and "price" in day_df.columns:
-                    day_df["Current Price"] = day_df["ticker"].map(_raw_prices).round(2)
-                    day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
-
-            _uv_hist = st.session_state.prefs.get("unit_value", 250)
-            with st.spinner("Computing unit allocations…"):
-                day_df = compute_unit_sizing(day_df, unit_value=_uv_hist)
-            _hist_total_units = int(day_df["units_final"].sum()) if "units_final" in day_df.columns else 0
-            _hist_total_capital = _hist_total_units * _uv_hist
-            with st.container(border=True):
-                _hs1, _hs2, _hs3 = st.columns(3)
-                _hs1.metric("📦 Total Units", f"{_hist_total_units} / {UNIT_DAILY_CAP}")
-                _hs2.metric("💷 Capital to Deploy", f"£{_hist_total_capital:,}")
-                _hs3.metric("1 Unit =", f"£{_uv_hist:,}")
-
-            if "reasons" in day_df.columns:
-                day_df["reasons"] = day_df["reasons"].apply(format_reasons)
-            
-            # Show cards for better readability
-            display_cards(day_df)
-            
-            with st.expander("Show History Table"):
-                _day_export = day_df.copy()
-                if "units_modifiers" in _day_export.columns:
-                    _day_export["units_modifiers"] = _day_export["units_modifiers"].apply(
-                        lambda x: " · ".join(x) if isinstance(x, list) else str(x)
-                    )
-                if HAS_AGGRID:
-                    show_aggrid(_day_export, height=320)
-                else:
-                    try:
-                        _theme_base = st.get_option("theme.base") or "dark"
-                    except Exception:
-                        _theme_base = "dark"
-                    if "Return (%)" in _day_export.columns and _theme_base == "light":
-                        st.dataframe(_day_export.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
-                    else:
-                        st.dataframe(_day_export, use_container_width=True)
-                _hist_csv = _day_export.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "⬇️ Download Scan CSV (with unit sizing)",
-                    data=_hist_csv,
-                    file_name=f"argus_scan_{selected_day}.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
-
-    st.divider()
     st.subheader("⚙️ Manual Scan")
     st.caption("Use this for weekend/on-demand runs. Results are written to history + feature store.")
     if st.button("🚀 Run Global Scan", key="btn_run_scan"):
@@ -1815,6 +1698,122 @@ if active_tab == "Scans":
                 st.success("Manual run sent to Telegram.")
             else:
                 st.error("Could not send to Telegram. Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.")
+
+    st.divider()
+    st.subheader("🗂 Scan History")
+    if history_df.empty:
+        st.info("No history file yet.")
+    else:
+        history_df["scan_date"] = pd.to_datetime(history_df["scan_date"], errors="coerce")
+        run_type_opts = ["all"] + sorted(history_df["run_type"].dropna().unique().tolist())
+        selected_run_type = st.selectbox("Run type", run_type_opts)
+        if selected_run_type != "all":
+            filtered = history_df[history_df["run_type"] == selected_run_type].copy()
+        else:
+            filtered = history_df.copy()
+
+        filtered = filtered.dropna(subset=["scan_date"])
+        if filtered.empty:
+            st.warning("No rows after filters.")
+        else:
+            filtered["scan_day"] = filtered["scan_date"].dt.date
+            daily = (
+                filtered.groupby("scan_day", as_index=False)
+                .agg(picks=("ticker", "count"), top_score=("score", "max"), avg_score=("score", "mean"))
+                .sort_values("scan_day", ascending=False)
+            )
+            daily["scan_day"] = daily["scan_day"].astype(str)
+            daily["avg_score"] = daily["avg_score"].round(1)
+            daily["top_score"] = daily["top_score"].round(1)
+            with st.expander("\U0001f4cb Scan History Table", expanded=False):
+                show_aggrid(daily, height=280)
+
+            with st.expander("📈 Score Trend", expanded=False):
+                trend = (
+                    filtered.groupby("scan_day", as_index=False)
+                    .agg(avg_score=("score", "mean"))
+                    .sort_values("scan_day")
+                )
+                safe_line_chart(trend.set_index("scan_day")["avg_score"], y_label="avg_score")
+
+            date_options = [d.strftime("%Y-%m-%d") for d in sorted(filtered["scan_day"].unique(), reverse=True)]
+
+            hc1, hc2 = st.columns([5, 1], vertical_alignment="bottom")
+            with hc1:
+                selected_day = st.selectbox("Day details", date_options)
+            with hc2:
+                if st.button("🗑️ Delete Day", help="Delete all scan history for the selected day", use_container_width=True):
+                    try:
+                        conn = get_db_connection()
+                        try:
+                            from sqlalchemy import text
+                            conn.execute(text("DELETE FROM results WHERE scan_date LIKE :sd"), {"sd": selected_day + "%"})
+                            conn.execute(text("DELETE FROM features WHERE scan_date LIKE :sd"), {"sd": selected_day + "%"})
+                        except:
+                            conn.execute("DELETE FROM results WHERE scan_date LIKE ?", (selected_day + "%",))
+                            conn.execute("DELETE FROM features WHERE scan_date LIKE ?", (selected_day + "%",))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Deleted history for {selected_day}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error deleting: {e}")
+
+            day_df = filtered[filtered["scan_date"].dt.strftime("%Y-%m-%d") == selected_day].sort_values("score", ascending=False).copy()
+
+            # Deduplicate: count scans per ticker, keep the highest-score row
+            _scan_counts = day_df.groupby("ticker").size().rename("scan_count")
+            day_df = day_df.drop_duplicates(subset=["ticker"], keep="first").copy()
+            day_df = day_df.merge(_scan_counts, on="ticker", how="left")
+
+            with st.spinner("Fetching current prices to calculate return..."):
+                _raw_prices = fetch_current_prices_usd(day_df["ticker"].dropna().unique().tolist())
+                if _raw_prices and "price" in day_df.columns:
+                    day_df["Current Price"] = day_df["ticker"].map(_raw_prices).round(2)
+                    day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
+
+            _uv_hist = st.session_state.prefs.get("unit_value", 250)
+            with st.spinner("Computing unit allocations…"):
+                day_df = compute_unit_sizing(day_df, unit_value=_uv_hist)
+            _hist_total_units = int(day_df["units_final"].sum()) if "units_final" in day_df.columns else 0
+            _hist_total_capital = _hist_total_units * _uv_hist
+            with st.container(border=True):
+                _hs1, _hs2, _hs3 = st.columns(3)
+                _hs1.metric("📦 Total Units", f"{_hist_total_units} / {UNIT_DAILY_CAP}")
+                _hs2.metric("💷 Capital to Deploy", f"£{_hist_total_capital:,}")
+                _hs3.metric("1 Unit =", f"£{_uv_hist:,}")
+
+            if "reasons" in day_df.columns:
+                day_df["reasons"] = day_df["reasons"].apply(format_reasons)
+
+            # Show cards for better readability
+            display_cards(day_df)
+
+            with st.expander("Show History Table"):
+                _day_export = day_df.copy()
+                if "units_modifiers" in _day_export.columns:
+                    _day_export["units_modifiers"] = _day_export["units_modifiers"].apply(
+                        lambda x: " · ".join(x) if isinstance(x, list) else str(x)
+                    )
+                if HAS_AGGRID:
+                    show_aggrid(_day_export, height=320)
+                else:
+                    try:
+                        _theme_base = st.get_option("theme.base") or "dark"
+                    except Exception:
+                        _theme_base = "dark"
+                    if "Return (%)" in _day_export.columns and _theme_base == "light":
+                        st.dataframe(_day_export.style.background_gradient(subset=["Return (%)"], cmap="RdYlGn"), use_container_width=True)
+                    else:
+                        st.dataframe(_day_export, use_container_width=True)
+                _hist_csv = _day_export.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Scan CSV (with unit sizing)",
+                    data=_hist_csv,
+                    file_name=f"argus_scan_{selected_day}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
 if active_tab == "Ticker Detail":
     st.subheader("🔎 Ticker Detail")

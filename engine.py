@@ -2,6 +2,7 @@ import sqlite3
 import json
 import logging
 import os
+import random
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -488,6 +489,7 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None,
     import concurrent.futures
 
     tickers = get_universe()
+    random.shuffle(tickers)
     memory_df = load_memory(config.MEMORY_FILE)
     scan_date = datetime.now().strftime("%Y-%m-%d")
     scan_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
