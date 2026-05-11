@@ -282,7 +282,7 @@ def save_memory(df, filepath=None):
 
 def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_file=None):
     cols = [
-        "ticker", "sector", "score", "f_score", "v_score", "m_score", "s_score", "p_score",
+        "ticker", "sector", "score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score",
         "tier", "price", "mkt_cap_m",
         "reason_count", "scan_date", "scan_timestamp", "run_type",
     ]
@@ -297,21 +297,22 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
         except Exception:
             mkt_cap_m = 0.0
         rows.append({
-            "ticker": pick.get("ticker", ""),
-            "sector": pick.get("sector", "Unknown"),
-            "score": float(pick.get("score", 0)),
-            "f_score": float(pick.get("f_score", 0)),
-            "v_score": float(pick.get("v_score", 0)),
-            "m_score": float(pick.get("m_score", 0)),
-            "s_score": float(pick.get("s_score", 0)),
-            "p_score": float(pick.get("p_score", 0)),
-            "tier": pick.get("tier", ""),
-            "price": float(pick.get("price", 0)),
-            "mkt_cap_m": mkt_cap_m,
-            "reason_count": len(pick.get("reasons", [])),
-            "scan_date": scan_date,
+            "ticker":         pick.get("ticker", ""),
+            "sector":         pick.get("sector", "Unknown"),
+            "score":          float(pick.get("score", 0)),
+            "raw_score":      float(pick.get("raw_score", pick.get("score", 0))),
+            "f_score":        float(pick.get("f_score", 0)),
+            "v_score":        float(pick.get("v_score", 0)),
+            "m_score":        float(pick.get("m_score", 0)),
+            "s_score":        float(pick.get("s_score", 0)),
+            "p_score":        float(pick.get("p_score", 0)),
+            "tier":           pick.get("tier", ""),
+            "price":          float(pick.get("price", 0)),
+            "mkt_cap_m":      mkt_cap_m,
+            "reason_count":   len(pick.get("reasons", [])),
+            "scan_date":      scan_date,
             "scan_timestamp": scan_timestamp,
-            "run_type": run_type,
+            "run_type":       run_type,
         })
     df = pd.DataFrame(rows)
     conn = get_db_connection()
@@ -524,7 +525,7 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
             if pick:
                 results.append(pick)
 
-    results.sort(key=lambda x: x["score"], reverse=True)
+    results.sort(key=lambda x: (x["score"], x.get("raw_score", x["score"])), reverse=True)
     _append_feature_rows(results, scan_date, scan_timestamp, run_type)
     results = _apply_sector_diversity(results, top_n=config.TOP_N, max_per_sector=3)
 
@@ -713,63 +714,92 @@ def monitor_portfolio():
         latest_buy = buys.iloc[-1]
         sl_pct = float(latest_buy.get("stop_loss_pct", 0) or 5.0)
         tp_pct = float(latest_buy.get("take_profit_pct", 0) or 20.0)
+        entry_date = buys["timestamp"].min()
 
         open_positions[ticker] = {
-            "avg_buy": avg_buy,
-            "step_loss_pct": sl_pct,
-            "take_profit_pct": tp_pct
+            "avg_buy":        avg_buy,
+            "sl_pct":         sl_pct,
+            "take_profit_pct": tp_pct,
+            "entry_date":     entry_date,
         }
 
     tickers = list(open_positions.keys())
     if not tickers:
         return alerts
-        
-    # Get current prices safely
+
+    # Batch-download 1y history for current prices + trailing stop peak computation
     try:
         if len(tickers) == 1:
-            price_data = yf.download(tickers[0], period="1d", progress=False)
-            current_prices = {tickers[0]: float(price_data["Close"].iloc[-1])}
+            hist_all = yf.download(tickers[0], period="1y", progress=False)
+            hist_by_ticker = {tickers[0]: hist_all}
         else:
-            price_data = yf.download(tickers, period="1d", group_by="ticker", progress=False)
-            current_prices = {}
+            hist_all = yf.download(tickers, period="1y", group_by="ticker", progress=False)
+            hist_by_ticker = {}
             for t in tickers:
-                if t in price_data.columns.get_level_values(0):
-                    current_prices[t] = float(price_data[t]["Close"].iloc[-1])
-                elif t in price_data.columns:
-                    current_prices[t] = float(price_data["Close"].iloc[-1])
+                if isinstance(hist_all.columns, pd.MultiIndex) and t in hist_all.columns.get_level_values(0):
+                    hist_by_ticker[t] = hist_all[t]
+                elif not isinstance(hist_all.columns, pd.MultiIndex):
+                    hist_by_ticker[t] = hist_all
     except Exception as e:
-        logger.warning(f"Failed to fetch current prices for monitor: {e}")
+        logger.warning(f"Failed to fetch history for monitor: {e}")
         return alerts
+
+    current_prices = {}
+    for t, h in hist_by_ticker.items():
+        if h is not None and not h.empty and "Close" in h.columns:
+            current_prices[t] = float(h["Close"].dropna().iloc[-1])
 
     for ticker, pos in open_positions.items():
         if ticker not in current_prices:
             continue
-            
+
         curr_price = float(current_prices[ticker])
         entry = float(pos["avg_buy"])
-        
         if entry <= 0:
             continue
-        
-        try:
-            step_loss = float(pos.get("step_loss_pct", 0) or 0)
-        except (ValueError, TypeError):
-            step_loss = 0.0
-            
-        try:
-            take_profit = float(pos.get("take_profit_pct", 0) or 0)
-        except (ValueError, TypeError):
-            take_profit = 0.0
-            
-        sl_price = entry * (1 - (step_loss / 100))
-        tp_price = entry * (1 + (take_profit / 100))
-        
+
+        sl_pct = float(pos.get("sl_pct", 5.0) or 5.0)
+        tp_pct = float(pos.get("take_profit_pct", 20.0) or 20.0)
+
+        static_sl = entry * (1 - sl_pct / 100)
+        tp_price  = entry * (1 + tp_pct / 100)
+
+        # Trailing stop: trail the peak close since entry at the same sl_pct distance.
+        # If the stock has risen, trail_sl > static_sl — locking in gains.
+        # If it never went above entry, static_sl is the floor.
+        peak_price = entry
+        entry_date = pos.get("entry_date")
+        if ticker in hist_by_ticker and entry_date is not None:
+            h = hist_by_ticker[ticker]
+            try:
+                h_since = h[h.index >= pd.Timestamp(entry_date).tz_localize(None)]
+                if not h_since.empty:
+                    peak_price = float(h_since["Close"].max())
+            except Exception:
+                pass
+
+        trail_sl       = peak_price * (1 - sl_pct / 100)
+        effective_sl   = max(static_sl, trail_sl)
+        is_trailing    = trail_sl > static_sl
+
         pct_move = ((curr_price - entry) / entry) * 100
-        
-        if curr_price <= sl_price:
-            alerts.append(f"🔴 *STOP LOSS BROKEN:* {ticker} hit ${curr_price:.2f} (Entry: ${entry:.2f}, {pct_move:.1f}%)")
+
+        if curr_price <= effective_sl:
+            if is_trailing:
+                alerts.append(
+                    f"🔴 *TRAILING STOP TRIGGERED:* {ticker} hit ${curr_price:.2f} "
+                    f"(Peak: ${peak_price:.2f}, Trail SL: ${effective_sl:.2f}, {pct_move:.1f}% from entry)"
+                )
+            else:
+                alerts.append(
+                    f"🔴 *STOP LOSS BROKEN:* {ticker} hit ${curr_price:.2f} "
+                    f"(Entry: ${entry:.2f}, {pct_move:.1f}%)"
+                )
         elif curr_price >= tp_price:
-            alerts.append(f"✅ *TAKE PROFIT REACHED:* {ticker} hit ${curr_price:.2f} (Entry: ${entry:.2f}, +{pct_move:.1f}%)")
+            alerts.append(
+                f"✅ *TAKE PROFIT REACHED:* {ticker} hit ${curr_price:.2f} "
+                f"(Entry: ${entry:.2f}, +{pct_move:.1f}%)"
+            )
 
     return alerts
 
@@ -1079,7 +1109,7 @@ def _check_red_flags(info, stock):
     return flags
 
 def _score_fundamentals(info, stock):
-    """Score: revenue growth (max 25), ROCE (max 8), gross margin (max 10), FCF (max 8) = 51 pts max."""
+    """Score: revenue growth (max 20), ROCE (max 7), gross margin (max 5), FCF (max 3) = 35 pts max."""
     score, reasons = 0, []
 
     # ── Revenue Growth ──────────────────────────────────────
@@ -1094,20 +1124,20 @@ def _score_fundamentals(info, stock):
     except:
         growth = info.get("revenueGrowth", 0) or 0
 
-    if growth >= 0.30:   score += 25; reasons.append(f"Rev growth {growth*100:.0f}%")
-    elif growth >= 0.20: score += 15; reasons.append(f"Rev growth {growth*100:.0f}%")
+    if growth >= 0.30:   score += 20; reasons.append(f"Rev growth {growth*100:.0f}%")
+    elif growth >= 0.20: score += 12; reasons.append(f"Rev growth {growth*100:.0f}%")
 
     # ── ROCE ────────────────────────────────────────────────
     roce = info.get("returnOnCapitalEmployed", info.get("returnOnCapital", 0)) or 0
-    if roce > 0.20: score += 8; reasons.append(f"ROCE {roce*100:.0f}%")
+    if roce > 0.20: score += 7; reasons.append(f"ROCE {roce*100:.0f}%")
 
     # ── Gross Margin ────────────────────────────────────────
     # Strongest single predictor of durable competitive advantage.
     # >60% = pricing power / platform business (max pts)
     # >40% = solid margin profile
     gross_margin = info.get("grossMargins", 0) or 0
-    if gross_margin > 0.60:   score += 10; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
-    elif gross_margin > 0.40: score += 5;  reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+    if gross_margin > 0.60:   score += 5; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+    elif gross_margin > 0.40: score += 3; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
 
     # ── Free Cash Flow ──────────────────────────────────────
     # Positive FCF separates real businesses from burn-rate stories.
@@ -1124,12 +1154,12 @@ def _score_fundamentals(info, stock):
         ttm_fcf = info.get("freeCashflow", None)
 
     if ttm_fcf is not None and ttm_fcf > 0:
-        score += 8; reasons.append("FCF positive")
+        score += 3; reasons.append("FCF positive")
 
     return score, reasons
 
 def _score_momentum(hist, ticker):
-    """Score: 6mo momentum (10), 50MA (5), 200MA (5), volume spike (10), IWM RS (10) = 40 pts max."""
+    """Score: 6mo momentum (8), 50MA (4), 200MA (4), volume spike (8), IWM RS (6) = 30 pts max."""
     score, reasons = 0, []
     if hist.empty or len(hist) < 50:
         return score, reasons
@@ -1142,26 +1172,26 @@ def _score_momentum(hist, ticker):
 
     # 6-month price momentum
     if price_now > price_6mo * 1.15:
-        score += 10; reasons.append("6mo Momentum")
+        score += 8; reasons.append("6mo Momentum")
 
     # Price above 50-day MA
     if price_now > ma50:
-        score += 5; reasons.append("Above 50MA")
+        score += 4; reasons.append("Above 50MA")
 
     # Price above 200-day MA (trend health check)
     if len(hist) >= 200:
         ma200 = hist["Close"].rolling(200).mean().iloc[-1]
         if price_now > ma200:
-            score += 5; reasons.append("Above 200MA")
+            score += 4; reasons.append("Above 200MA")
     else:
         logger.debug(f"{ticker}: fewer than 200 days of history — 200MA check skipped")
 
     # Unusual volume spike
     if vol_today > vol_avg * 2:
-        score += 10; reasons.append("⚡ Volume spike")
+        score += 8; reasons.append("⚡ Volume spike")
 
     # Relative Strength vs IWM (Russell 2000 benchmark)
-    # +10 pts if the stock has outperformed IWM by 20%+ over the last 3 months.
+    # +6 pts if the stock has outperformed IWM by 20%+ over the last 3 months.
     try:
         # Use the last ~63 trading days as a proxy for 3 months
         if len(hist) >= 63:
@@ -1179,7 +1209,7 @@ def _score_momentum(hist, ticker):
                 iwm_return = (iwm_hist["Close"].iloc[-1] / iwm_hist["Close"].iloc[0]) - 1
                 rs_delta   = stock_3mo_return - iwm_return
                 if rs_delta >= 0.20:
-                    score += 10; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
+                    score += 6; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
     except Exception as e:
         logger.debug(f"{ticker}: IWM relative strength check failed — {e}")
 
@@ -1203,28 +1233,28 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         f_score, f_reasons = _score_fundamentals(info, stock)
         score += f_score; reasons.extend(f_reasons)
 
-        # 2. Valuation
+        # 2. Valuation (max 10 pts: PEG 6 + P/S 4)
         v_score = 0
         peg = info.get("pegRatio", 2)
-        if 0 < peg < 1: v_score += 15; reasons.append(f"PEG {peg:.1f}")
+        if 0 < peg < 1: v_score += 6; reasons.append(f"PEG {peg:.1f}")
         ps = info.get("priceToSalesTrailing12Months", 10)
-        if 0 < ps < 4: v_score += 10; reasons.append(f"P/S {ps:.1f}x")
+        if 0 < ps < 4: v_score += 4; reasons.append(f"P/S {ps:.1f}x")
         score += v_score
 
-        # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS)
+        # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS — max 30 pts)
         hist = stock.history(period="1y")  # 1y gives enough data for 200MA
         m_score, m_reasons = _score_momentum(hist, ticker)
         score += m_score; reasons.extend(m_reasons)
 
-        # 4. Smart Money & Cap
+        # 4. Smart Money & Cap (max 20 pts: inst ownership 13 + cap range 7)
         s_score = 0
         inst_own = info.get("heldPercentInstitutions", 1) or 1
-        if inst_own < 0.40: s_score += 20; reasons.append(f"Inst. {inst_own*100:.0f}%")
+        if inst_own < 0.40: s_score += 13; reasons.append(f"Inst. {inst_own*100:.0f}%")
         mkt_cap = info.get("marketCap", 0) or 0
-        if 50e6 < mkt_cap < 10e9: s_score += 10; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
+        if 50e6 < mkt_cap < 10e9: s_score += 7; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
         score += s_score
 
-        # 5. Persistence Bonus
+        # 5. Persistence Bonus (max 5 pts — unchanged)
         p_score = 0
         prev = memory_df[memory_df["ticker"] == ticker]
         if not prev.empty and int(prev["times_flagged"].values[0]) >= 3:
@@ -1236,7 +1266,7 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         if regime_info and regime_info.get("multiplier", 1.0) != 1.0:
             score *= regime_info["multiplier"]
             reasons.append(f"{regime_info['regime']} Regime Adj")
-            
+
         score = int(round(score))
 
         # 7. AI News Sentiment Score (Only if preliminary math score is decent to save API)
@@ -1246,24 +1276,27 @@ def score_stock(ticker, memory_df, config, regime_info=None):
                 score += sentiment
                 reasons.append(f"AI Sentiment {sentiment:+d}")
 
+        # raw_score is the unclamped total — used as tiebreaker when multiple picks hit 100
+        raw_score = score
         score = min(100, score)
 
         if score < config.MIN_SCORE:
             return None
 
         return {
-            "ticker":  ticker,
-            "sector":  info.get("sector", "Unknown"),
-            "score":   score,
-            "f_score": f_score,
-            "v_score": v_score,
-            "m_score": m_score,
-            "s_score": s_score,
-            "p_score": p_score,
-            "tier":    "\U0001f7e2 HIGH CONVICTION" if score >= 80 else "\U0001f7e1 WATCHLIST",
-            "reasons": reasons,
-            "price":   round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
-            "mkt_cap": f"${mkt_cap/1e6:.0f}M"
+            "ticker":     ticker,
+            "sector":     info.get("sector", "Unknown"),
+            "score":      score,
+            "raw_score":  raw_score,
+            "f_score":    f_score,
+            "v_score":    v_score,
+            "m_score":    m_score,
+            "s_score":    s_score,
+            "p_score":    p_score,
+            "tier":       "\U0001f7e2 HIGH CONVICTION" if score >= 80 else "\U0001f7e1 WATCHLIST",
+            "reasons":    reasons,
+            "price":      round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
+            "mkt_cap":    f"${mkt_cap/1e6:.0f}M"
         }
     except Exception as e:
         logger.warning(f"score_stock failed for {ticker}: {e}")

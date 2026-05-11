@@ -544,10 +544,10 @@ def fetch_ticker_news(ticker: str, max_items: int = 5) -> list:
 
 
 def _compute_display_rank(df):
-    """Sort df and assign a sequential rank; within tied scores rank by prob_upside, m_score, f_score."""
+    """Sort df and assign a sequential rank; within tied scores rank by raw_score, prob_upside, m_score, f_score."""
     df = df.copy()
     sort_cols, ascending = ["score"], [False]
-    for col in ("prob_upside", "m_score", "f_score"):
+    for col in ("raw_score", "prob_upside", "m_score", "f_score"):
         if col in df.columns:
             sort_cols.append(col)
             ascending.append(False)
@@ -1639,6 +1639,14 @@ if active_tab == "Scans":
             df_res = pd.DataFrame(results).sort_values("score", ascending=False)
             df_res = add_predictions(df_res, model)
             df_res = add_risk_guidance(df_res, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
+            if "suggested_position_pct" in df_res.columns:
+                _total_alloc = df_res["suggested_position_pct"].sum()
+                if _total_alloc > 100:
+                    st.warning(
+                        f"⚠️ **Over-allocation:** Suggested position sizes sum to **{_total_alloc:.1f}%** "
+                        f"across {len(df_res)} picks — exceeds 100% of portfolio. "
+                        f"Review allocations before deploying capital."
+                    )
             df_res = format_pct_columns(df_res, ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"])
             _uv_scan = st.session_state.prefs.get("unit_value", 250)
             with st.spinner("Computing unit allocations…"):
