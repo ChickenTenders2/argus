@@ -19,6 +19,13 @@ try:
     HAS_XGB = True
 except ImportError:
     HAS_XGB = False
+
+try:
+    from scipy.optimize import minimize as _scipy_minimize
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+
 from dataclasses import dataclass
 from datetime import datetime, date
 
@@ -251,15 +258,24 @@ class Config:
     GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
     MEMORY_FILE: str = "data/argus_memory.csv"
     WATCHLIST_FILE: str = "data/argus_watchlist.csv"
-    MIN_SCORE: int = 65
-    TOP_N: int = 10
+    MIN_SCORE: int = 60
+    TOP_N: int = 12
     PRICE_FLOOR: float = 2.0
     PRICE_CEILING: float = None
-    VOL_FLOOR: int = 200000
+    VOL_FLOOR: int = 500000
     RESULTS_FILE: str = "data/argus_results.csv"
     RESULTS_HISTORY_FILE: str = "data/argus_results_history.csv"
     FEATURES_FILE: str = "data/argus_feature_history.csv"
     JOURNAL_FILE: str = "data/argus_journal.csv"
+    # Configurable scoring thresholds
+    REV_GROWTH_HIGH: float = 0.30
+    REV_GROWTH_LOW: float = 0.20
+    ROCE_THRESHOLD: float = 0.20
+    GROSS_MARGIN_HIGH: float = 0.60
+    GROSS_MARGIN_LOW: float = 0.40
+    INST_OWN_CEILING: float = 0.40
+    MKT_CAP_MIN: float = 50e6
+    MKT_CAP_MAX: float = 10e9
 
 # Always ensure migration happens when engine starts (now safely below Config definition)
 migrate_csv_to_sqlite()
@@ -504,6 +520,7 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
     valid_tickers = _prefilter_tickers(tickers, config, scan_limit=scan_limit)
     results = []
     total = len(valid_tickers)
+    filtered_count = 0
 
     def scan_worker(ticker):
         try:
@@ -514,9 +531,8 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
             return None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        # submit all tasks
         future_to_ticker = {executor.submit(scan_worker, t): t for t in valid_tickers}
-        
+
         for idx, future in enumerate(concurrent.futures.as_completed(future_to_ticker)):
             ticker = future_to_ticker[future]
             if progress_callback:
@@ -524,6 +540,8 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
             pick = future.result()
             if pick:
                 results.append(pick)
+            else:
+                filtered_count += 1
 
     results.sort(key=lambda x: (x["score"], x.get("raw_score", x["score"])), reverse=True)
     _append_feature_rows(results, scan_date, scan_timestamp, run_type)
@@ -551,6 +569,7 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
         "scan_date": scan_date,
         "scan_timestamp": scan_timestamp,
         "scanned_count": len(valid_tickers),
+        "filtered_count": filtered_count,
     }
 
 def save_results(results, scan_date, scan_timestamp, run_type, latest_file, history_file, write_latest, feature_file=None):
@@ -850,47 +869,83 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
         return {"ready": False, "reason": "Not enough matured samples yet (need ~30+)."}
 
     train["target_hit"] = (train["fwd_return"] >= target_return).astype(int)
-    
+
     # Feature selection
-    possible_features = ["score", "f_score", "v_score", "m_score", "s_score", "p_score", "reason_count", "mkt_cap_m"]
+    possible_features = ["score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score", "reason_count", "mkt_cap_m"]
     features = [f for f in possible_features if f in train.columns]
-    
-    X = train[features].fillna(0)
-    y = train["target_hit"]
-    global_prob = float(y.mean())
-    
+
+    global_prob = float(train["target_hit"].mean())
+
+    # Temporal walk-forward split: train on oldest 80%, evaluate on newest 20%.
+    # Sorted by scan_date so no future data leaks into training.
+    train_sorted = train.sort_values("scan_date").reset_index(drop=True)
+    split_idx = max(int(len(train_sorted) * 0.8), len(train_sorted) - 20)
+    train_set = train_sorted.iloc[:split_idx]
+    test_set  = train_sorted.iloc[split_idx:]
+
+    X_train = train_set[features].fillna(0)
+    y_train = train_set["target_hit"]
+    X_test  = test_set[features].fillna(0)
+    y_test  = test_set["target_hit"]
+    X_all   = train_sorted[features].fillna(0)
+    y_all   = train_sorted["target_hit"]
+
     clf = None
     feature_importance = {}
-    
-    if HAS_XGB and len(train) > 50:
+
+    if HAS_XGB and len(train_sorted) > 50:
         try:
             clf = xgb.XGBClassifier(
-                n_estimators=50, 
-                max_depth=3, 
-                learning_rate=0.1, 
-                eval_metric="logloss", 
-                use_label_encoder=False
+                n_estimators=50,
+                max_depth=3,
+                learning_rate=0.1,
+                eval_metric="logloss",
+                use_label_encoder=False,
             )
-            clf.fit(X, y)
-            train["pred_prob"] = clf.predict_proba(X)[:, 1]
+            clf.fit(X_train, y_train)
             imp = clf.feature_importances_
             feature_importance = {features[i]: float(imp[i]) for i in range(len(features))}
         except Exception as e:
             logger.error(f"XGBoost training failed: {e}")
             clf = None
-    
-    if clf is None:
-        # Fallback to empirical deciles
+
+    # Compute pred_prob on the full dataset for downstream scenario stats
+    if clf is not None:
+        train_sorted["pred_prob"] = clf.predict_proba(X_all)[:, 1]
+        # Brier score on held-out test set (walk-forward evaluation)
+        if len(X_test) > 0:
+            test_probs = clf.predict_proba(X_test)[:, 1]
+            brier = float(((test_probs - y_test) ** 2).mean())
+        else:
+            brier = float(((train_sorted["pred_prob"] - y_all) ** 2).mean())
+    else:
+        # Fallback to empirical deciles (trained on train_set, applied to all)
         logger.info("Falling back to empirical decile model.")
         try:
-            train["score_bucket"] = pd.qcut(train["score"], q=10, duplicates="drop")
+            train_set = train_set.copy()
+            train_set["score_bucket"] = pd.qcut(train_set["score"], q=10, duplicates="drop")
         except Exception:
-            train["score_bucket"] = pd.cut(train["score"], bins=5)
-            
-        bucket_stats_fallback = train.groupby("score_bucket", observed=False)["target_hit"].mean()
-        train["pred_prob"] = train["score_bucket"].map(bucket_stats_fallback).fillna(global_prob)
-        
-    brier = float(((train["pred_prob"] - train["target_hit"]) ** 2).mean())
+            train_set = train_set.copy()
+            train_set["score_bucket"] = pd.cut(train_set["score"], bins=5)
+
+        bucket_stats_fallback = train_set.groupby("score_bucket", observed=False)["target_hit"].mean()
+
+        def _bucket_prob(score):
+            for bucket, prob in bucket_stats_fallback.items():
+                try:
+                    if score in bucket:
+                        return prob
+                except Exception:
+                    pass
+            return global_prob
+
+        train_sorted["pred_prob"] = train_sorted["score"].apply(_bucket_prob)
+        if len(test_set) > 0:
+            brier = float(((train_sorted.iloc[split_idx:]["pred_prob"] - y_test) ** 2).mean())
+        else:
+            brier = float(((train_sorted["pred_prob"] - y_all) ** 2).mean())
+
+    train = train_sorted  # alias for the rest of the function
 
     calibration = (
         train.assign(prob_bin=pd.cut(train["pred_prob"], bins=[0, 0.2, 0.4, 0.6, 0.8, 1.0], include_lowest=True))
@@ -920,10 +975,14 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
 
     cm = None
     if clf is not None:
-        import numpy as np
         from sklearn.metrics import confusion_matrix
-        y_pred = (train["pred_prob"] >= 0.5).astype(int)
-        cm = confusion_matrix(train["target_hit"], y_pred).tolist()
+        if len(X_test) > 0:
+            _cm_probs = clf.predict_proba(X_test)[:, 1]
+            _cm_preds = (_cm_probs >= 0.5).astype(int)
+            cm = confusion_matrix(y_test, _cm_preds).tolist()
+        else:
+            y_pred = (train["pred_prob"] >= 0.5).astype(int)
+            cm = confusion_matrix(train["target_hit"], y_pred).tolist()
 
     return {
         "ready": True,
@@ -931,6 +990,8 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
         "target_return": target_return,
         "global_prob": global_prob,
         "samples": int(len(train)),
+        "train_samples": int(len(train_set)),
+        "test_samples": int(len(test_set)),
         "brier_score": brier,
         "bucket_stats": bucket_stats,
         "calibration": calibration,
@@ -938,7 +999,7 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
         "features": features,
         "feature_importance": feature_importance,
         "confusion_matrix": cm,
-        "X_sample": train[features]
+        "X_sample": train[features],
     }
 
 def add_predictions(df_results, model):
@@ -1108,9 +1169,15 @@ def _check_red_flags(info, stock):
         pass
     return flags
 
-def _score_fundamentals(info, stock):
+def _score_fundamentals(info, stock, config=None):
     """Score: revenue growth (max 20), ROCE (max 7), gross margin (max 5), FCF (max 3) = 35 pts max."""
     score, reasons = 0, []
+
+    rev_high  = getattr(config, "REV_GROWTH_HIGH",   0.30)
+    rev_low   = getattr(config, "REV_GROWTH_LOW",    0.20)
+    roce_thr  = getattr(config, "ROCE_THRESHOLD",    0.20)
+    gm_high   = getattr(config, "GROSS_MARGIN_HIGH", 0.60)
+    gm_low    = getattr(config, "GROSS_MARGIN_LOW",  0.40)
 
     # ── Revenue Growth ──────────────────────────────────────
     try:
@@ -1124,20 +1191,18 @@ def _score_fundamentals(info, stock):
     except:
         growth = info.get("revenueGrowth", 0) or 0
 
-    if growth >= 0.30:   score += 20; reasons.append(f"Rev growth {growth*100:.0f}%")
-    elif growth >= 0.20: score += 12; reasons.append(f"Rev growth {growth*100:.0f}%")
+    if growth >= rev_high:   score += 20; reasons.append(f"Rev growth {growth*100:.0f}%")
+    elif growth >= rev_low:  score += 12; reasons.append(f"Rev growth {growth*100:.0f}%")
 
     # ── ROCE ────────────────────────────────────────────────
     roce = info.get("returnOnCapitalEmployed", info.get("returnOnCapital", 0)) or 0
-    if roce > 0.20: score += 7; reasons.append(f"ROCE {roce*100:.0f}%")
+    if roce > roce_thr: score += 7; reasons.append(f"ROCE {roce*100:.0f}%")
 
     # ── Gross Margin ────────────────────────────────────────
     # Strongest single predictor of durable competitive advantage.
-    # >60% = pricing power / platform business (max pts)
-    # >40% = solid margin profile
     gross_margin = info.get("grossMargins", 0) or 0
-    if gross_margin > 0.60:   score += 5; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
-    elif gross_margin > 0.40: score += 3; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+    if gross_margin > gm_high:   score += 5; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+    elif gross_margin > gm_low:  score += 3; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
 
     # ── Free Cash Flow ──────────────────────────────────────
     # Positive FCF separates real businesses from burn-rate stories.
@@ -1230,7 +1295,7 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         score, reasons = 0, []
 
         # 1. Fundamentals (rev growth + ROCE + gross margin + FCF)
-        f_score, f_reasons = _score_fundamentals(info, stock)
+        f_score, f_reasons = _score_fundamentals(info, stock, config)
         score += f_score; reasons.extend(f_reasons)
 
         # 2. Valuation (max 10 pts: PEG 6 + P/S 4)
@@ -1248,10 +1313,13 @@ def score_stock(ticker, memory_df, config, regime_info=None):
 
         # 4. Smart Money & Cap (max 20 pts: inst ownership 13 + cap range 7)
         s_score = 0
+        inst_ceil = getattr(config, "INST_OWN_CEILING", 0.40)
+        mkt_min   = getattr(config, "MKT_CAP_MIN", 50e6)
+        mkt_max   = getattr(config, "MKT_CAP_MAX", 10e9)
         inst_own = info.get("heldPercentInstitutions", 1) or 1
-        if inst_own < 0.40: s_score += 13; reasons.append(f"Inst. {inst_own*100:.0f}%")
+        if inst_own < inst_ceil: s_score += 13; reasons.append(f"Inst. {inst_own*100:.0f}%")
         mkt_cap = info.get("marketCap", 0) or 0
-        if 50e6 < mkt_cap < 10e9: s_score += 7; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
+        if mkt_min < mkt_cap < mkt_max: s_score += 7; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
         score += s_score
 
         # 5. Persistence Bonus (max 5 pts — unchanged)
@@ -1370,79 +1438,72 @@ def get_universe():
     ]
 
 def optimize_portfolio(tickers: list, risk_free_rate: float = 0.04) -> dict:
-    """Phase 4: Run mean-variance portfolio optimization to find Max Sharpe allocation."""
-    import logging
-    logger = logging.getLogger(__name__)
+    """Phase 4: Mean-variance optimization (Max Sharpe + Min Volatility) via scipy SLSQP."""
     if not tickers:
         return {"error": "No tickers provided."}
-    
-    logger.info(f"Optimizing portfolio for: {tickers}")
+
     try:
-        # Download 1y history
-        data = yf.download(tickers, period="1y", interval="1d")["Close"]
-        
-        # If single ticker was passed accidentally
+        data = yf.download(tickers, period="1y", interval="1d", progress=False)["Close"]
         if isinstance(data, pd.Series):
             data = data.to_frame()
-            
         returns = data.pct_change().dropna()
         if len(returns) < 50:
             return {"error": "Not enough trading days to optimize reliably."}
-            
-        # Compute mean and covariance
-        mean_returns = returns.mean() * 252
-        cov_matrix = returns.cov() * 252
-        
-        num_assets = len(tickers)
-        num_portfolios = 5000
-        
-        results = np.zeros((3, num_portfolios))
-        weights_record = []
-        
-        for i in range(num_portfolios):
-            weights = np.random.random(num_assets)
-            weights /= np.sum(weights)
-            
-            weights_record.append(weights)
-            
-            p_ret = np.sum(weights * mean_returns)
-            p_std = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
-            p_sharpe = (p_ret - risk_free_rate) / p_std
-            
-            results[0, i] = p_ret
-            results[1, i] = p_std
-            results[2, i] = p_sharpe
-            
-        # Max Sharpe
-        max_sharpe_idx = np.argmax(results[2])
-        max_sharpe_ret = results[0, max_sharpe_idx]
-        max_sharpe_std = results[1, max_sharpe_idx]
-        max_sharpe_ratio = results[2, max_sharpe_idx]
-        max_sharpe_weights = weights_record[max_sharpe_idx]
-        
-        # Min Volatility
-        min_vol_idx = np.argmin(results[1])
-        min_vol_ret = results[0, min_vol_idx]
-        min_vol_std = results[1, min_vol_idx]
-        min_vol_sharpe = results[2, min_vol_idx]
-        min_vol_weights = weights_record[min_vol_idx]
-        
-        metrics = {
+
+        mean_ret = returns.mean().values * 252
+        cov = returns.cov().values * 252
+        n = len(tickers)
+        w0 = np.full(n, 1.0 / n)
+        bounds = tuple((0.0, 1.0) for _ in range(n))
+        constraints = [{"type": "eq", "fun": lambda w: w.sum() - 1}]
+
+        def _neg_sharpe(w):
+            r = w @ mean_ret
+            v = np.sqrt(w @ cov @ w)
+            return -(r - risk_free_rate) / v if v > 0 else 0.0
+
+        def _port_vol(w):
+            return np.sqrt(w @ cov @ w)
+
+        if HAS_SCIPY:
+            res_sharpe = _scipy_minimize(_neg_sharpe, w0, method="SLSQP",
+                                         bounds=bounds, constraints=constraints,
+                                         options={"ftol": 1e-9, "maxiter": 1000})
+            res_vol    = _scipy_minimize(_port_vol, w0, method="SLSQP",
+                                         bounds=bounds, constraints=constraints,
+                                         options={"ftol": 1e-9, "maxiter": 1000})
+            ms_w = res_sharpe.x
+            mv_w = res_vol.x
+        else:
+            # Monte Carlo fallback when scipy is unavailable
+            rng = np.random.default_rng()
+            sim_w = rng.dirichlet(np.ones(n), size=3000)
+            sharpes = np.array([
+                -(w @ mean_ret - risk_free_rate) / max(np.sqrt(w @ cov @ w), 1e-9)
+                for w in sim_w
+            ])
+            vols = np.array([np.sqrt(w @ cov @ w) for w in sim_w])
+            ms_w = sim_w[np.argmin(sharpes)]
+            mv_w = sim_w[np.argmin(vols)]
+
+        def _stats(w):
+            r = float(w @ mean_ret)
+            v = float(np.sqrt(w @ cov @ w))
+            return r, v, (r - risk_free_rate) / v if v > 0 else 0.0
+
+        ms_r, ms_v, ms_s = _stats(ms_w)
+        mv_r, mv_v, mv_s = _stats(mv_w)
+
+        return {
             "max_sharpe": {
-                "return": max_sharpe_ret,
-                "volatility": max_sharpe_std,
-                "sharpe": max_sharpe_ratio,
-                "weights": {ticker: float(weight) for ticker, weight in zip(tickers, max_sharpe_weights)}
+                "return": ms_r, "volatility": ms_v, "sharpe": ms_s,
+                "weights": {t: float(w) for t, w in zip(tickers, ms_w)},
             },
             "min_volatility": {
-                "return": min_vol_ret,
-                "volatility": min_vol_std,
-                "sharpe": min_vol_sharpe,
-                "weights": {ticker: float(weight) for ticker, weight in zip(tickers, min_vol_weights)}
-            }
+                "return": mv_r, "volatility": mv_v, "sharpe": mv_s,
+                "weights": {t: float(w) for t, w in zip(tickers, mv_w)},
+            },
         }
-        
-        return metrics
     except Exception as e:
         logger.error(f"Portfolio optimization failed: {e}")
         return {"error": str(e)}

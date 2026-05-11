@@ -561,6 +561,21 @@ UNIT_DAILY_CAP = 12
 UNIT_CEILING = 5
 UNIT_FLOOR = 0
 
+# ── Sector colour mapping (Streamlit markdown colour names) ────────────────
+SECTOR_COLORS = {
+    "Technology":             "blue",
+    "Communication Services": "blue",
+    "Healthcare":             "green",
+    "Consumer Cyclical":      "red",
+    "Consumer Defensive":     "gray",
+    "Financial Services":     "orange",
+    "Industrials":            "violet",
+    "Basic Materials":        "violet",
+    "Energy":                 "orange",
+    "Real Estate":            "orange",
+    "Utilities":              "gray",
+}
+
 def _is_overextended(ticker: str) -> bool:
     """Return True if the last 10 days moved >2.5× the average 10-day pace over 63 days."""
     try:
@@ -926,8 +941,8 @@ def apply_preset():
         st.session_state.price_floor = 1.0
         st.session_state.price_ceiling = 10.0
     elif preset == "Default":
-        st.session_state.preset_desc = "**Use when:** Market conditions are neutral or you are unsure which preset to choose. Score ≥65, 63-day horizon, 0.75% risk per trade. A well-rounded starting point for most market environments."
-        st.session_state.min_score = 65
+        st.session_state.preset_desc = "**Use when:** Market conditions are neutral or you are unsure which preset to choose. Score ≥60, 63-day horizon, 0.75% risk per trade. A well-rounded starting point for most market environments."
+        st.session_state.min_score = 60
         st.session_state.horizon_days = 63
         st.session_state.target_return = 10
         st.session_state.risk_per_trade_pct = 0.75
@@ -940,7 +955,7 @@ if "price_ceiling" not in st.session_state:
     st.session_state.price_ceiling = 0.0
 
 if "min_score" not in st.session_state:
-    st.session_state.min_score = 65
+    st.session_state.min_score = 60
 def nav_to_ticker(t):
     st.session_state["selected_ticker"] = t
     st.session_state["main_tabs"] = "Ticker Detail"
@@ -998,16 +1013,40 @@ def display_cards(df, show_copy_button=True):
         if i % 3 == 0:
             row_cols = st.columns(3)
         with row_cols[i % 3]:
-            rank = int(row.get("_rank", i + 1))
-            tier_str = row.get("tier", "")
-            tier_icon = "🟢" if "HIGH CONVICTION" in str(tier_str) else "🟡" if tier_str else ""
-            label = f"#{rank} {tier_icon} {row['ticker']} · Score: {row['score']}/100"
-            with st.expander(label, expanded=("HIGH CONVICTION" in str(tier_str))):
+            rank      = int(row.get("_rank", i + 1))
+            tier_str  = str(row.get("tier", ""))
+            is_hc     = "HIGH CONVICTION" in tier_str
+            tier_icon = "🟢" if is_hc else ("🟡" if tier_str else "")
+            tier_short = "HC" if is_hc else "WL"
+
+            score_val = int(row.get("score", 0) or 0)
+            raw_sc    = int(row.get("raw_score", score_val) or score_val)
+            f_sc = int(row.get("f_score", 0) or 0)
+            m_sc = int(row.get("m_score", 0) or 0)
+            s_sc = int(row.get("s_score", 0) or 0)
+            v_sc = int(row.get("v_score", 0) or 0)
+
+            score_display = f"{score_val}/100"
+            if raw_sc > 100:
+                score_display += f" ★+{raw_sc - 100}"
+
+            label = (
+                f"#{rank} {tier_icon}[{tier_short}] {row['ticker']}"
+                f" · {score_display}"
+                f" [F:{f_sc} M:{m_sc} S:{s_sc} V:{v_sc}]"
+            )
+
+            with st.expander(label, expanded=is_hc):
+                # Sector colour pill
+                sector = str(row.get("sector", "Unknown") or "Unknown")
+                s_color = SECTOR_COLORS.get(sector, "gray")
+                st.markdown(f":{s_color}[**{sector}**]")
+
                 if "tier" in row and pd.notna(row["tier"]):
-                    color = "green" if "HIGH CONVICTION" in row["tier"] else "orange"
+                    color = "green" if is_hc else "orange"
                     st.markdown(f"**:{color}[{row['tier']}]**")
 
-                sig_label, sig_color = get_signal_label(row.get("score", 0))
+                sig_label, sig_color = get_signal_label(score_val)
                 st.markdown(f"**:{sig_color}[{sig_label}]**")
 
                 if "scan_count" in row and pd.notna(row["scan_count"]) and int(row["scan_count"]) > 1:
@@ -1138,6 +1177,18 @@ if "vol_floor" not in st.session_state:
     st.session_state.vol_floor = 500000
 if "price_floor" not in st.session_state:
     st.session_state.price_floor = 2.00
+if "rev_growth_high" not in st.session_state:
+    st.session_state.rev_growth_high = 30
+if "rev_growth_low" not in st.session_state:
+    st.session_state.rev_growth_low = 20
+if "roce_threshold" not in st.session_state:
+    st.session_state.roce_threshold = 20
+if "gross_margin_high" not in st.session_state:
+    st.session_state.gross_margin_high = 60
+if "gross_margin_low" not in st.session_state:
+    st.session_state.gross_margin_low = 40
+if "inst_own_ceiling" not in st.session_state:
+    st.session_state.inst_own_ceiling = 40
 if "preset_desc" not in st.session_state:
     st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
 
@@ -1243,15 +1294,41 @@ with st.sidebar:
             help="1 unit = this £ amount. Used for unit-based buying suggestions. Default: £250.",
         )
 
+    with st.expander("Scoring Thresholds"):
+        st.caption("Tune the quality bars used in the scoring algorithm.")
+        rev_growth_high = st.slider("Rev Growth (full pts, %)", 10, 50, key="rev_growth_high",
+            help="Revenue growth ≥ this → 20 pts. Default: 30%.") / 100
+        rev_growth_low = st.slider("Rev Growth (partial pts, %)", 5, 40, key="rev_growth_low",
+            help="Revenue growth ≥ this → 12 pts. Default: 20%.") / 100
+        roce_threshold = st.slider("ROCE threshold (%)", 5, 40, key="roce_threshold",
+            help="Return on Capital Employed ≥ this → 7 pts. Default: 20%.") / 100
+        gross_margin_high = st.slider("Gross Margin (full pts, %)", 30, 85, key="gross_margin_high",
+            help="Gross margin > this → 5 pts. Default: 60%.") / 100
+        gross_margin_low = st.slider("Gross Margin (partial pts, %)", 15, 60, key="gross_margin_low",
+            help="Gross margin > this → 3 pts. Default: 40%.") / 100
+        inst_own_ceiling = st.slider("Inst. Ownership ceiling (%)", 20, 80, key="inst_own_ceiling",
+            help="Institutional ownership < this → 13 pts (undiscovered signal). Default: 40%.") / 100
+
     st.divider()
     send_to_telegram = st.checkbox(
-        "Send manual run to Telegram", 
-        value=st.session_state.prefs.get("send_to_telegram", False), 
-        key="send_to_telegram_cb", 
+        "Send manual run to Telegram",
+        value=st.session_state.prefs.get("send_to_telegram", False),
+        key="send_to_telegram_cb",
         on_change=update_telegram_pref
     )
 
-    config = Config(MIN_SCORE=min_score, PRICE_FLOOR=price_floor, PRICE_CEILING=(price_ceiling if price_ceiling > 0 else None), VOL_FLOOR=vol_floor)
+    config = Config(
+        MIN_SCORE=min_score,
+        PRICE_FLOOR=price_floor,
+        PRICE_CEILING=(price_ceiling if price_ceiling > 0 else None),
+        VOL_FLOOR=vol_floor,
+        REV_GROWTH_HIGH=rev_growth_high,
+        REV_GROWTH_LOW=rev_growth_low,
+        ROCE_THRESHOLD=roce_threshold,
+        GROSS_MARGIN_HIGH=gross_margin_high,
+        GROSS_MARGIN_LOW=gross_margin_low,
+        INST_OWN_CEILING=inst_own_ceiling,
+    )
 
 model = cached_build_prediction_model(
     features_file=config.FEATURES_FILE,
@@ -1308,6 +1385,23 @@ if _auto_scan_ran:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# ── Persistent regime strip (shown on all tabs) ───────────────────────────
+_strip_regime = cached_market_regime()
+_strip_color_map = {
+    "Bull": "#2E8B57", "Neutral": "#4169E1", "Bear": "#FF8C00",
+    "Extreme Fear": "#DC143C", "Stagflation": "#8B008B",
+}
+_sc = _strip_color_map.get(_strip_regime["regime"], "#555555")
+_strip_vix = _strip_regime.get("vix_level")
+_strip_vix_str = f" · VIX {_strip_vix:.1f}" if _strip_vix else ""
+st.markdown(
+    f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:4px;'
+    f'padding:5px 12px;margin-bottom:10px;font-size:0.82rem;">'
+    f'<strong>{_strip_regime["regime"]}</strong> regime'
+    f' · ×{_strip_regime["multiplier"]}{_strip_vix_str}'
+    f' · <em>{_strip_regime["reason"]}</em></div>',
+    unsafe_allow_html=True,
+)
 
 if active_tab == "Overview":
     st.subheader("📡 Latest Scheduled Scan")
@@ -1619,6 +1713,7 @@ if active_tab == "Scans":
             scan_date = payload["scan_date"]
             scan_timestamp = payload["scan_timestamp"]
             scanned_count = payload["scanned_count"]
+            filtered_count = payload.get("filtered_count", 0)
 
             save_results(
                 results=results,
@@ -1632,7 +1727,10 @@ if active_tab == "Scans":
             )
 
         _lottie_ph.empty()
-        st.caption(f"Scanned {scanned_count} tickers")
+        _h1, _h2, _h3 = st.columns(3)
+        _h1.metric("Scanned", scanned_count)
+        _h2.metric("Picked", len(results))
+        _h3.metric("Filtered / Skipped", filtered_count)
         if results:
             regime = cached_market_regime()
             st.success(f"{len(results)} picks met requirements in {regime['regime']} regime.")
