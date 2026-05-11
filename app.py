@@ -849,8 +849,8 @@ def apply_preset():
     preset = st.session_state.preset_selector
     st.session_state.price_ceiling = 0.0
     if preset == "High Conviction":
-        st.session_state.preset_desc = "**Use when:** You want the fewest, highest-quality picks only. Ultra-strict score filter (≥90) in a strong bull market where you are comfortable concentrating capital into 1–3 exceptional setups instead of diversifying broadly."
-        st.session_state.min_score = 90
+        st.session_state.preset_desc = "**Use when:** You want the fewest, highest-quality picks only. Strict score filter (≥75) in a strong bull market where you are comfortable concentrating capital into 1–3 exceptional setups instead of diversifying broadly."
+        st.session_state.min_score = 75
         st.session_state.horizon_days = 63
         st.session_state.target_return = 15
         st.session_state.risk_per_trade_pct = 1.50
@@ -868,7 +868,7 @@ def apply_preset():
         st.session_state.price_floor = 10.00
     elif preset == "Momentum Sprint":
         st.session_state.preset_desc = "**Use when:** The market is trending hard and you want to catch explosive short-term breakouts. 21-day horizon targets +30% moves. Best used after confirmed momentum weeks, not during chop or reversal."
-        st.session_state.min_score = 72
+        st.session_state.min_score = 65
         st.session_state.horizon_days = 21
         st.session_state.target_return = 30
         st.session_state.risk_per_trade_pct = 1.25
@@ -876,8 +876,8 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Capital Preservation":
-        st.session_state.preset_desc = "**Use when:** VIX is elevated, SPY is below its 200-day MA, or you are in a confirmed bear market. Minimum risk per trade (0.15%), very high score threshold (≥85), and a 6-month horizon to weather volatility."
-        st.session_state.min_score = 85
+        st.session_state.preset_desc = "**Use when:** VIX is elevated, SPY is below its 200-day MA, or you are in a confirmed bear market. Minimum risk per trade (0.15%), strict score threshold (≥72), and a 6-month horizon to weather volatility."
+        st.session_state.min_score = 72
         st.session_state.horizon_days = 126
         st.session_state.target_return = 3
         st.session_state.risk_per_trade_pct = 0.15
@@ -886,7 +886,7 @@ def apply_preset():
         st.session_state.price_floor = 2.0
     elif preset == "Small Cap Hunter":
         st.session_state.preset_desc = "**Use when:** You want exposure to high-growth micro/small-cap names. Lowers price floor to $0.50 and volume floor to 100K. Best used in a bull market where risk appetite is high. Expect higher volatility."
-        st.session_state.min_score = 68
+        st.session_state.min_score = 62
         st.session_state.horizon_days = 84
         st.session_state.target_return = 40
         st.session_state.risk_per_trade_pct = 0.50
@@ -903,8 +903,8 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Swing Recovery":
-        st.session_state.preset_desc = "**Use when:** The market has pulled back significantly (10–20%) but fundamentals remain intact. Targets beaten-down quality tickers expecting mean-reversion over 6 weeks. Score ≥70 filters out genuine deteriorations."
-        st.session_state.min_score = 70
+        st.session_state.preset_desc = "**Use when:** The market has pulled back significantly (10–20%) but fundamentals remain intact. Targets beaten-down quality tickers expecting mean-reversion over 6 weeks. Score ≥65 filters out genuine deteriorations."
+        st.session_state.min_score = 65
         st.session_state.horizon_days = 42
         st.session_state.target_return = 15
         st.session_state.risk_per_trade_pct = 0.60
@@ -913,7 +913,7 @@ def apply_preset():
         st.session_state.price_floor = 2.0
     elif preset == "Aggressive Growth":
         st.session_state.preset_desc = "**Use when:** Market is in a confirmed bull run and you are comfortable with higher risk per trade (1%). Targets +20% moves over 6 weeks. Best suited for growth-oriented accounts not needing capital preservation."
-        st.session_state.min_score = 70
+        st.session_state.min_score = 65
         st.session_state.horizon_days = 42
         st.session_state.target_return = 20
         st.session_state.risk_per_trade_pct = 1.0
@@ -921,8 +921,8 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Bear Market Defense":
-        st.session_state.preset_desc = "**Use when:** SPY is below the 200-day MA or a recession is likely. Extremely low risk (0.25%), high score threshold (≥80), and a 3-month horizon. Focuses on defensive names that hold value in downturns."
-        st.session_state.min_score = 80
+        st.session_state.preset_desc = "**Use when:** SPY is below the 200-day MA or a recession is likely. Extremely low risk (0.25%), strict score threshold (≥68), and a 3-month horizon. Focuses on defensive names that hold value in downturns."
+        st.session_state.min_score = 68
         st.session_state.horizon_days = 84
         st.session_state.target_return = 5
         st.session_state.risk_per_trade_pct = 0.25
@@ -1465,12 +1465,12 @@ if active_tab == "Overview":
 
     # ── FRED Macro Signal Cards ───────────────────────────────────────────────
     _macro = regime.get("macro", {})
-    if _macro:
-        _fm1, _fm2, _fm3, _fm4 = st.columns(4)
-        _yc = _macro.get("yield_curve", {})
-        _cpi = _macro.get("cpi", {})
-        _ff = _macro.get("fed_funds", {})
-        _fg = _macro.get("fear_greed", {})
+    _fm1, _fm2, _fm3, _fm4 = st.columns(4)
+    _yc = _macro.get("yield_curve", {})
+    _cpi = _macro.get("cpi", {})
+    _ff = _macro.get("fed_funds", {})
+    _fg = _macro.get("fear_greed", {})
+    if True:
         with _fm1:
             with st.container(border=True):
                 _yc_val = _yc.get("value")
@@ -2680,7 +2680,39 @@ if active_tab == "Prediction Model":
     st.subheader("📈 ML Prediction Model Quality")
     if not model.get("ready"):
         st.info(model.get("reason", "Model is not ready yet."))
-        st.caption("Keep running scans to accumulate matured samples (need ~50+).")
+        st.caption("The model activates once 30+ scan samples have matured past the forward-return horizon. Keep running daily scans.")
+
+        # Show whatever feature history exists so far
+        try:
+            _feat_conn = get_db_connection()
+            _feat_df = pd.read_sql("SELECT * FROM features", _feat_conn)
+            _feat_conn.close()
+        except Exception:
+            _feat_df = pd.DataFrame()
+
+        if not _feat_df.empty:
+            _feat_df["scan_date"] = pd.to_datetime(_feat_df["scan_date"], errors="coerce")
+            _n_rows = len(_feat_df)
+            _n_dates = _feat_df["scan_date"].nunique()
+            _first = _feat_df["scan_date"].min()
+            _last = _feat_df["scan_date"].max()
+
+            _mc1, _mc2, _mc3 = st.columns(3)
+            _mc1.metric("Feature Rows Collected", _n_rows)
+            _mc2.metric("Unique Scan Days", _n_dates)
+            _mc3.metric("Rows Still Needed", max(0, 30 - _n_rows))
+
+            if _first and _last and _n_dates > 1:
+                _days_span = (_last - _first).days or 1
+                _rate = _n_rows / _days_span
+                _days_to_go = max(0, int((30 - _n_rows) / _rate)) if _rate > 0 else "?"
+                st.caption(f"Collecting ~{_rate:.1f} rows/day · estimated ~{_days_to_go} more days to activation")
+
+            st.markdown("**Feature history preview (latest 20 rows)**")
+            _preview_cols = [c for c in ["scan_date", "ticker", "score", "f_score", "m_score", "s_score", "v_score", "p_score", "price"] if c in _feat_df.columns]
+            st.dataframe(_feat_df.sort_values("scan_date", ascending=False).head(20)[_preview_cols], use_container_width=True)
+        else:
+            st.caption("No feature history yet — run your first scan to start building the training set.")
     else:
         col1, col2, col3 = st.columns(3)
         col1.metric("Matured Samples", model["samples"])

@@ -4,20 +4,20 @@ import logging
 
 logger = logging.getLogger("Argus.Macro")
 
-FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 _FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 
 
 def _fetch_fred_series(series_id, limit=5):
     """Fetch the latest N observations for a FRED series. Returns list newest-first."""
-    if not FRED_API_KEY:
+    fred_api_key = os.environ.get("FRED_API_KEY", "")
+    if not fred_api_key:
         return None
     try:
         r = requests.get(
             _FRED_BASE,
             params={
                 "series_id": series_id,
-                "api_key": FRED_API_KEY,
+                "api_key": fred_api_key,
                 "file_type": "json",
                 "limit": limit,
                 "sort_order": "desc",
