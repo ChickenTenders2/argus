@@ -926,3 +926,340 @@ _Scanned 400 tickers • Top 10 picks shown_
 ──────────────────────────────
 _Scanned 400 tickers • Top 10 picks shown_
 
+--- 2026-05-11 11:02:51 ---
+👁 *Argus Daily Scan — 11 May 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+🟢 HIGH CONVICTION
+*VSAT* — Score: *100/100*
+⚡ _Previously flagged 22x since 21 Mar 2026 — signals strengthening_
+💰 Price: $70.01 | Cap: $9510M
+📊 Rev growth 311% | FCF positive | PEG 0.3 | P/S 2.1x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +45% | Cap $9510M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _Based on the Argus screener's high score of 100/100, driven by robust revenue growth (311%), positive free cash flow, and attractive valuation metrics (PEG 0.3, P/S 2.1x), VSAT presents an attractive investment opportunity. The stock's technical indicators, including 6-month momentum, above-average moving averages, and strong relative strength against the IWM, further support its bullish thesis. Amidst this backdrop, the recent news headlines suggest a positive sentiment, underscoring the company's momentum and reinforcing the case for a long position in VSAT._
+
+🟢 HIGH CONVICTION
+*MXL* — Score: *100/100*
+⚡ _Previously flagged 5x since 26 Apr 2026 — signals strengthening_
+💰 Price: $99.83 | Cap: $8939M
+📊 Rev growth 430% | Gross margin 57% | FCF positive | PEG 0.4 | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +418% | Cap $8939M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _MXL presents a compelling investment opportunity due to its exceptional technical and fundamental performance, with a 430% revenue growth rate, 57% gross margin, and positive free cash flow. The stock's technical indicators, including a 6-month momentum, above-average moving averages, and strong relative strength, further support its bullish sentiment. Despite the recent news headlines, the overall market momentum and persistence of MXL's fundamental strengths suggest a continued upward trajectory, making it a good buy for investors seeking high growth potential._
+
+🟢 HIGH CONVICTION
+*DIOD* — Score: *100/100*
+⚡ _Previously flagged 5x since 26 Apr 2026 — signals strengthening_
+💰 Price: $111.41 | Cap: $5119M
+📊 Rev growth 337% | FCF positive | PEG 0.9 | P/S 3.3x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +76% | Cap $5119M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _Based on the Argus screener's high score of 100/100, DIOD appears to be a compelling buy opportunity due to its exceptional revenue growth of 337%, positive free cash flow, and attractive valuation metrics, including a PEG ratio of 0.9 and price-to-sales ratio of 3.3x. The stock's technical indicators, such as its 6-month momentum, above-average moving averages, and strong relative strength compared to the IWM, further support its bullish thesis. Furthermore, the recent news headlines suggest a positive sentiment, which, when combined with the stock's fundamental and technical strengths, make DIOD an attractive long position._
+
+🟢 HIGH CONVICTION
+*SM* — Score: *100/100*
+⚡ _Previously flagged 23x since 20 Mar 2026 — signals strengthening_
+💰 Price: $29.44 | Cap: $7058M
+📊 Rev growth 275% | Gross margin 88% | FCF positive | PEG 0.7 | P/S 2.0x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +33% | Cap $7058M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _Based on the high Argus score of 100/100, driven by robust revenue growth (275%), high gross margin (88%), positive free cash flow, and attractive valuation metrics (PEG 0.7, P/S 2.0x), SM presents a compelling investment opportunity. The stock's technical indicators, including 6mo momentum, above 50MA and 200MA, and strong relative strength against the IWM (+33%), further support its bullish thesis. Notably, the recent news headlines do not appear to have introduced any significant negative catalysts, maintaining the stock's momentum and reinforcing the case for a buy._
+
+🟢 HIGH CONVICTION
+*MUR* — Score: *100/100*
+⚡ _Previously flagged 14x since 28 Mar 2026 — signals strengthening_
+💰 Price: $36.98 | Cap: $5301M
+📊 Rev growth 302% | Gross margin 78% | FCF positive | PEG 0.3 | P/S 1.9x | 6mo Momentum | Above 200MA | Cap $5301M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _MUR's 100/100 score is driven by its exceptional revenue growth (302%), robust gross margin (78%), and positive free cash flow, indicating a strong fundamental momentum. The stock's technical indicators, including 6-month momentum, above 200-day moving average, and low PEG ratio (0.3), further support its bullish case. The recent news headlines suggest a positive sentiment, with no red flags, making MUR an attractive long-term investment opportunity._
+
+🟢 HIGH CONVICTION
+*PTEN* — Score: *100/100*
+⚡ _Previously flagged 1x since 11 May 2026 — signals strengthening_
+💰 Price: $11.42 | Cap: $4335M
+📊 Rev growth 264% | FCF positive | PEG 0.7 | P/S 0.9x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +26% | Cap $4335M | Bull Regime Adj
+💡 *AI Note:* _PTEN's high technical score of 100/100, driven by robust revenue growth (264%), positive free cash flow, and favorable valuation metrics (PEG 0.7, P/S 0.9x), indicates a strong fundamental momentum. The stock's technical indicators, including 6mo momentum, above 50MA and 200MA, and RS vs IWM +26%, further support a bullish outlook. The current news sentiment is neutral, with no recent headlines indicating significant risk or catalysts for a near-term correction, suggesting PTEN is a good buy for investors seeking to capitalize on its momentum and valuation._
+
+🟢 HIGH CONVICTION
+*SSRM* — Score: *100/100*
+⚡ _Previously flagged 9x since 15 Mar 2026 — signals strengthening_
+💰 Price: $34.2 | Cap: $7096M
+📊 Rev growth 498% | Gross margin 55% | FCF positive | PEG 0.0 | P/S 3.7x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +25% | Cap $7096M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _Based on the Argus screener's high score of 100/100, I believe SSRM is a compelling buy due to its exceptional revenue growth of 498%, strong gross margin of 55%, and positive free cash flow, indicating a solid financial foundation. The stock's technical indicators, including a 6-month momentum, above 50MA and 200MA, and a Relative Strength (RS) vs IWM of +25%, suggest a strong uptrend. Furthermore, the recent news headlines are neutral, providing no significant red flags, and the company's market capitalization of $7.1B and persistence bonus from Argus screener reinforce the stock's potential for continued growth._
+
+🟢 HIGH CONVICTION
+*CSTM* — Score: *100/100*
+⚡ _Previously flagged 4x since 26 Apr 2026 — signals strengthening_
+💰 Price: $33.88 | Cap: $4613M
+📊 Rev growth 351% | FCF positive | PEG 0.4 | P/S 0.5x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +30% | Cap $4613M | 🔁 Persistence bonus | Bull Regime Adj
+💡 *AI Note:* _Based on the technical score of 100/100 and fundamental momentum, CSTM appears to be a compelling buy opportunity due to its exceptional revenue growth of 351%, positive free cash flow, and attractive valuation metrics (PEG 0.4, P/S 0.5x). The stock's technical indicators, including 6mo momentum, above 50MA, and above 200MA, suggest a strong uptrend, further supported by its Relative Strength (RS) outperformance against the IWM by 30%. The recent news headlines do not appear to be a significant concern, and the overall sentiment remains positive, making CSTM a promising long-term investment._
+
+🟢 HIGH CONVICTION
+*GATX* — Score: *100/100*
+⚡ _Previously flagged 1x since 11 May 2026 — signals strengthening_
+💰 Price: $186.43 | Cap: $6619M
+📊 Rev growth 321% | Gross margin 74% | FCF positive | PEG 0.6 | P/S 3.5x | 6mo Momentum | Above 50MA | Above 200MA | Cap $6619M | Bull Regime Adj
+💡 *AI Note:* _GATX's 100/100 score on Argus screener is driven by exceptional revenue growth of 321%, a robust gross margin of 74%, and positive free cash flow, indicating strong fundamental momentum. The stock's technical indicators, including a 6-month momentum signal, above-average moving averages, and a low PEG ratio of 0.6, suggest a bullish trend. Amidst this backdrop, recent news headlines suggest a favorable industry environment, with GATX poised to benefit from growing demand for railcar leasing and related services, supporting our bullish thesis on the stock._
+
+🟢 HIGH CONVICTION
+*RDN* — Score: *100/100*
+⚡ _Previously flagged 2x since 27 Apr 2026 — signals strengthening_
+💰 Price: $38.06 | Cap: $5132M
+📊 Rev growth 287% | Gross margin 82% | FCF positive | PEG 0.8 | P/S 3.7x | 6mo Momentum | Above 50MA | Above 200MA | Cap $5132M | Bull Regime Adj
+💡 *AI Note:* _RDN's high technical score of 100/100, driven by robust revenue growth (287%), positive free cash flow, and strong momentum indicators, suggests a compelling investment opportunity. The company's fundamental strengths, including an 82% gross margin and a PEG ratio of 0.8, indicate a potentially undervalued stock. The recent news headlines, while not explicitly bullish, do not raise any red flags, providing a clean backdrop for a long position in this well-capitalized ($5.1B market cap) company._
+
+──────────────────────────────
+_Scanned 400 tickers • Top 10 picks shown_
+
+--- 2026-05-11 11:02:53 ---
+
+📡 *FMP Enrichment — VSAT*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:02:54 ---
+
+📡 *FMP Enrichment — MXL*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:02:55 ---
+
+📡 *FMP Enrichment — DIOD*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:02:56 ---
+
+📡 *FMP Enrichment — SM*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:02:57 ---
+
+📡 *FMP Enrichment — MUR*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:02:58 ---
+
+📡 *FMP Enrichment — PTEN*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:02:59 ---
+
+📡 *FMP Enrichment — SSRM*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:03:00 ---
+
+📡 *FMP Enrichment — CSTM*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:03:01 ---
+
+📡 *FMP Enrichment — GATX*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:03:02 ---
+
+📡 *FMP Enrichment — RDN*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+
+--- 2026-05-11 11:03:03 ---
+
+🏛 *EDGAR Insider Activity — VSAT*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:04 ---
+
+🏛 *EDGAR Insider Activity — MXL*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:04 ---
+
+🏛 *EDGAR Insider Activity — DIOD*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:05 ---
+
+🏛 *EDGAR Insider Activity — SM*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:05 ---
+
+🏛 *EDGAR Insider Activity — MUR*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:06 ---
+
+🏛 *EDGAR Insider Activity — PTEN*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:06 ---
+
+🏛 *EDGAR Insider Activity — SSRM*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:07 ---
+
+🏛 *EDGAR Insider Activity — CSTM*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:07 ---
+
+🏛 *EDGAR Insider Activity — GATX*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
+--- 2026-05-11 11:03:08 ---
+
+🏛 *EDGAR Insider Activity — RDN*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
