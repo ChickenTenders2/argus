@@ -116,6 +116,52 @@ _METRIC_TOOLTIP_CSS = """
 </style>
 """
 
+_GLOBAL_CSS = """
+<style>
+/* ── Hide default Streamlit chrome ── */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+
+/* ── Metric hierarchy ── */
+[data-testid="stMetricValue"] {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.66rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
+    opacity: 0.55 !important;
+}
+[data-testid="stMetricDelta"] { font-size: 0.74rem !important; }
+
+/* ── Border container hover glow ── */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    border-color: rgba(0,180,216,0.45) !important;
+    box-shadow: 0 0 0 1px rgba(0,180,216,0.12);
+}
+
+/* ── Expander header weight ── */
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary span { font-weight: 600 !important; }
+
+/* ── Sidebar nav radio ── */
+[data-testid="stSidebar"] [role="radiogroup"] label {
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+[data-testid="stSidebar"] [role="radiogroup"] label:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+/* ── Dividers ── */
+hr { border-color: rgba(255,255,255,0.08) !important; }
+</style>
+"""
+
 def _find_metric_tooltip(reason_str):
     """Return the tooltip text for a metric reason string by fuzzy-key lookup."""
     r_lower = reason_str.lower()
@@ -275,8 +321,27 @@ def update_unit_value_pref():
     st.session_state.prefs["unit_value"] = st.session_state.unit_value_input
     save_prefs(st.session_state.prefs)
 
-st.set_page_config(page_title="Argus Dashboard", layout="wide")
-st.title("👁 Argus Investment Workstation")
+st.set_page_config(
+    page_title="Argus Investment Workstation",
+    page_icon="👁",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+st.markdown(
+    f"""<div style="border-left:4px solid #00b4d8;padding:12px 18px;margin-bottom:4px;
+        background:linear-gradient(90deg,rgba(0,180,216,0.06) 0%,transparent 72%);
+        border-radius:0 6px 6px 0;">
+        <span style="font-size:1.85rem;font-weight:800;color:#dde6f0;letter-spacing:-0.02em;">
+            👁 Argus <span style="color:#00b4d8;">Investment Workstation</span>
+        </span><br>
+        <span style="font-size:0.78rem;color:#7a8faa;font-style:italic;">
+            Quantitative &nbsp;·&nbsp; AI-Assisted &nbsp;·&nbsp; Regime-Aware
+            &nbsp;|&nbsp; {datetime.now().strftime('%a %d %b %Y, %H:%M')}
+        </span>
+    </div>""",
+    unsafe_allow_html=True,
+)
 
 @st.cache_data(ttl=3600)
 def fetch_ticker_history(ticker, period="1y"):
@@ -346,6 +411,34 @@ def fetch_current_prices(tickers):
                 prices[t] = round(price / 100, 4)   # pence → GBP
             else:
                 prices[t] = round(price / gbpusd, 4)  # USD → GBP
+    except Exception:
+        pass
+    return prices
+
+@st.cache_data(ttl=300)
+def fetch_current_prices_usd(tickers):
+    """Bulk fetch current prices in native currency (USD for US stocks, pence for .L).
+    Use this for return% calculations where entry prices were stored by yfinance (no FX conversion).
+    """
+    if not tickers: return {}
+    prices = {}
+    try:
+        data = yf.download(list(tickers), period="2d", progress=False, auto_adjust=True)
+        if data.empty:
+            return prices
+        if isinstance(data.columns, pd.MultiIndex):
+            if "Close" not in data.columns.get_level_values(0):
+                return prices
+            close_df = data["Close"]
+            for t in tickers:
+                if t in close_df.columns:
+                    val = close_df[t].dropna()
+                    if not val.empty:
+                        prices[t] = float(val.iloc[-1])
+        else:
+            t = tickers[0]
+            if "Close" in data.columns and not data["Close"].dropna().empty:
+                prices[t] = float(data["Close"].dropna().iloc[-1])
     except Exception:
         pass
     return prices
@@ -909,7 +1002,7 @@ def display_cards(df, show_copy_button=True):
             tier_str = row.get("tier", "")
             tier_icon = "🟢" if "HIGH CONVICTION" in str(tier_str) else "🟡" if tier_str else ""
             label = f"#{rank} {tier_icon} {row['ticker']} · Score: {row['score']}/100"
-            with st.expander(label, expanded=False):
+            with st.expander(label, expanded=("HIGH CONVICTION" in str(tier_str))):
                 if "tier" in row and pd.notna(row["tier"]):
                     color = "green" if "HIGH CONVICTION" in row["tier"] else "orange"
                     st.markdown(f"**:{color}[{row['tier']}]**")
@@ -1072,10 +1165,12 @@ if "auto_preset_applied" not in st.session_state:
 
 with st.sidebar:
     _db_url = os.environ.get("DATABASE_URL", "")
-    if _db_url:
-        st.success("🟢 Supabase connected", icon=None)
-    else:
-        st.warning("🟡 SQLite (local fallback) — set DATABASE_URL in .env to persist data to Supabase", icon=None)
+    _db_badge_text = "🟢 &nbsp;Supabase" if _db_url else "🟡 &nbsp;SQLite (local)"
+    _db_badge_help = "" if _db_url else "Set DATABASE_URL in .env to use Supabase."
+    st.markdown(
+        f'<p style="font-size:0.77rem;margin:0 0 6px;opacity:0.72;" title="{_db_badge_help}">{_db_badge_text}</p>',
+        unsafe_allow_html=True,
+    )
     st.markdown("### 👁 Navigate")
     active_tab = st.radio(
         "Navigate",
@@ -1553,9 +1648,9 @@ if active_tab == "Scans":
             day_df = day_df.merge(_scan_counts, on="ticker", how="left")
 
             with st.spinner("Fetching current prices to calculate return..."):
-                current_prices = fetch_current_prices(day_df["ticker"].dropna().unique().tolist())
-                if current_prices and "price" in day_df.columns:
-                    day_df["Current Price"] = day_df["ticker"].map(current_prices).round(2)
+                _raw_prices = fetch_current_prices_usd(day_df["ticker"].dropna().unique().tolist())
+                if _raw_prices and "price" in day_df.columns:
+                    day_df["Current Price"] = day_df["ticker"].map(_raw_prices).round(2)
                     day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
 
             _uv_hist = st.session_state.prefs.get("unit_value", 250)
@@ -2184,6 +2279,10 @@ if active_tab == "Journal":
                             edited_df.to_sql("journal", conn, if_exists="append", index=False)
                         else:
                             edited_df.to_sql("journal", conn, if_exists="replace", index=False)
+                        try:
+                            conn.commit()
+                        except Exception:
+                            pass
                         sync_journal_to_csv(config.JOURNAL_FILE)
                         conn.close()
                         st.success("Log updated successfully!")
@@ -2521,65 +2620,6 @@ if active_tab == "Prediction Model":
         calibration["actual_hit_rate"] = (calibration["actual_hit_rate"] * 100).round(1)
         st.markdown("**Calibration table**")
         st.dataframe(calibration, use_container_width=True)
-
-if active_tab == "Portfolio Optimizer":
-    st.subheader("⚖️ Portfolio Optimizer & Dynamic Sizing")
-    st.markdown("Phase 4: Uses efficient frontier logic to dynamically calculate the best weightings.")
-    
-    st.write("Select tickers to include in the optimization:")
-    
-    if not latest_df.empty:
-        default_tickers = latest_df.head(5)['ticker'].tolist()
-    else:
-        default_tickers = ["AAPL", "MSFT", "GOOG", "AMZN"]
-        
-    opt_tickers = st.multiselect("Optimization Tickers", latest_df["ticker"].tolist() if not latest_df.empty else default_tickers, default=default_tickers)
-    
-    if st.button("⚡ Optimize Portfolio", key="btn_opt"):
-        if len(opt_tickers) < 2:
-            st.error("Please select at least 2 tickers.")
-        else:
-            with st.spinner("Downloading 1-year history and optimizing..."):
-                from engine import optimize_portfolio
-                opt_result = optimize_portfolio(opt_tickers)
-                
-                if "error" in opt_result:
-                    st.error(opt_result["error"])
-                else:
-                    ms = opt_result["max_sharpe"]
-                    mv = opt_result["min_volatility"]
-                    
-                    st.success("Optimization Complete!")
-                    
-                    st.markdown("### Max Sharpe Ratio Portfolio")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        with st.container(border=True): st.metric("Annual Return", f"{ms['return']*100:.1f}%", help="Expected Yield")
-                    with col2:
-                        with st.container(border=True): st.metric("Volatility", f"{ms['volatility']*100:.1f}%", help="Annual Risk")
-                    with col3:
-                        with st.container(border=True): st.metric("Sharpe Ratio", f"{ms['sharpe']:.2f}", help="Risk Adjusted Return")
-                    
-                    st.markdown("#### Optimal Position Sizing (Max Sharpe)")
-                    weights_df = pd.DataFrame(list(ms['weights'].items()), columns=['Ticker', 'Weight'])
-                    weights_df['Weight'] = weights_df['Weight'].apply(lambda x: f"{x*100:.1f}%")
-                    st.dataframe(weights_df, use_container_width=True)
-                    
-                    st.divider()
-                    
-                    st.markdown("### Minimum Volatility Portfolio")
-                    col4, col5, col6 = st.columns(3)
-                    with col4:
-                        with st.container(border=True): st.metric("Annual Return", f"{mv['return']*100:.1f}%", help="Expected Yield")
-                    with col5:
-                        with st.container(border=True): st.metric("Volatility", f"{mv['volatility']*100:.1f}%", help="Annual Risk")
-                    with col6:
-                        with st.container(border=True): st.metric("Sharpe Ratio", f"{mv['sharpe']:.2f}", help="Risk Adjusted Return")
-                    
-                    st.markdown("#### Optimal Position Sizing (Min Volatility)")
-                    weights_df2 = pd.DataFrame(list(mv['weights'].items()), columns=['Ticker', 'Weight'])
-                    weights_df2['Weight'] = weights_df2['Weight'].apply(lambda x: f"{x*100:.1f}%")
-                    st.dataframe(weights_df2, use_container_width=True)
 
 if active_tab == "Help":
     st.subheader("❓ Help & Documentation")

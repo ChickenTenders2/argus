@@ -178,12 +178,16 @@ def run_edgar_enrichment(results, send_telegram_fn):
         return
 
     logger.info(f"EDGAR enrichment for {len(high_conviction)} ticker(s)...")
+    blocks = []
     for pick in high_conviction:
         ticker = pick["ticker"]
         try:
             buys = get_insider_buys(ticker, days=30)
-            block = format_edgar_block(ticker, buys)
-            send_telegram_fn(block)
-            logger.info(f"EDGAR: {ticker} sent ({len(buys)} buy(s) found)")
+            blocks.append(format_edgar_block(ticker, buys))
+            logger.info(f"EDGAR: {ticker} ready ({len(buys)} buy(s) found)")
         except Exception as e:
             logger.warning(f"EDGAR enrichment failed for {ticker}: {e}")
+
+    if blocks:
+        send_telegram_fn("".join(blocks))
+        logger.info(f"EDGAR: {len(blocks)} ticker(s) sent in one message")

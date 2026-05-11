@@ -1,3 +1,4 @@
+import os
 import yfinance as yf
 import pandas as pd
 import requests
@@ -10,8 +11,8 @@ try:
 except ImportError:
     pass
 
-from fmp_fetch import run_fmp_enrichment
-from edgar_fetch import run_edgar_enrichment
+from fmp_fetch import run_fmp_enrichment, get_fmp_data, parse_fmp_data, format_fmp_block
+from edgar_fetch import run_edgar_enrichment, get_insider_buys, format_edgar_block
 from engine import Config, run_scan, save_results, load_memory, monitor_portfolio
 
 try:
@@ -163,6 +164,35 @@ def main():
         raise
 
 
+def _send_combined_enrichment(results):
+    """Build FMP + EDGAR enrichment blocks for all HIGH CONVICTION picks and send as one message."""
+    high_conviction = [r for r in results if r.get("score", 0) >= 80]
+    if not high_conviction:
+        logger.info("Enrichment: no HIGH CONVICTION picks — skipping")
+        return
+
+    fmp_key = os.environ.get("FMP_API_KEY", "")
+    blocks = []
+    for pick in high_conviction:
+        ticker = pick["ticker"]
+        if fmp_key:
+            try:
+                raw = get_fmp_data(ticker)
+                parsed = parse_fmp_data(ticker, raw)
+                blocks.append(format_fmp_block(parsed))
+            except Exception as e:
+                logger.warning(f"FMP enrichment failed for {ticker}: {e}")
+        try:
+            buys = get_insider_buys(ticker, days=30)
+            blocks.append(format_edgar_block(ticker, buys))
+        except Exception as e:
+            logger.warning(f"EDGAR enrichment failed for {ticker}: {e}")
+
+    if blocks:
+        send_telegram("".join(blocks))
+        logger.info(f"Enrichment: combined message sent for {len(high_conviction)} HC ticker(s)")
+
+
 def _run():
     logger.info("Argus scan starting...")
     scan_payload = run_scan(config=config, scan_limit=400, update_memory=True, run_type="scheduled")
@@ -241,8 +271,7 @@ def _run():
     if not send_ok:
         raise RuntimeError("Failed to deliver daily Telegram message.")
     
-    run_fmp_enrichment(results, send_telegram)
-    run_edgar_enrichment(results, send_telegram)
+    _send_combined_enrichment(results)
 
     # ── Watchlist monitor ──
     run_watchlist_monitor()

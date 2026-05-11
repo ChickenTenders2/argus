@@ -1064,11 +1064,12 @@ def _check_red_flags(info, stock):
         flags.append("Dilution risk")
     try:
         earnings = stock.calendar
-        if not earnings.empty and 'EPS Estimate' in earnings.columns and 'Reported EPS' in earnings.columns:
-            last_est = earnings['EPS Estimate'].dropna().iloc[-1]
-            last_rep = earnings['Reported EPS'].dropna().iloc[-1] if len(earnings['Reported EPS'].dropna()) > 0 else 0
-            if last_est > 0 and last_rep / last_est < 0.90:
-                flags.append("Earnings miss")
+        if isinstance(earnings, pd.DataFrame) and not earnings.empty:
+            if 'EPS Estimate' in earnings.columns and 'Reported EPS' in earnings.columns:
+                last_est = earnings['EPS Estimate'].dropna().iloc[-1]
+                last_rep = earnings['Reported EPS'].dropna().iloc[-1] if len(earnings['Reported EPS'].dropna()) > 0 else 0
+                if last_est > 0 and last_rep / last_est < 0.90:
+                    flags.append("Earnings miss")
     except:
         pass
     return flags
@@ -1130,7 +1131,7 @@ def _score_momentum(hist, ticker):
         return score, reasons
 
     price_now  = hist["Close"].iloc[-1]
-    price_6mo  = hist["Close"].iloc[0]
+    price_6mo  = hist["Close"].iloc[-126] if len(hist) >= 126 else hist["Close"].iloc[0]
     ma50       = hist["Close"].rolling(50).mean().iloc[-1]
     vol_avg    = hist["Volume"].rolling(30).mean().iloc[-1]
     vol_today  = hist["Volume"].iloc[-1]

@@ -2,21 +2,22 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-FMP_API_KEY = os.environ.get("FMP_API_KEY", "")
 BASE = "https://financialmodelingprep.com/api"
 HIGH_CONVICTION_THRESHOLD = 80
 
 
 # ── Safe Fetch ───────────────────────────────────────────
 def safe_get(url):
-    """Returns None gracefully on paywalled or failed responses."""
+    """Returns None gracefully on paywalled, rate-limited, or failed responses."""
     try:
         r = requests.get(url, timeout=10)
-        if r.status_code in [401, 402, 403]:
+        if r.status_code in [401, 402, 403, 429]:
             return None
         if r.status_code != 200:
             return None
         data = r.json()
+        if isinstance(data, dict) and ("Error Message" in data or "message" in data):
+            return None
         return data if data else None
     except Exception:
         return None
@@ -24,16 +25,16 @@ def safe_get(url):
 
 # ── Fetch All Endpoints ──────────────────────────────────
 def get_fmp_data(ticker):
-    BASE_STABLE = "https://financialmodelingprep.com/stable"
+    api_key = os.environ.get("FMP_API_KEY", "")
     return {
-        "profile":       safe_get(f"{BASE_STABLE}/profile?symbol={ticker}&apikey={FMP_API_KEY}"),
-        "income":        safe_get(f"{BASE_STABLE}/income-statement?symbol={ticker}&limit=2&apikey={FMP_API_KEY}"),
-        "cashflow":      safe_get(f"{BASE_STABLE}/cash-flow-statement?symbol={ticker}&limit=1&apikey={FMP_API_KEY}"),
-        "key_metrics":   safe_get(f"{BASE_STABLE}/key-metrics-ttm?symbol={ticker}&apikey={FMP_API_KEY}"),
-        "insiders":      safe_get(f"{BASE_STABLE}/insider-trading?symbol={ticker}&limit=20&apikey={FMP_API_KEY}"),
-        "institutions":  safe_get(f"{BASE_STABLE}/institutional-holder?symbol={ticker}&apikey={FMP_API_KEY}"),
-        "earnings_cal":  safe_get(f"{BASE_STABLE}/historical/earning_calendar?symbol={ticker}&apikey={FMP_API_KEY}"),
-        "analyst_grade": safe_get(f"{BASE_STABLE}/grade?symbol={ticker}&limit=5&apikey={FMP_API_KEY}"),
+        "profile":       safe_get(f"{BASE}/v3/profile/{ticker}?apikey={api_key}"),
+        "income":        safe_get(f"{BASE}/v3/income-statement/{ticker}?limit=2&apikey={api_key}"),
+        "cashflow":      safe_get(f"{BASE}/v3/cash-flow-statement/{ticker}?limit=1&apikey={api_key}"),
+        "key_metrics":   safe_get(f"{BASE}/v3/key-metrics-ttm/{ticker}?apikey={api_key}"),
+        "insiders":      safe_get(f"{BASE}/v4/insider-trading?symbol={ticker}&limit=20&apikey={api_key}"),
+        "institutions":  safe_get(f"{BASE}/v3/institutional-holder/{ticker}?apikey={api_key}"),
+        "earnings_cal":  safe_get(f"{BASE}/v3/historical/earning_calendar/{ticker}?apikey={api_key}"),
+        "analyst_grade": safe_get(f"{BASE}/v3/grade/{ticker}?limit=5&apikey={api_key}"),
     }
 
 
@@ -179,7 +180,7 @@ def run_fmp_enrichment(results, send_telegram_fn):
     Only fetches data for HIGH CONVICTION tickers (score >= 80).
     Sends a separate Telegram message per qualifying ticker.
     """
-    if not FMP_API_KEY:
+    if not os.environ.get("FMP_API_KEY", ""):
         print("⚠️ FMP_API_KEY not set — skipping FMP enrichment")
         return
 
@@ -191,21 +192,29 @@ def run_fmp_enrichment(results, send_telegram_fn):
 
     print(f"📡 FMP enrichment running for {len(high_conviction)} HIGH CONVICTION ticker(s)...")
 
+    blocks = []
     for pick in high_conviction:
         ticker = pick["ticker"]
         print(f"  → Fetching {ticker}...")
-        raw = get_fmp_data(ticker)
-        parsed = parse_fmp_data(ticker, raw)
-        send_telegram_fn(format_fmp_block(parsed))
-        print(f"  ✅ {ticker} sent")
+        try:
+            raw = get_fmp_data(ticker)
+            parsed = parse_fmp_data(ticker, raw)
+            blocks.append(format_fmp_block(parsed))
+            print(f"  ✅ {ticker} ready")
+        except Exception as _e:
+            print(f"  ⚠️ FMP enrichment failed for {ticker}: {_e}")
+
+    if blocks:
+        send_telegram_fn("".join(blocks))
+        print(f"📡 FMP enrichment: {len(blocks)} ticker(s) sent in one message")
 
 # ── Temporary Debug Block ─────────────────────────────────
 if __name__ == "__main__":
     import os
     key = os.environ.get("FMP_API_KEY", "")
-    print(f"API Key loaded: {'✅ ' + key[:6] + '...' if key else '❌ EMPTY'}")
+    print(f"FMP_API_KEY loaded: {'✅ ' + key[:6] + '...' if key else '❌ EMPTY'}")
 
-    test_url = f"https://financialmodelingprep.com/stable/income-statement?symbol=PL&limit=2&apikey={key}"
+    test_url = f"https://financialmodelingprep.com/api/v3/income-statement/AAPL?limit=2&apikey={key}"
     r = requests.get(test_url)
     print(f"Status code: {r.status_code}")
     print(f"Response: {r.text[:300]}")
