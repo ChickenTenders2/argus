@@ -1199,7 +1199,20 @@ with st.sidebar:
 
     st.header("Quick Scan Settings")
     min_score = st.slider("Minimum Score", 50, 95, key="min_score")
-    scan_limit = st.slider("Universe size (tickers to scan)", 50, 400, 200, step=50)
+    universe_mode = st.radio(
+        "Universe Mode",
+        ["🔒 Fixed Top", "🎲 Random", "🌐 Full Universe"],
+        key="universe_mode",
+        help="Fixed Top: always scans the largest-weighted R2000 stocks (consistent, fast). Random: different subset each run (broader coverage). Full Universe: all ~2000 R2000 tickers (most thorough, ~5–10 min).",
+    )
+    if universe_mode == "🌐 Full Universe":
+        scan_limit = None
+        _scan_shuffle = True
+        st.caption("⏱ ~5–10 min · scanning all ~2000 Russell 2000 tickers")
+    else:
+        scan_limit = st.slider("Universe size", 50, 800, 400, step=50,
+            help="Number of tickers to scan. ~200 ≈ 1 min · ~400 ≈ 2 min · ~800 ≈ 4 min.")
+        _scan_shuffle = (universe_mode == "🎲 Random")
 
     with st.expander("Advanced Filters & Constraints"):
         price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor",
@@ -1271,7 +1284,7 @@ if _latest_scan_date != _today_str and not st.session_state.get("_auto_scan_done
     with st.status("🔄 Running today's auto-scan…", expanded=True) as _auto_st:
         st.write(f"No scan found for today ({_today_str}). Starting automated scan…")
         try:
-            _auto_payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, run_type="auto")
+            _auto_payload = run_scan(config=config, scan_limit=scan_limit, shuffle=_scan_shuffle, update_memory=True, run_type="auto")
             save_results(
                 results=_auto_payload["results"],
                 scan_date=_auto_payload["scan_date"],
@@ -1600,7 +1613,7 @@ if active_tab == "Scans":
             status_text.text(f"Scanning {ticker}... ({idx + 1}/{total})")
 
         with st.spinner("Scanning tickers..."):
-            payload = run_scan(config=config, scan_limit=scan_limit, update_memory=True, progress_callback=scan_progress_cb, run_type="manual")
+            payload = run_scan(config=config, scan_limit=scan_limit, shuffle=_scan_shuffle, update_memory=True, progress_callback=scan_progress_cb, run_type="manual")
             status_text.text("Scan complete!")
             results = payload["results"]
             scan_date = payload["scan_date"]
@@ -1899,8 +1912,6 @@ if active_tab == "Ticker Detail":
             if _desc:
                 with st.container(border=True):
                     st.markdown(f"**About {ticker}:** {_desc}")
-
-            st.markdown("#### Execution Guidance")
 
             # ── Price History & Execution Guidance ────────────────────────────
             colC, colD = st.columns([2, 1])
@@ -2234,6 +2245,10 @@ if active_tab == "Journal":
                             _import_df["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             conn = get_db_connection()
                             _import_df.to_sql("journal", conn, if_exists="append", index=False)
+                            try:
+                                conn.commit()
+                            except Exception:
+                                pass
                             sync_journal_to_csv(config.JOURNAL_FILE)
                             conn.close()
                             st.success(f"Imported {len(_import_df)} entries into '{_target_j}'.")
@@ -2635,7 +2650,7 @@ if active_tab == "Help":
     ### Pages Overview
     * **Overview:** Snapshot of the latest scan results with interactive visual metric cards. View the current macro Market Regime, FRED macro signals (yield curve, CPI, Fed Funds), last scan date, VIX level, and SPY vs 200-day MA proximity. Bear transition warnings appear automatically when conditions deteriorate. Alerts Log is accessible via expander at the bottom.
     * **Ticker Detail:** Deep dive into specific tickers. Evaluate a two-panel Plotly chart (price on top, Argus score with colour bands on bottom — 🟢 ≥75, 🟡 50–75, 🔴 <50), quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq).
-    * **Scans:** Browse historical database scans with interactive sortable tables and score trend charts. Trigger an on-demand Manual Scan (with optional Telegram delivery) in the bottom section.
+    * **Scans:** Run an on-demand Manual Scan at the top (with optional Telegram delivery), then browse historical database scans with interactive sortable tables and score trend charts below.
     * **Journal:** Personal logbook featuring a **Live Portfolio Analytics Dashboard**. Track Total Invested, Current Value, Net Return %, and visualize Sector Diversification via interactive pie charts. Benchmarks portfolio performance against the S&P 500 (SPY). Portfolio Optimizer accessible via expander at the bottom.
     * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, confusion matrix, feature importance, and calibration accuracy across different market conditions.
     * **Help:** Full documentation, sidebar settings reference, and curated LLM research prompts for AI-assisted stock analysis.
@@ -2705,7 +2720,8 @@ if active_tab == "Help":
 
     **Quick Scan Settings**
     * **Minimum Score:** The minimum Argus score required to pass (Default: 65).
-    * **Universe Size:** How many top market cap tickers to scan (Default: 200).
+    * **Universe Mode:** Controls which slice of the Russell 2000 is scanned. **Fixed Top** always scans the largest-weighted names (fast, consistent). **Random** picks a different subset each run (broader coverage over time). **Full Universe** scans all ~2000 R2000 tickers (~5–10 min).
+    * **Universe Size:** Number of tickers to scan in Fixed/Random modes (Default: 400).
     
     **Advanced Filters & Constraints**
     * **Price Floor ($):** Lowest acceptable stock price, filtering out highly volatile penny stocks.

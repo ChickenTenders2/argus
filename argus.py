@@ -195,7 +195,7 @@ def _send_combined_enrichment(results):
 
 def _run():
     logger.info("Argus scan starting...")
-    scan_payload = run_scan(config=config, scan_limit=400, update_memory=True, run_type="scheduled")
+    scan_payload = run_scan(config=config, scan_limit=None, update_memory=True, run_type="scheduled")
     results = scan_payload["results"]
     scan_date = scan_payload["scan_date"]
     scan_timestamp = scan_payload["scan_timestamp"]

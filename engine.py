@@ -481,15 +481,18 @@ def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", 
     
     return header + alerts_block + highest_block + high_block + footer
 
-def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None, run_type: str = "manual"):
+def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_callback=None, run_type: str = "manual"):
     """
     Execute Argus scan and return standardized payload.
     This is used by both scheduled runs and Streamlit manual runs.
+    shuffle=True  → random subset each run (Random / Full modes)
+    shuffle=False → always scans the top-weighted IWM tickers first (Fixed mode)
     """
     import concurrent.futures
 
     tickers = get_universe()
-    random.shuffle(tickers)
+    if shuffle:
+        random.shuffle(tickers)
     memory_df = load_memory(config.MEMORY_FILE)
     scan_date = datetime.now().strftime("%Y-%m-%d")
     scan_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -504,13 +507,12 @@ def run_scan(config, scan_limit=400, update_memory=True, progress_callback=None,
     def scan_worker(ticker):
         try:
             import time
-            time.sleep(0.7)
+            time.sleep(0.4)
             return score_stock(ticker, memory_df, config, regime_info)
         except Exception:
             return None
 
-    # Limit workers to 10 to avoid too many simultaneous requests to Yahoo Finance
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         # submit all tasks
         future_to_ticker = {executor.submit(scan_worker, t): t for t in valid_tickers}
         
