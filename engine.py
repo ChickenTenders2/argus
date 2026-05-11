@@ -251,11 +251,11 @@ class Config:
     GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
     MEMORY_FILE: str = "data/argus_memory.csv"
     WATCHLIST_FILE: str = "data/argus_watchlist.csv"
-    MIN_SCORE: int = 65
-    TOP_N: int = 10
+    MIN_SCORE: int = 60
+    TOP_N: int = 12
     PRICE_FLOOR: float = 2.0
     PRICE_CEILING: float = None
-    VOL_FLOOR: int = 200000
+    VOL_FLOOR: int = 500000
     RESULTS_FILE: str = "data/argus_results.csv"
     RESULTS_HISTORY_FILE: str = "data/argus_results_history.csv"
     FEATURES_FILE: str = "data/argus_feature_history.csv"

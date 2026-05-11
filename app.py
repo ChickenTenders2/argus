@@ -926,8 +926,8 @@ def apply_preset():
         st.session_state.price_floor = 1.0
         st.session_state.price_ceiling = 10.0
     elif preset == "Default":
-        st.session_state.preset_desc = "**Use when:** Market conditions are neutral or you are unsure which preset to choose. Score ≥65, 63-day horizon, 0.75% risk per trade. A well-rounded starting point for most market environments."
-        st.session_state.min_score = 65
+        st.session_state.preset_desc = "**Use when:** Market conditions are neutral or you are unsure which preset to choose. Score ≥60, 63-day horizon, 0.75% risk per trade. A well-rounded starting point for most market environments."
+        st.session_state.min_score = 60
         st.session_state.horizon_days = 63
         st.session_state.target_return = 10
         st.session_state.risk_per_trade_pct = 0.75
@@ -940,7 +940,7 @@ if "price_ceiling" not in st.session_state:
     st.session_state.price_ceiling = 0.0
 
 if "min_score" not in st.session_state:
-    st.session_state.min_score = 65
+    st.session_state.min_score = 60
 def nav_to_ticker(t):
     st.session_state["selected_ticker"] = t
     st.session_state["main_tabs"] = "Ticker Detail"
