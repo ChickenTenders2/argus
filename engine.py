@@ -1339,6 +1339,11 @@ def score_stock(ticker, memory_df, config, regime_info=None):
             reasons.append("\U0001f501 Persistence bonus")
         score += p_score
 
+        # Capture raw quality score before regime adjustment for MIN_SCORE gating.
+        # The regime multiplier adjusts the *displayed* score to reflect market context
+        # but must not make the threshold unachievable (e.g. 0.7 × max-100 = 70 < 72).
+        quality_score = score
+
         # 6. Market Regime Modification (Phase 3)
         if regime_info and regime_info.get("multiplier", 1.0) != 1.0:
             score *= regime_info["multiplier"]
@@ -1357,7 +1362,8 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         raw_score = score
         score = min(100, score)
 
-        if score < config.MIN_SCORE:
+        # Gate on pre-multiplier quality score so bearish regime penalties don't produce zero results.
+        if quality_score < config.MIN_SCORE:
             return None
 
         return {

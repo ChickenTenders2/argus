@@ -211,6 +211,16 @@ def cached_market_regime():
     return get_market_regime()
 
 
+@st.cache_data(ttl=1800)
+def cached_macro_data():
+    """Standalone macro fetch — used as fallback when regime macro dict is empty."""
+    try:
+        from macro_data import build_macro_context
+        return build_macro_context()
+    except Exception:
+        return {}
+
+
 @st.cache_data(ttl=3600)
 def cached_build_prediction_model(features_file, horizon_days, target_return):
     """Cached wrapper — avoids re-training XGBoost on every page navigation."""
@@ -1165,6 +1175,10 @@ def display_cards(df, show_copy_button=True):
             st.code(_ticker_str, language=None)
 
 
+if "min_score" not in st.session_state:
+    st.session_state.min_score = 60
+if "price_ceiling" not in st.session_state:
+    st.session_state.price_ceiling = 0.0
 if "horizon_days" not in st.session_state:
     st.session_state.horizon_days = 63
 if "target_return" not in st.session_state:
@@ -1464,7 +1478,7 @@ if active_tab == "Overview":
                 st.success("All positions within bounds ✅", icon="✅")
 
     # ── FRED Macro Signal Cards ───────────────────────────────────────────────
-    _macro = regime.get("macro", {})
+    _macro = regime.get("macro") or cached_macro_data()
     _fm1, _fm2, _fm3, _fm4 = st.columns(4)
     _yc = _macro.get("yield_curve", {})
     _cpi = _macro.get("cpi", {})
@@ -1475,12 +1489,14 @@ if active_tab == "Overview":
             with st.container(border=True):
                 _yc_val = _yc.get("value")
                 _yc_sig = _yc.get("signal", "N/A")
+                _yc_src = _yc.get("source", "FRED T10Y2Y")
+                _yc_label = "📈 Yield Curve (10Y-3M)" if "yfinance" in _yc_src else "📈 Yield Curve (10Y-2Y)"
                 st.metric(
-                    "📈 Yield Curve (10Y-2Y)",
+                    _yc_label,
                     f"{_yc_val:+.2f}%" if _yc_val is not None else "N/A",
                     delta=_yc_sig,
                     delta_color="off",
-                    help="Negative = inverted yield curve (recession signal). Source: FRED T10Y2Y.",
+                    help=f"Negative = inverted yield curve (recession signal). Source: {_yc_src}.",
                 )
         with _fm2:
             with st.container(border=True):
@@ -1509,12 +1525,13 @@ if active_tab == "Overview":
                 _fg_val = _fg.get("value")
                 _fg_label = _fg.get("label", "N/A")
                 _fg_trend = _fg.get("trend", "stable")
+                _fg_src = _fg.get("source", "alternative.me")
                 st.metric(
                     "😱 Fear & Greed",
                     f"{_fg_val}/100" if _fg_val is not None else "N/A",
                     delta=f"{_fg_label} · {_fg_trend}",
                     delta_color="off",
-                    help="Alternative.me Fear & Greed Index. <25 = Extreme Fear (contrarian buy zone).",
+                    help=f"Fear & Greed Index. <25 = Extreme Fear (contrarian buy zone). Source: {_fg_src}.",
                 )
 
     # Bear-transition inline warnings
@@ -2395,10 +2412,14 @@ if active_tab == "Journal":
                                 conn.execute(_sa_text("DELETE FROM journal WHERE journal_name = :jn"), {"jn": _current_journal})
                             except Exception:
                                 conn.execute("DELETE FROM journal WHERE journal_name = ?", (_current_journal,))
-                            conn.commit()
-                            edited_df.to_sql("journal", conn, if_exists="append", index=False)
                         else:
-                            edited_df.to_sql("journal", conn, if_exists="replace", index=False)
+                            try:
+                                from sqlalchemy import text as _sa_text
+                                conn.execute(_sa_text("DELETE FROM journal"))
+                            except Exception:
+                                conn.execute("DELETE FROM journal")
+                        conn.commit()
+                        edited_df.to_sql("journal", conn, if_exists="append", index=False)
                         try:
                             conn.commit()
                         except Exception:
@@ -2697,16 +2718,34 @@ if active_tab == "Prediction Model":
             _first = _feat_df["scan_date"].min()
             _last = _feat_df["scan_date"].max()
 
+            _matured = 0
+            try:
+                for _t, _g in _feat_df.groupby("ticker"):
+                    _g = _g.sort_values("scan_date")
+                    _fdates = _g["scan_date"].tolist()
+                    for _idx in range(len(_g)):
+                        _target_dt = _fdates[_idx] + pd.Timedelta(days=horizon_days)
+                        if any(_d >= _target_dt for _d in _fdates[_idx + 1:]):
+                            _matured += 1
+            except Exception:
+                _matured = 0
+
             _mc1, _mc2, _mc3 = st.columns(3)
             _mc1.metric("Feature Rows Collected", _n_rows)
-            _mc2.metric("Unique Scan Days", _n_dates)
-            _mc3.metric("Rows Still Needed", max(0, 30 - _n_rows))
+            _mc2.metric("Matured Samples", _matured)
+            _mc3.metric("Matured Samples Needed", max(0, 30 - _matured))
 
-            if _first and _last and _n_dates > 1:
-                _days_span = (_last - _first).days or 1
-                _rate = _n_rows / _days_span
-                _days_to_go = max(0, int((30 - _n_rows) / _rate)) if _rate > 0 else "?"
-                st.caption(f"Collecting ~{_rate:.1f} rows/day · estimated ~{_days_to_go} more days to activation")
+            if _first and _last:
+                _days_span = max(1, (_last - _first).days)
+                if _days_span < horizon_days:
+                    st.caption(
+                        f"⏱ Samples start maturing in ~{horizon_days - _days_span} more scanning days "
+                        f"(horizon = {horizon_days} days). Keep running daily scans."
+                    )
+                elif _matured < 30:
+                    _rate_mat = max(0.01, _matured / max(1, _days_span - horizon_days))
+                    _eta = int((30 - _matured) / _rate_mat)
+                    st.caption(f"Maturing ~{_rate_mat:.1f} samples/day · ~{_eta} more days to model activation")
 
             st.markdown("**Feature history preview (latest 20 rows)**")
             _preview_cols = [c for c in ["scan_date", "ticker", "score", "f_score", "m_score", "s_score", "v_score", "p_score", "price"] if c in _feat_df.columns]
