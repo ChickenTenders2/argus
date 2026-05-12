@@ -99,6 +99,14 @@ def get_db_connection():
                         conn.commit()
                     except: conn.rollback()
                     try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN entry_date TEXT DEFAULT NULL"))
+                        conn.commit()
+                    except: conn.rollback()
+                    try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN peak_price REAL DEFAULT NULL"))
+                        conn.commit()
+                    except: conn.rollback()
+                    try:
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS features (
                             id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
                             f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
@@ -176,11 +184,12 @@ def migrate_csv_to_sqlite():
             df = pd.read_csv(c.MEMORY_FILE)
             df.to_sql("memory", conn, if_exists="append", index=False)
 
-        # Append to journal if journal table is completely empty
-        db_jrnl_count = pd.read_sql("SELECT COUNT(*) FROM journal", conn).iloc[0,0]
-        if db_jrnl_count == 0 and os.path.exists(c.JOURNAL_FILE):
-            df = pd.read_csv(c.JOURNAL_FILE)
-            df.to_sql("journal", conn, if_exists="append", index=False)
+        # Migrate journal only for local SQLite — never overwrite Supabase journal
+        if not os.environ.get("DATABASE_URL"):
+            db_jrnl_count = pd.read_sql("SELECT COUNT(*) FROM journal", conn).iloc[0,0]
+            if db_jrnl_count == 0 and os.path.exists(c.JOURNAL_FILE):
+                df = pd.read_csv(c.JOURNAL_FILE)
+                df.to_sql("journal", conn, if_exists="append", index=False)
 
         db_feat_count = pd.read_sql("SELECT COUNT(*) FROM features", conn).iloc[0,0]
         if db_feat_count == 0 and os.path.exists(c.FEATURES_FILE):
