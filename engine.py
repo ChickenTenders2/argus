@@ -671,11 +671,22 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
         # Lazily add any new columns before inserting to prevent schema mismatch errors
         _migrate_results_columns(conn, df)
         df.to_sql("results", conn, if_exists="append", index=False)
-        
+
+        # Always append to history CSV for persistence across app restarts.
+        # Streamlit Cloud wipes SQLite on redeploy; the committed CSV is the only
+        # reliable record that a scan already ran today.
+        if history_file:
+            try:
+                if os.path.exists(history_file):
+                    _hist_existing = pd.read_csv(history_file)
+                    _hist_combined = pd.concat([_hist_existing, df], ignore_index=True)
+                else:
+                    _hist_combined = df.copy()
+                _hist_combined.to_csv(history_file, index=False)
+            except Exception as _he:
+                logger.warning(f"save_results: could not update history CSV: {_he}")
+
         if write_latest:
-            # To emulate latest_file logic in app.py, we can leave this part writing to CSV 
-            # OR we just rely on latest rows inside sqlite. We will write to latest_file 
-            # to not break app.py immediately, although we will update app.py too.
             df.to_csv(latest_file, index=False)
     conn.close()
 
@@ -1437,8 +1448,12 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         raw_score = score
         score = min(100, score)
 
-        # Gate on pre-multiplier quality score so bearish regime penalties don't produce zero results.
-        if quality_score < config.MIN_SCORE:
+        # Gate on pre-multiplier quality score, adjusted for the regime multiplier so that
+        # borderline stocks are not rejected before the multiplier can push them over MIN_SCORE.
+        # e.g. MIN_SCORE=75, Bull ×1.05 → gate = 71.4, letting quality_score 72 → 75.6 pass.
+        _gate_mult = regime_info.get("multiplier", 1.0) if regime_info else 1.0
+        _gate_threshold = config.MIN_SCORE / max(_gate_mult, 0.01)
+        if quality_score < _gate_threshold:
             return None
 
         return {

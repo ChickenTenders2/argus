@@ -196,19 +196,24 @@ def _find_metric_tooltip(reason_str):
     return ""
 
 def render_metric_badges(reasons):
-    """Render metric reason badges with CSS hover tooltips."""
+    """Render metric reason badges with fully inline styles for expander compatibility."""
     if not reasons:
         return
-    badges_html = '<div class="argus-badge-wrap">'
+    _badge = (
+        "display:inline-block;background:#1a2e4a;color:#c9d6e8;"
+        "padding:3px 9px;border-radius:10px;font-size:0.75rem;"
+        "white-space:nowrap;border:1px solid #2a4a6a;margin:2px 1px"
+    )
+    html = '<div style="display:flex;flex-wrap:wrap;gap:5px;margin:5px 0">'
     for r in reasons:
         r = str(r).strip()
         if not r:
             continue
         tip = _find_metric_tooltip(r)
-        tip_html = f'<span class="argus-tip">{tip}</span>' if tip else ''
-        badges_html += f'<span class="argus-badge">{r}{tip_html}</span>'
-    badges_html += '</div>'
-    st.markdown(badges_html, unsafe_allow_html=True)
+        title_attr = f' title="{tip}"' if tip else ''
+        html += f'<span style="{_badge}"{title_attr}>{r}</span>'
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def get_signal_label(score):
@@ -1397,15 +1402,24 @@ if os.path.exists(config.RESULTS_FILE):
 else:
     latest_df = pd.DataFrame()
 
-# ── Auto-scan on load: fire once per session if no scan exists for today ──
+# ── Auto-scan on load: fire only if no scan has run today (any source) ──
 _today_str = datetime.now().strftime("%Y-%m-%d")
 _latest_scan_date = (
     str(latest_df["scan_date"].iloc[0])[:10]
     if not latest_df.empty and "scan_date" in latest_df.columns
     else ""
 )
+# Also check full history DB/CSV — more comprehensive than just the latest-results file.
+# This ensures a scan committed via GH Actions or run earlier in the session is detected.
+_history_has_today = (
+    not history_df.empty
+    and "scan_date" in history_df.columns
+    and history_df["scan_date"].astype(str).str[:10].eq(_today_str).any()
+)
+_has_scan_today = (_latest_scan_date == _today_str) or _history_has_today
+
 _auto_scan_ran = False
-if _latest_scan_date != _today_str and not st.session_state.get("_auto_scan_done_today", False):
+if not _has_scan_today and not st.session_state.get("_auto_scan_done_today", False):
     with st.status("🔄 Running today's auto-scan…", expanded=True) as _auto_st:
         st.write(f"No scan found for today ({_today_str}). Starting automated scan…")
         try:
@@ -1465,11 +1479,17 @@ _strip_reason_str = re.sub(
 )
 st.markdown(
     f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:4px;'
-    f'padding:5px 12px;margin-bottom:10px;font-size:0.82rem;">'
+    f'padding:5px 12px;margin-bottom:4px;font-size:0.82rem;">'
     f'<strong>{_strip_regime["regime"]}</strong> regime'
     f' · {_strip_mult_str}{_strip_vix_str}'
     f' · <em>{_strip_reason_str}</em></div>',
     unsafe_allow_html=True,
+)
+st.caption(
+    "ⓘ **×mult** = Argus score multiplier (>1 bull boost · <1 bear penalty)  ·  "
+    "**VIX** = CBOE fear gauge (<18 calm · 18–25 elevated · >25 high fear)  ·  "
+    "**50/200-day MA** = rolling avg of closing prices — price above = uptrend  ·  "
+    "**macro adj** = multiplier offset from yield curve / CPI / Fear & Greed signals"
 )
 
 if active_tab == "Overview":
