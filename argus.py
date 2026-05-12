@@ -207,7 +207,7 @@ def _run():
             f"No high-conviction picks found today. Market may be choppy."
         )
         if not send_ok:
-            raise RuntimeError("Failed to deliver daily Telegram message.")
+            logger.warning("Telegram delivery failed for no-results message — scan results saved, continuing.")
         save_results(
             results=[],
             scan_date=scan_date,
@@ -269,7 +269,7 @@ def _run():
     body = highest_block + high_block
     send_ok = send_telegram(header + alerts_block + body + footer)
     if not send_ok:
-        raise RuntimeError("Failed to deliver daily Telegram message.")
+        logger.warning("Telegram delivery failed for main scan message — scan results saved, continuing.")
     
     _send_combined_enrichment(results)
 

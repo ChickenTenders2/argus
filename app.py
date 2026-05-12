@@ -882,6 +882,14 @@ def send_telegram_message(token, chat_id, message):
 def apply_preset():
     preset = st.session_state.preset_selector
     st.session_state.price_ceiling = 0.0
+    # Defensive reset: restore all scoring thresholds to safe defaults so stale
+    # or incorrectly-set values never silently suppress scan results.
+    st.session_state.rev_growth_high = 30
+    st.session_state.rev_growth_low = 20
+    st.session_state.roce_threshold = 20
+    st.session_state.gross_margin_high = 60
+    st.session_state.gross_margin_low = 40
+    st.session_state.inst_own_ceiling = 40
     if preset == "High Conviction":
         st.session_state.preset_desc = "**Use when:** You want the fewest, highest-quality picks only. Strict score filter (≥75) in a strong bull market where you are comfortable concentrating capital into 1–3 exceptional setups instead of diversifying broadly."
         st.session_state.min_score = 75
@@ -1032,7 +1040,7 @@ def quick_log_dialog(ticker, price, stop_loss_pct, take_profit_pct):
             st.rerun()
 
 
-def display_cards(df, show_copy_button=True):
+def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
     """Render a DataFrame of picks as visual cards instead of a wide table."""
     if df.empty:
         st.info("No picks to display.")
@@ -1040,13 +1048,12 @@ def display_cards(df, show_copy_button=True):
 
     df = _compute_display_rank(df)
     n = len(df)
-    remainder = n % 5
 
     row_cols = None
     for i, (_, row) in enumerate(df.iterrows()):
-        if i % 5 == 0:
-            row_cols = st.columns(5)
-        with row_cols[i % 5]:
+        if i % cols_per_row == 0:
+            row_cols = st.columns(cols_per_row)
+        with row_cols[i % cols_per_row]:
             rank      = int(row.get("_rank", i + 1))
             tier_str  = str(row.get("tier", ""))
             is_hc     = "HIGH CONVICTION" in tier_str
@@ -1064,11 +1071,14 @@ def display_cards(df, show_copy_button=True):
             if raw_sc > 100:
                 score_display += f" ★+{raw_sc - 100}"
 
-            label = (
-                f"#{rank} {tier_icon}[{tier_short}] {row['ticker']}"
-                f" · {score_display}"
-                f" [F:{f_sc} M:{m_sc} S:{s_sc} V:{v_sc}]"
-            )
+            if compact:
+                label = f"#{rank} {tier_icon} {row['ticker']} · {score_val}"
+            else:
+                label = (
+                    f"#{rank} {tier_icon}[{tier_short}] {row['ticker']}"
+                    f" · {score_display}"
+                    f" [F:{f_sc} M:{m_sc} S:{s_sc} V:{v_sc}]"
+                )
 
             with st.expander(label, expanded=is_hc):
                 # Sector colour pill
@@ -1431,13 +1441,34 @@ _strip_color_map = {
 }
 _sc = _strip_color_map.get(_strip_regime["regime"], "#555555")
 _strip_vix = _strip_regime.get("vix_level")
-_strip_vix_str = f" · VIX {_strip_vix:.1f}" if _strip_vix else ""
+_tip_style = "text-decoration:underline dotted;cursor:help"
+_strip_vix_str = (
+    f' · <abbr title="CBOE Volatility Index — market fear gauge. &lt;18 = calm, 18–25 = elevated, &gt;25 = high fear" style="{_tip_style}">'
+    f'VIX {_strip_vix:.1f}</abbr>'
+    if _strip_vix else ""
+)
+_strip_mult = _strip_regime["multiplier"]
+_strip_mult_str = (
+    f'<abbr title="Score multiplier: all Argus scores are scaled by this factor in the current regime. '
+    f'&gt;1.0 = bull boost, &lt;1.0 = bear penalty, 1.0 = neutral" style="{_tip_style}">'
+    f'×{_strip_mult}</abbr>'
+)
+_strip_reason_str = re.sub(
+    r'(50-day|200-day)',
+    rf'<abbr title="Moving average: rolling average of closing prices over N days. Price above MA = uptrend." style="{_tip_style}">\1</abbr>',
+    _strip_regime["reason"],
+)
+_strip_reason_str = re.sub(
+    r'(macro adj [+\-]?\d+\.\d+)',
+    rf'<abbr title="Macro adjustment: the multiplier was shifted by macro signals — yield curve inversion, elevated CPI, or extreme fear reading." style="{_tip_style}">\1</abbr>',
+    _strip_reason_str,
+)
 st.markdown(
     f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:4px;'
     f'padding:5px 12px;margin-bottom:10px;font-size:0.82rem;">'
     f'<strong>{_strip_regime["regime"]}</strong> regime'
-    f' · ×{_strip_regime["multiplier"]}{_strip_vix_str}'
-    f' · <em>{_strip_regime["reason"]}</em></div>',
+    f' · {_strip_mult_str}{_strip_vix_str}'
+    f' · <em>{_strip_reason_str}</em></div>',
     unsafe_allow_html=True,
 )
 
@@ -1474,6 +1505,13 @@ if active_tab == "Overview":
             )
             st.caption(f"Last scan: **{scan_date_display}** · Refreshes every hour")
 
+    _SECTOR_SHORT = {
+        "Technology": "Tech", "Communication Services": "Comm.",
+        "Consumer Cyclical": "Cons.Cyc.", "Consumer Defensive": "Cons.Def.",
+        "Healthcare": "Health", "Financial Services": "Fin.",
+        "Basic Materials": "Matls", "Real Estate": "RE",
+        "Energy": "Energy", "Industrials": "Ind.", "Utilities": "Utils",
+    }
     with _bc2:
         with st.container(border=True):
             st.markdown("**🏆 Top Picks Today**")
@@ -1483,14 +1521,18 @@ if active_tab == "Overview":
                 for _i, (_, _tr) in enumerate(_top5.iterrows()):
                     _sig_lbl, _sig_col = get_signal_label(_tr.get("score", 0))
                     _sig_icon = _sig_lbl.split()[0]
+                    _raw_sec = _tr.get("sector", "")
+                    _sec_short = _SECTOR_SHORT.get(_raw_sec, _raw_sec[:6] if _raw_sec else "")
                     with _tp_cols[_i]:
                         st.markdown(
                             f"**{_tr['ticker']}**  \n"
                             f":{_sig_col}[{_sig_icon} {_tr['score']:.0f}]"
-                            + (f"  \n*{_tr.get('sector', '')}*" if _tr.get("sector") else ""),
+                            + (f"  \n*{_sec_short}*" if _sec_short else ""),
                         )
+                st.caption(f"Scan: **{scan_date_display}**")
             else:
                 st.caption("No scan data yet — run a scan to see picks.")
+                st.caption("&nbsp;", unsafe_allow_html=True)
 
     with _bc3:
         with st.container(border=True):
@@ -1502,6 +1544,7 @@ if active_tab == "Overview":
                     st.caption(f"…and {len(_briefing_alerts) - 3} more. Check Journal tab.")
             else:
                 st.success("All positions within bounds ✅", icon="✅")
+            st.caption("Auto-monitored vs. open journal positions.")
 
     # ── FRED Macro Signal Cards ───────────────────────────────────────────────
     _macro = regime.get("macro") or cached_macro_data()
@@ -1648,7 +1691,7 @@ if active_tab == "Overview":
             )
 
         # Display the visual card grid instead of a flat table
-        display_cards(subset_view)
+        display_cards(subset_view, cols_per_row=5, compact=True)
 
         with st.expander("Show Raw Data Table"):
             _export_view = subset_view.copy()
@@ -1833,6 +1876,13 @@ if active_tab == "Scans":
                 st.info("No high conviction picks found in this run.")
         else:
             st.warning("No tickers met the current criteria.")
+            with st.expander("🔍 Diagnostic — Why no results?"):
+                st.write("**Active thresholds most likely to restrict results:**")
+                st.write(f"- Min Score: **{min_score}** (lower = more picks)")
+                st.write(f"- Rev Growth (full pts): **≥{st.session_state.get('rev_growth_high', 30)}%** · (partial): **≥{st.session_state.get('rev_growth_low', 20)}%**")
+                st.write(f"- Inst. Ownership Ceiling: **<{st.session_state.get('inst_own_ceiling', 40)}%** (too low = very few qualify)")
+                st.write(f"- Vol Floor: **{int(vol_floor):,}** · Price Floor: **${price_floor:.2f}**")
+                st.caption("💡 Switch to the **Default** preset in the sidebar to reset all thresholds, then re-run.")
 
         if send_to_telegram:
             alerts = monitor_portfolio()
@@ -2938,6 +2988,33 @@ if active_tab == "Help":
     * **Risk per Trade:** The % of your total portfolio you're willing to lose if stopped out (Default: 0.75%).
     * **Max Position Size:** Maximum portfolio allocation allowed in a single stock, forcing diversification (Default: 8.0%).
     ''')
+
+    st.divider()
+    st.subheader("📋 Copy Today's Scan Tickers")
+    st.caption("Quickly copy tickers from the latest scan to paste into the AI research prompts below.")
+    if not latest_df.empty:
+        _help_tickers_all = ", ".join(latest_df["ticker"].tolist())
+        _help_top10 = latest_df.sort_values("score", ascending=False).head(10)["ticker"].tolist()
+        _help_tickers_top10 = ", ".join(_help_top10)
+        _ht1, _ht2 = st.columns(2)
+        with _ht1:
+            st.markdown(f"**All picks ({len(latest_df)})**")
+            st.code(_help_tickers_all, language=None)
+        with _ht2:
+            st.markdown(f"**Top 10 by score**")
+            st.code(_help_tickers_top10, language=None)
+        st.markdown("**Pre-filled Watchlist Impact Prompt (M3):**")
+        _help_prompt = (
+            f"The following stocks are on my active watchlist: {_help_tickers_top10}.\n"
+            f"Today is [TODAY'S DATE]. For each ticker, briefly answer:\n"
+            f"1. Is there any major news or catalyst in the last 5 days that directly affects this company?\n"
+            f"2. Does any broad macro event meaningfully change the risk/reward for this stock?\n"
+            f"3. Flag any ticker I should be especially cautious about right now, and why.\n"
+            f"Format as a bullet list per ticker."
+        )
+        st.code(_help_prompt, language="text")
+    else:
+        st.info("No scan data yet — run a scan first to populate tickers here.")
 
     st.divider()
     st.subheader("🤖 AI Prompts for Research")
