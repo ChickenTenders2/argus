@@ -120,9 +120,16 @@ def get_db_connection():
                             conn.rollback()
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS results (
                             id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
+                            raw_score REAL,
                             f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
                             tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
                             scan_date TEXT, scan_timestamp TEXT, run_type TEXT)"""))
+                        conn.commit()
+                    except Exception as e:
+                        logger.warning(f"Concurrent DB init safely skipped (Phase 2b): {e}")
+                        conn.rollback()
+                    try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE results ADD COLUMN IF NOT EXISTS raw_score REAL"))
                         conn.commit()
                     except Exception as e:
                         logger.warning(f"Concurrent DB init safely skipped (Phase 2): {e}")
@@ -175,12 +182,18 @@ def get_db_connection():
                         pass
                     conn.execute("""CREATE TABLE IF NOT EXISTS results (
                         id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, sector TEXT, score REAL,
+                        raw_score REAL,
                         f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
                         tier TEXT, reasons TEXT, price REAL, mkt_cap TEXT,
                         scan_date TEXT, scan_timestamp TEXT, run_type TEXT)""")
                     conn.commit()
                 except Exception as e:
                     logger.warning(f"Concurrent local DB init safely skipped (Phase 2): {e}")
+                try:
+                    conn.execute("ALTER TABLE results ADD COLUMN raw_score REAL")
+                    conn.commit()
+                except Exception:
+                    pass
                 _DB_INITIALIZED = True
     return conn
 
@@ -608,6 +621,40 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
         "filtered_count": filtered_count,
     }
 
+def _migrate_results_columns(conn, df):
+    """Lazily add any DataFrame columns missing from the results table to prevent schema mismatch errors."""
+    try:
+        db_url = os.environ.get("DATABASE_URL")
+        if db_url:
+            import sqlalchemy as _sa
+            for col in df.columns:
+                if col == "id":
+                    continue
+                dtype = "TEXT" if df[col].dtype == object else "DOUBLE PRECISION"
+                try:
+                    conn.execute(_sa.text(f"ALTER TABLE results ADD COLUMN IF NOT EXISTS {col} {dtype}"))
+                    conn.commit()
+                except Exception:
+                    try: conn.rollback()
+                    except Exception: pass
+        else:
+            try:
+                existing = {r[1] for r in conn.execute("PRAGMA table_info(results)").fetchall()}
+            except Exception:
+                existing = {r[1] for r in conn.execute("PRAGMA table_info(results)")}
+            for col in df.columns:
+                if col in ("id",) or col in existing:
+                    continue
+                dtype = "TEXT" if df[col].dtype == object else "REAL"
+                try:
+                    conn.execute(f"ALTER TABLE results ADD COLUMN {col} {dtype}")
+                    conn.commit()
+                except Exception as _ce:
+                    logger.warning(f"Could not add column '{col}' to results table: {_ce}")
+    except Exception as _me:
+        logger.warning(f"_migrate_results_columns failed: {_me}")
+
+
 def save_results(results, scan_date, scan_timestamp, run_type, latest_file, history_file, write_latest, feature_file=None):
     """
     Persist scan outputs
@@ -621,7 +668,8 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
         # Handle "reasons" list conversion to string for sqlite
         if "reasons" in df.columns:
             df["reasons"] = df["reasons"].apply(lambda x: json.dumps(x) if isinstance(x, list) else x)
-        
+        # Lazily add any new columns before inserting to prevent schema mismatch errors
+        _migrate_results_columns(conn, df)
         df.to_sql("results", conn, if_exists="append", index=False)
         
         if write_latest:
