@@ -1040,13 +1040,13 @@ def display_cards(df, show_copy_button=True):
 
     df = _compute_display_rank(df)
     n = len(df)
-    remainder = n % 3
+    remainder = n % 5
 
     row_cols = None
     for i, (_, row) in enumerate(df.iterrows()):
-        if i % 3 == 0:
-            row_cols = st.columns(3)
-        with row_cols[i % 3]:
+        if i % 5 == 0:
+            row_cols = st.columns(5)
+        with row_cols[i % 5]:
             rank      = int(row.get("_rank", i + 1))
             tier_str  = str(row.get("tier", ""))
             is_hc     = "HIGH CONVICTION" in tier_str
