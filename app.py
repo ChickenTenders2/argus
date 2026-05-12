@@ -1085,7 +1085,7 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
                     f" [F:{f_sc} M:{m_sc} S:{s_sc} V:{v_sc}]"
                 )
 
-            with st.expander(label, expanded=is_hc):
+            with st.expander(label, expanded=True):
                 # Sector colour pill
                 sector = str(row.get("sector", "Unknown") or "Unknown")
                 s_color = SECTOR_COLORS.get(sector, "gray")
@@ -1477,19 +1477,21 @@ _strip_reason_str = re.sub(
     rf'<abbr title="Macro adjustment: the multiplier was shifted by macro signals — yield curve inversion, elevated CPI, or extreme fear reading." style="{_tip_style}">\1</abbr>',
     _strip_reason_str,
 )
+_regime_info_tip = (
+    "×mult: score multiplier (>1 = bull boost, <1 = bear penalty). "
+    "VIX: CBOE fear gauge (<18 calm · 18-25 elevated · >25 high fear). "
+    "50/200-day MA: price above moving average = uptrend. "
+    "macro adj: multiplier offset from yield curve / CPI / Fear&Greed signals."
+)
 st.markdown(
     f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:4px;'
-    f'padding:5px 12px;margin-bottom:4px;font-size:0.82rem;">'
+    f'padding:5px 12px;margin-bottom:10px;font-size:0.82rem;">'
     f'<strong>{_strip_regime["regime"]}</strong> regime'
     f' · {_strip_mult_str}{_strip_vix_str}'
-    f' · <em>{_strip_reason_str}</em></div>',
+    f' · <em>{_strip_reason_str}</em>'
+    f' <span title="{_regime_info_tip}" style="cursor:help;opacity:0.55;font-size:0.8rem;margin-left:4px">ⓘ</span>'
+    f'</div>',
     unsafe_allow_html=True,
-)
-st.caption(
-    "ⓘ **×mult** = Argus score multiplier (>1 bull boost · <1 bear penalty)  ·  "
-    "**VIX** = CBOE fear gauge (<18 calm · 18–25 elevated · >25 high fear)  ·  "
-    "**50/200-day MA** = rolling avg of closing prices — price above = uptrend  ·  "
-    "**macro adj** = multiplier offset from yield curve / CPI / Fear & Greed signals"
 )
 
 if active_tab == "Overview":
