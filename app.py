@@ -1478,10 +1478,10 @@ _strip_reason_str = re.sub(
     _strip_reason_str,
 )
 _regime_info_tip = (
-    "×mult: score multiplier (>1 = bull boost, <1 = bear penalty). "
-    "VIX: CBOE fear gauge (<18 calm · 18-25 elevated · >25 high fear). "
+    "\u00d7mult: score multiplier (&gt;1 = bull boost, &lt;1 = bear penalty). "
+    "VIX: CBOE fear gauge (&lt;18 calm &middot; 18\u201325 elevated &middot; &gt;25 high fear). "
     "50/200-day MA: price above moving average = uptrend. "
-    "macro adj: multiplier offset from yield curve / CPI / Fear&Greed signals."
+    "macro adj: multiplier offset from yield curve / CPI / Fear&amp;Greed signals."
 )
 st.markdown(
     f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:4px;'
@@ -2063,7 +2063,8 @@ if active_tab == "Ticker Detail":
             try:
                 from engine import score_stock, load_memory
                 _mem_df = load_memory()
-                _manual_result = score_stock(_manual_ticker_input, _mem_df, config, None)
+                _live_regime = cached_market_regime()
+                _manual_result = score_stock(_manual_ticker_input, _mem_df, config, _live_regime)
                 if _manual_result:
                     _mr_df = pd.DataFrame([_manual_result])
                     _mr_df = add_predictions(_mr_df, model)
@@ -2099,8 +2100,15 @@ if active_tab == "Ticker Detail":
         ticker = st.selectbox("Select ticker", ticker_options, index=idx)
         st.session_state["selected_ticker"] = ticker
         
-        # Load up the ticker history
-        tdf = history_df[history_df["ticker"] == ticker].copy()
+        # Load up the ticker history — merge latest_df so the current scan score is always visible
+        # even if history_df was loaded before this session's scan ran.
+        _tdf_hist = history_df[history_df["ticker"] == ticker].copy()
+        _tdf_fresh = latest_df[latest_df["ticker"] == ticker].copy() if not latest_df.empty and "ticker" in latest_df.columns else pd.DataFrame()
+        tdf = pd.concat([_tdf_hist, _tdf_fresh], ignore_index=True)
+        if "scan_date" in tdf.columns and "scan_timestamp" in tdf.columns:
+            tdf = tdf.drop_duplicates(subset=["ticker", "scan_date"], keep="last")
+        elif "scan_date" in tdf.columns:
+            tdf = tdf.drop_duplicates(subset=["ticker", "scan_date"], keep="last")
         tdf["scan_date"] = pd.to_datetime(tdf["scan_date"], errors="coerce")
         tdf = tdf.sort_values("scan_date", ascending=False)
         
@@ -2974,38 +2982,80 @@ if active_tab == "Help":
     * Scan history is preserved via the committed CSV files (`argus_results_history.csv`) and automatically re-imported into your local database if it is ever missing
 
     ---
+    ### 🟢 Signal Label Reference
+
+    All signals are derived from the **post-regime-multiplier Argus score** (0–100):
+
+    | Score | Signal | Meaning |
+    |---|---|---|
+    | ≥ 85 | 🟢 Strong Buy | Top-tier quality + momentum — highest confidence |
+    | ≥ 75 | 🔵 Buy | High quality, suitable for entry |
+    | ≥ 65 | 🟡 Moderate Buy | Good setup but not exceptional — watchlist candidate |
+    | ≥ 55 | ⚪ Hold / Watch | Borderline — wait for a catalyst |
+    | < 55 | 🔴 Avoid for Now | Poor fundamentals or adverse momentum |
+
+    > The same scoring function is used everywhere — scan cards, Ticker Detail, and manual lookups — so the signal will always match as long as the same market regime is active.
+
+    ---
     ### 🎛 Global Presets — Quick Reference
 
-    | Preset | Best for |
-    |---|---|
-    | **Default** | Neutral market, unsure which preset |
-    | **High Conviction** | Bull market, concentrate into 1–3 best picks |
-    | **Momentum Sprint** | Strong trend, catch short-term breakouts |
-    | **Earnings Season** | Jan / Apr / Jul / Oct earnings cycles |
-    | **Swing Recovery** | Market pulled back 10–20%, expect mean-reversion |
-    | **Aggressive Growth** | Confirmed bull run, higher risk tolerance |
-    | **Liquidity Focus** | Large accounts needing fast entry/exit |
-    | **Capital Preservation** | Bear or Extreme Fear regime active |
-    | **Bear Market Defense** | SPY below 200-day MA |
-    | **Small Cap Hunter** | Bull market, high risk appetite |
-    | **Penny Stock High Risk** | Speculative allocation only |
+    | Preset | Min Score | Best for |
+    |---|---|---|
+    | **Default** | 60 | Neutral market, unsure which preset — gives ~8–12 picks |
+    | **High Conviction** | 75 | Bull market, concentrate into 1–3 highest-quality picks |
+    | **Momentum Sprint** | 65 | Strong trend, catch short-term breakouts (~30% target, 21d) |
+    | **Earnings Season** | 65 | Jan / Apr / Jul / Oct earnings cycles |
+    | **Swing Recovery** | 65 | Market pulled back 10–20%, expect mean-reversion |
+    | **Aggressive Growth** | 65 | Confirmed bull run, higher risk tolerance |
+    | **Liquidity Focus** | 65 | Large accounts needing fast entry/exit (vol ≥ 2M) |
+    | **Capital Preservation** | 72 | Bear or Extreme Fear regime active |
+    | **Bear Market Defense** | 70 | SPY below 200-day MA |
+    | **Small Cap Hunter** | 62 | Bull market, high risk appetite (price floor $0.50) |
+    | **Penny Stock High Risk** | 55 | Speculative allocation only |
+
+    > **For finding 10%+ movers:** Use **Momentum Sprint** (21-day horizon, 30% target). It balances strict-enough quality (≥65) with the short-term breakout signals most predictive of big moves.
+
+    > **High Conviction returns 2–3 picks** by design — it requires score ≥75 which only the top ~1% of the 400-stock scan universe achieves. If you need 8–12 picks, use **Default**.
+
+    ---
+    ### 🔧 Scoring Thresholds — What They Do
+
+    The **Scoring Thresholds** expander in the sidebar lets you tune how generously each fundamental metric awards points. Changing these does **not** block any stock outright — it only shifts how many points they earn. The **Minimum Score** slider is the actual pass/fail gate.
+
+    | Threshold | Default | Effect |
+    |---|---|---|
+    | Rev Growth (full pts) | 30% | ≥30% revenue growth → 20 pts; ≥20% → 12 pts |
+    | ROCE threshold | 20% | Return on Capital Employed ≥20% → 7 pts |
+    | Gross Margin (full pts) | 60% | Gross margin >60% → 5 pts; >40% → 3 pts |
+    | Inst. Ownership Ceiling | 70% | inst. ownership <70% → 13 pts (undiscovered signal) |
+
+    > Applying any preset resets all thresholds to these safe defaults automatically.
+
+    ---
+    ### ⚡ Auto-Scan Behaviour
+
+    On app startup, Argus checks whether a scan has already run today (by looking at both the latest CSV and the full results history). If a scan exists for today it skips the auto-scan entirely. This prevents redundant scans after a code push or Streamlit reboot on the same day.
+
+    The check uses **two sources** in order:
+    1. `argus_results.csv` — the last committed latest-results file (written by GitHub Actions)
+    2. `argus_results_history.csv` — the full history CSV (now also written by every manual/auto scan)
 
     ---
     ### Sidebar Settings Explained
 
     **Quick Scan Settings**
-    * **Minimum Score:** The minimum Argus score required to pass (Default: 65).
+    * **Minimum Score:** The minimum Argus score required to appear in results (Default: 60).
     * **Universe Mode:** Controls which slice of the Russell 2000 is scanned. **Fixed Top** always scans the largest-weighted names (fast, consistent). **Random** picks a different subset each run (broader coverage over time). **Full Universe** scans all ~2000 R2000 tickers (~5–10 min).
     * **Universe Size:** Number of tickers to scan in Fixed/Random modes (Default: 400).
-    
+
     **Advanced Filters & Constraints**
     * **Price Floor ($):** Lowest acceptable stock price, filtering out highly volatile penny stocks.
     * **Volume Floor:** Minimum average daily trading volume to ensure liquidity (Default: 500,000).
-    
+
     **ML Prediction Horizons**
     * **Horizon Days:** The timeframe over which the ML model predicts price movement (Default: 63 days, ~1 quarter).
     * **Target Return (%):** The target profit percentage the ML model evaluates the stock against (Default: 10%).
-    
+
     **Advanced Risk Rules**
     * **Risk per Trade:** The % of your total portfolio you're willing to lose if stopped out (Default: 0.75%).
     * **Max Position Size:** Maximum portfolio allocation allowed in a single stock, forcing diversification (Default: 8.0%).

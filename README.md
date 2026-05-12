@@ -26,8 +26,8 @@ The project is designed to run automatically via local cron or GitHub Actions, s
 ## 🚀 Features
 
 *   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI, interactive AgGrid history tables, annotated metric badges, and styled metric cards for professional-grade navigation and data consumption.
-*   **Quantitative Scoring:** Ranks tickers (0-100) using a multi-factor `score_stock()` algorithm focusing on revenue growth, margins, technical momentum (50MA, 200MA), and relative strength vs IWM.
-*   **Market Regime Panel:** Overview tab displays the current regime (Bull/Bear/Neutral/Extreme Fear), live VIX level with trend arrow, SPY vs 200-day MA gap, last scan date, and automatic bear-transition warnings.
+*   **Quantitative Scoring:** Ranks tickers (0–100) using a multi-factor `score_stock()` algorithm across five components: Fundamentals (35 pts), Valuation (10 pts), Momentum (30 pts), Smart Money (20 pts), Persistence (5 pts). Score is regime-adjusted (Bull ×1.05 → Bear ×0.7) before the minimum-score gate is applied. Signal labels: 🟢 Strong Buy ≥85 · 🔵 Buy ≥75 · 🟡 Moderate Buy ≥65 · ⚪ Hold ≥55 · 🔴 Avoid <55.
+*   **Market Regime Panel:** Overview tab displays the current regime (Bull/Bear/Neutral/Extreme Fear), live VIX level with trend arrow, SPY vs 200-day MA gap, last scan date, and automatic bear-transition warnings. A hoverable **ⓘ** icon in the regime strip defines all metrics (×mult, VIX, 50/200-day MA, macro adj) on demand.
 *   **Two-Panel Price & Score Chart:** Ticker Detail tab shows a stacked Plotly chart — price on top, Argus score on bottom with colour-coded bands (🟢 ≥75, 🟡 50–75, 🔴 <50) so you immediately understand where a score sits in context.
 *   **Flexible Scan Universe:** Three universe modes — **Fixed Top** (same top-weighted R2000 names each run), **Random** (different subset each run for broader coverage over time), or **Full Universe** (all ~2000 R2000 tickers, ~5–10 min). Scheduled nightly scans always run the full universe. The scan engine shuffles tickers before prefiltering so no names are systematically skipped.
 *   **Deep Dive Integrations:** Seamlessly navigate to a specific ticker via table clicks and interactive callbacks to review technical setups, AI thesis, and execution guidance.
@@ -103,12 +103,15 @@ The workstation will launch in your browser at `http://localhost:8502`.
 | File | Tracked in Git | Updated by | Purpose |
 |---|---|---|---|
 | `argus_results.csv` | ✅ Yes | GitHub Action | Latest scan results |
-| `argus_results_history.csv` | ✅ Yes | GitHub Action | Full scan history |
-| `argus_feature_history.csv` | ✅ Yes | GitHub Action | ML feature store |
+| `argus_results_history.csv` | ✅ Yes | **Both** | Full scan history — written by every scan (app + CI) |
+| `argus_feature_history.csv` | ✅ Yes | Both | ML feature store |
+| `argus_memory.csv` | ✅ Yes | Both | Ticker persistence memory |
 | `argus_alerts_log.txt` | ✅ Yes | Both | Telegram alert log |
 | `argus.db` | ❌ No (gitignored) | Local app only | Journal + local DB |
 
 > `argus.db` is intentionally gitignored so that journal entries on your local machine are never lost when pulling GitHub Action updates.
+>
+> `argus_results_history.csv` is now written by **every** scan (manual, auto, and GitHub Actions) so the auto-scan dedup check works correctly across Streamlit Cloud restarts and code pushes.
 
 ---
 
