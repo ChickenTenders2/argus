@@ -122,6 +122,31 @@ _GLOBAL_CSS = """
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
+/* ── Argus metric badges ── */
+.argus-badge-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.argus-badge {
+    display: inline-block; position: relative;
+    background: #1a2e4a; color: #c9d6e8;
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 0.78rem; cursor: default; white-space: nowrap;
+}
+.argus-badge:hover { background: #1e3f68; }
+.argus-badge .argus-tip {
+    visibility: hidden; opacity: 0;
+    background: #1e2a3a; color: #e0e8f0;
+    border: 1px solid #334466;
+    text-align: left; border-radius: 6px;
+    padding: 7px 11px; position: absolute;
+    z-index: 9999; bottom: 130%; left: 50%;
+    transform: translateX(-50%);
+    min-width: 230px; max-width: 280px;
+    font-size: 0.73rem; line-height: 1.45;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    white-space: normal; pointer-events: none;
+    transition: opacity 0.15s;
+}
+.argus-badge:hover .argus-tip { visibility: visible; opacity: 1; }
+
 /* ── Metric hierarchy ── */
 [data-testid="stMetricValue"] {
     font-size: 1.25rem !important;
@@ -174,10 +199,9 @@ def render_metric_badges(reasons):
     """Render metric reason badges with CSS hover tooltips."""
     if not reasons:
         return
-    st.markdown(_METRIC_TOOLTIP_CSS, unsafe_allow_html=True)
     badges_html = '<div class="argus-badge-wrap">'
     for r in reasons:
-        r = r.strip()
+        r = str(r).strip()
         if not r:
             continue
         tip = _find_metric_tooltip(r)
@@ -1454,15 +1478,17 @@ if active_tab == "Overview":
         with st.container(border=True):
             st.markdown("**🏆 Top Picks Today**")
             if not latest_df.empty:
-                _top3 = latest_df.sort_values("score", ascending=False).head(3)
-                for _, _tr in _top3.iterrows():
+                _top5 = latest_df.sort_values("score", ascending=False).head(5)
+                _tp_cols = st.columns(5)
+                for _i, (_, _tr) in enumerate(_top5.iterrows()):
                     _sig_lbl, _sig_col = get_signal_label(_tr.get("score", 0))
                     _sig_icon = _sig_lbl.split()[0]
-                    st.markdown(
-                        f"**{_tr['ticker']}** &nbsp; :{_sig_col}[{_sig_icon} {_tr['score']:.0f}]"
-                        + (f" &nbsp; *{_tr.get('sector', '')}*" if _tr.get("sector") else ""),
-                        unsafe_allow_html=True,
-                    )
+                    with _tp_cols[_i]:
+                        st.markdown(
+                            f"**{_tr['ticker']}**  \n"
+                            f":{_sig_col}[{_sig_icon} {_tr['score']:.0f}]"
+                            + (f"  \n*{_tr.get('sector', '')}*" if _tr.get("sector") else ""),
+                        )
             else:
                 st.caption("No scan data yet — run a scan to see picks.")
 

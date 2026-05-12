@@ -109,9 +109,15 @@ def get_db_connection():
                     try:
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS features (
                             id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
+                            raw_score REAL,
                             f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
                             tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
                             scan_date TEXT, scan_timestamp TEXT, run_type TEXT)"""))
+                        try:
+                            conn.execute(sqlalchemy.text("ALTER TABLE features ADD COLUMN IF NOT EXISTS raw_score REAL"))
+                            conn.commit()
+                        except Exception:
+                            conn.rollback()
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS results (
                             id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
                             f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
@@ -158,9 +164,15 @@ def get_db_connection():
                 try:
                     conn.execute("""CREATE TABLE IF NOT EXISTS features (
                         id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, sector TEXT, score REAL,
+                        raw_score REAL,
                         f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
                         tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
                         scan_date TEXT, scan_timestamp TEXT, run_type TEXT)""")
+                    try:
+                        conn.execute("ALTER TABLE features ADD COLUMN raw_score REAL")
+                        conn.commit()
+                    except Exception:
+                        pass
                     conn.execute("""CREATE TABLE IF NOT EXISTS results (
                         id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, sector TEXT, score REAL,
                         f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
