@@ -894,7 +894,7 @@ def apply_preset():
     st.session_state.roce_threshold = 20
     st.session_state.gross_margin_high = 60
     st.session_state.gross_margin_low = 40
-    st.session_state.inst_own_ceiling = 40
+    st.session_state.inst_own_ceiling = 70
     if preset == "High Conviction":
         st.session_state.preset_desc = "**Use when:** You want the fewest, highest-quality picks only. Strict score filter (≥75) in a strong bull market where you are comfortable concentrating capital into 1–3 exceptional setups instead of diversifying broadly."
         st.session_state.min_score = 75
@@ -1241,7 +1241,7 @@ if "gross_margin_high" not in st.session_state:
 if "gross_margin_low" not in st.session_state:
     st.session_state.gross_margin_low = 40
 if "inst_own_ceiling" not in st.session_state:
-    st.session_state.inst_own_ceiling = 40
+    st.session_state.inst_own_ceiling = 70
 if "preset_desc" not in st.session_state:
     st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
 
