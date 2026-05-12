@@ -150,17 +150,17 @@ def run_watchlist_monitor():
 # ── Main ─────────────────────────────────────────────────
 def main():
     if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
-        logger.error("Telegram credentials missing. Exiting.")
-        return
+        logger.warning("Telegram credentials missing \u2014 scan will run but no Telegram alerts will be sent.")
 
     try:
         _run()
     except Exception as e:
         logger.error(f"Fatal scan error: {e}")
-        send_telegram(
-            f"\U0001f6a8 *Argus Scan FAILED \u2014 {datetime.now().strftime('%d %b %Y')}*\n"
-            f"Error: `{str(e)[:300]}`\nCheck GitHub Actions for details."
-        )
+        if config.TELEGRAM_TOKEN and config.TELEGRAM_CHAT_ID:
+            send_telegram(
+                f"\U0001f6a8 *Argus Scan FAILED \u2014 {datetime.now().strftime('%d %b %Y')}*\n"
+                f"Error: `{str(e)[:300]}`\nCheck GitHub Actions for details."
+            )
         raise
 
 

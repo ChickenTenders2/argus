@@ -184,6 +184,27 @@ footer {visibility: hidden;}
 
 /* ── Dividers ── */
 hr { border-color: rgba(255,255,255,0.08) !important; }
+
+/* ── Regime strip info tooltip ── */
+.argus-regime-tip {
+    position: relative; display: inline-block;
+    cursor: help; opacity: 0.6; font-size: 0.85rem;
+    margin-left: 6px; vertical-align: middle;
+}
+.argus-regime-tip .argus-regime-tip-box {
+    visibility: hidden; opacity: 0;
+    background: #0d1b2e; color: #c9d6e8;
+    text-align: left; border-radius: 7px;
+    padding: 9px 13px; position: absolute;
+    z-index: 9999; bottom: 140%; left: 50%;
+    transform: translateX(-50%);
+    width: 290px; font-size: 0.72rem; line-height: 1.55;
+    border: 1px solid #2a4a6a;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+    white-space: normal; pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+.argus-regime-tip:hover .argus-regime-tip-box { visibility: visible; opacity: 1; }
 </style>
 """
 
@@ -1477,19 +1498,21 @@ _strip_reason_str = re.sub(
     rf'<abbr title="Macro adjustment: the multiplier was shifted by macro signals — yield curve inversion, elevated CPI, or extreme fear reading." style="{_tip_style}">\1</abbr>',
     _strip_reason_str,
 )
-_regime_info_tip = (
-    "\u00d7mult: score multiplier (&gt;1 = bull boost, &lt;1 = bear penalty). "
-    "VIX: CBOE fear gauge (&lt;18 calm &middot; 18\u201325 elevated &middot; &gt;25 high fear). "
-    "50/200-day MA: price above moving average = uptrend. "
-    "macro adj: multiplier offset from yield curve / CPI / Fear&amp;Greed signals."
+_regime_tip_box = (
+    '<span class="argus-regime-tip-box">'
+    '<strong>\u00d7mult</strong> \u2014 score multiplier (&gt;1\u202fbull boost, &lt;1\u202fbear penalty)<br>'
+    '<strong>VIX</strong> \u2014 CBOE fear gauge (&lt;18\u202fcalm\u202f\u00b7\u202f18\u201325\u202felevated\u202f\u00b7\u202f&gt;25\u202fhigh fear)<br>'
+    '<strong>50/200-day MA</strong> \u2014 price above moving average\u202f=\u202fuptrend<br>'
+    '<strong>macro adj</strong> \u2014 multiplier shift from yield curve\u202f/\u202fCPI\u202f/\u202fFear&amp;Greed'
+    '</span>'
 )
 st.markdown(
     f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:4px;'
     f'padding:5px 12px;margin-bottom:10px;font-size:0.82rem;">'
     f'<strong>{_strip_regime["regime"]}</strong> regime'
-    f' · {_strip_mult_str}{_strip_vix_str}'
-    f' · <em>{_strip_reason_str}</em>'
-    f' <span title="{_regime_info_tip}" style="cursor:help;opacity:0.55;font-size:0.8rem;margin-left:4px">ⓘ</span>'
+    f' \u00b7 {_strip_mult_str}{_strip_vix_str}'
+    f' \u00b7 <em>{_strip_reason_str}</em>'
+    f' <span class="argus-regime-tip">\u24d8{_regime_tip_box}</span>'
     f'</div>',
     unsafe_allow_html=True,
 )
