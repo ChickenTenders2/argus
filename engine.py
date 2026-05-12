@@ -353,6 +353,21 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
         })
     df = pd.DataFrame(rows)
     conn = get_db_connection()
+    # Lazy migration: ensure raw_score column exists (handles pre-existing Supabase tables)
+    try:
+        import sqlalchemy as _sa
+        conn.execute(_sa.text("ALTER TABLE features ADD COLUMN IF NOT EXISTS raw_score REAL"))
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE features ADD COLUMN raw_score REAL")
+            conn.commit()
+        except Exception:
+            pass
     df.to_sql("features", conn, if_exists="append", index=False)
     conn.close()
 
