@@ -1344,3 +1344,84 @@ _None today_
 ──────────────────────────────
 _Scanned 917 tickers • Top 12 picks shown_
 
+--- 2026-05-13 10:27:40 ---
+👁 *Argus Daily Scan — 13 May 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*GSAT* — Score: *78/100*
+⚡ _Previously flagged 11x since 11 Apr 2026 — signals strengthening_
+💰 Price: $82.67 | Cap: $10647M
+📊 Rev growth 346% | Gross margin 64% | FCF positive | PEG 0.5 | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +33% | Inst. 26% | 🔁 Persistence bonus | Bull Regime Adj
+
+🟡 WATCHLIST
+*SM* — Score: *76/100*
+⚡ _Previously flagged 25x since 20 Mar 2026 — signals strengthening_
+💰 Price: $31.35 | Cap: $7516M
+📊 Rev growth 275% | Gross margin 88% | FCF positive | PEG 0.8 | P/S 2.1x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +37% | Cap $7516M | 🔁 Persistence bonus | Bull Regime Adj
+
+🟡 WATCHLIST
+*EXTR* — Score: *70/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $22.79 | Cap: $2980M
+📊 Rev growth 340% | Gross margin 61% | FCF positive | PEG 0.8 | P/S 2.4x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +45% | Cap $2980M | Bull Regime Adj
+
+🟡 WATCHLIST
+*SGHC* — Score: *69/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $12.92 | Cap: $6564M
+📊 Rev growth 420% | P/S 2.8x | Above 50MA | Above 200MA | ⚡ Volume spike | RS vs IWM +45% | Inst. 21% | Cap $6564M | Bull Regime Adj
+
+🟡 WATCHLIST
+*KODK* — Score: *68/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $10.26 | Cap: $1001M
+📊 Rev growth 302% | FCF positive | P/S 0.9x | 6mo Momentum | Above 200MA | RS vs IWM +27% | Inst. 37% | Cap $1001M | Bull Regime Adj
+
+🟡 WATCHLIST
+*RUM* — Score: *65/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $7.92 | Cap: $1709M
+📊 Rev growth 233% | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +21% | Inst. 24% | Cap $1709M | Bull Regime Adj
+
+🟡 WATCHLIST
+*CEVA* — Score: *65/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $37.08 | Cap: $1033M
+📊 Rev growth 275% | Gross margin 87% | 6mo Momentum | Above 50MA | Above 200MA | ⚡ Volume spike | RS vs IWM +49% | Cap $1033M | Bull Regime Adj
+
+🟡 WATCHLIST
+*RDW* — Score: *65/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $11.56 | Cap: $2300M
+📊 Rev growth 382% | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +21% | Inst. 39% | Cap $2300M | Bull Regime Adj
+
+🟡 WATCHLIST
+*LQDA* — Score: *65/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $56.6 | Cap: $5033M
+📊 Rev growth 5327% | Gross margin 92% | 6mo Momentum | Above 50MA | Above 200MA | ⚡ Volume spike | RS vs IWM +33% | Cap $5033M | Bull Regime Adj
+
+🟡 WATCHLIST
+*RELY* — Score: *64/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $23.86 | Cap: $5024M
+📊 Rev growth 377% | Gross margin 61% | FCF positive | P/S 2.9x | 6mo Momentum | Above 50MA | Above 200MA | RS vs IWM +72% | Cap $5024M | Bull Regime Adj
+
+🟡 WATCHLIST
+*PSIX* — Score: *64/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $38.0 | Cap: $876M
+📊 Rev growth 401% | FCF positive | PEG 0.8 | P/S 1.2x | ⚡ Volume spike | Inst. 31% | Cap $876M | Bull Regime Adj
+
+🟡 WATCHLIST
+*WEST* — Score: *64/100*
+⚡ _Previously flagged 1x since 13 May 2026 — signals strengthening_
+💰 Price: $8.65 | Cap: $844M
+📊 Rev growth 419% | P/S 0.7x | 6mo Momentum | Above 50MA | Above 200MA | ⚡ Volume spike | RS vs IWM +61% | Cap $844M | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 932 tickers • Top 12 picks shown_
+
