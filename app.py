@@ -1263,6 +1263,8 @@ if "gross_margin_low" not in st.session_state:
     st.session_state.gross_margin_low = 40
 if "inst_own_ceiling" not in st.session_state:
     st.session_state.inst_own_ceiling = 70
+if "universe_mode" not in st.session_state:
+    st.session_state.universe_mode = "🌐 Full Universe"
 if "preset_desc" not in st.session_state:
     st.session_state.preset_desc = "A balanced setup suitable for normal market conditions."
 
