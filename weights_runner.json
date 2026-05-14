@@ -1,0 +1,11 @@
+{
+  "description": "Runner-optimised weights (tuned for 3-5x explosive moves)",
+  "fundamentals_max": 10,
+  "valuation_max": 4,
+  "momentum_max": 40,
+  "smart_money_max": 26,
+  "catalyst_max": 20,
+  "persistence_max": 5,
+  "sentiment_cap": 10,
+  "notes": "Aggressive: momentum + catalyst dominate. Best for volatile markets where rockets emerge. May produce more false positives."
+}

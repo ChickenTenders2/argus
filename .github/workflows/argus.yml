@@ -5,8 +5,17 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 8 * * 1-5'  # 08:00 UTC = 09:00 BST, Monday–Friday
-  workflow_dispatch:         # allows manual trigger from GitHub UI
+    - cron: '0 11 * * 1-5'   # Pre-market: 06:00 ET Mon–Fri
+    - cron: '0 14 * * 1-5'   # Open/Full: 09:00 ET Mon–Fri
+    - cron: '30 21 * * 1-5'  # Post-close: 16:30 ET Mon–Fri
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Scan profile'
+        required: false
+        default: 'full'
+        type: choice
+        options: [premarket, full, postclose]
 
 jobs:
   argus:
@@ -32,6 +41,20 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run Argus
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            CRON="${{ github.event.schedule }}"
+            if [ "$CRON" = "0 11 * * 1-5" ]; then
+              PROFILE="premarket"
+            elif [ "$CRON" = "30 21 * * 1-5" ]; then
+              PROFILE="postclose"
+            else
+              PROFILE="full"
+            fi
+          else
+            PROFILE="${{ github.event.inputs.profile || 'full' }}"
+          fi
+          python argus.py --profile $PROFILE
         env:
           DATABASE_URL:     ${{ secrets.DATABASE_URL }}
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
@@ -39,7 +62,6 @@ jobs:
           FMP_API_KEY:      ${{ secrets.FMP_API_KEY }}
           GROQ_API_KEY:     ${{ secrets.GROQ_API_KEY }}
           FRED_API_KEY:     ${{ secrets.FRED_API_KEY }}
-        run: python argus.py
 
       - name: Commit updated data
         continue-on-error: true

@@ -1,4 +1,5 @@
 import os
+import argparse as _argparse
 import yfinance as yf
 import pandas as pd
 import requests
@@ -14,11 +15,20 @@ except ImportError:
 from fmp_fetch import run_fmp_enrichment, get_fmp_data, parse_fmp_data, format_fmp_block
 from edgar_fetch import run_edgar_enrichment, get_insider_buys, format_edgar_block
 from engine import Config, run_scan, save_results, load_memory, monitor_portfolio
+from scan_profiles import get_profile
 
 try:
     from llm import generate_ai_thesis
 except ImportError:
     generate_ai_thesis = None
+
+# ── CLI argument parsing ─────────────────────────────────
+_parser = _argparse.ArgumentParser(description="Argus scanner")
+_parser.add_argument("--profile", default="full", help="Scan profile: premarket, full, catalyst, postclose")
+_parser.add_argument("--ticker", default=None, help="Single ticker for catalyst profile")
+_args, _ = _parser.parse_known_args()
+profile_name = _args.profile
+catalyst_ticker = _args.ticker or os.environ.get("CATALYST_TICKER", None)
 
 # ── Setup Logging ───────────────────────────────────────
 logging.basicConfig(
@@ -195,24 +205,71 @@ def _send_combined_enrichment(results):
 
 def _run():
     logger.info("Argus scan starting...")
-    scan_payload = run_scan(config=config, scan_limit=None, update_memory=True, run_type="scheduled")
+    profile = get_profile(profile_name)
+    logger.info(f"Profile: {profile.name} — {profile.description}")
+
+    # ── Catalyst profile: single-ticker rescore ──
+    if profile.name == "catalyst":
+        ticker = catalyst_ticker
+        if not ticker:
+            logger.warning("Catalyst profile selected but no ticker provided (--ticker or CATALYST_TICKER). Exiting.")
+            return
+        logger.info(f"Catalyst rescore for ticker: {ticker}")
+        scan_payload = run_scan(
+            config=config,
+            scan_limit=profile.scan_limit,
+            update_memory=profile.update_memory,
+            run_type=profile.run_type,
+            tickers=[ticker],
+        )
+        results = scan_payload["results"]
+        if results and results[0]["score"] >= profile.min_score_override:
+            try:
+                memory_df = load_memory(config.MEMORY_FILE)
+            except Exception:
+                memory_df = pd.DataFrame(columns=["ticker"])
+            msg = (
+                f"⚡ *Argus 8-K Catalyst Alert — {datetime.now().strftime('%d %b %Y %H:%M')}*\n"
+                f"{'─'*30}\n"
+                + format_pick(results[0], memory_df)
+            )
+            if profile.send_telegram:
+                send_telegram(msg)
+        else:
+            logger.info(f"Catalyst rescore for {ticker}: score below threshold or no result.")
+        return
+
+    # ── Standard scan (premarket / full / postclose) ──
+    min_score = profile.min_score_override if profile.min_score_override is not None else None
+
+    scan_payload = run_scan(
+        config=config,
+        scan_limit=profile.scan_limit,
+        update_memory=profile.update_memory,
+        run_type=profile.run_type,
+    )
     results = scan_payload["results"]
     scan_date = scan_payload["scan_date"]
     scan_timestamp = scan_payload["scan_timestamp"]
     scanned_count = scan_payload["scanned_count"]
 
+    # Apply min_score filter for profiles that override it (e.g. premarket)
+    if min_score is not None:
+        results = [r for r in results if r.get("score", 0) >= min_score]
+
     if not results:
-        send_ok = send_telegram(
-            f"👁 *Argus Daily Scan — {datetime.now().strftime('%d %b %Y')}*\n"
-            f"No high-conviction picks found today. Market may be choppy."
-        )
-        if not send_ok:
-            logger.warning("Telegram delivery failed for no-results message — scan results saved, continuing.")
+        if profile.send_telegram:
+            send_ok = send_telegram(
+                f"👁 *Argus Daily Scan — {datetime.now().strftime('%d %b %Y')}*\n"
+                f"No high-conviction picks found today. Market may be choppy."
+            )
+            if not send_ok:
+                logger.warning("Telegram delivery failed for no-results message — scan results saved, continuing.")
         save_results(
             results=[],
             scan_date=scan_date,
             scan_timestamp=scan_timestamp,
-            run_type="scheduled",
+            run_type=profile.run_type,
             latest_file=config.RESULTS_FILE,
             history_file=config.RESULTS_HISTORY_FILE,
             write_latest=True,
@@ -225,7 +282,7 @@ def _run():
         results=results,
         scan_date=scan_date,
         scan_timestamp=scan_timestamp,
-        run_type="scheduled",
+        run_type=profile.run_type,
         latest_file=config.RESULTS_FILE,
         history_file=config.RESULTS_HISTORY_FILE,
         write_latest=True,
@@ -233,45 +290,47 @@ def _run():
     )
 
     # ── Build & send Telegram message ──
-    today_str = datetime.now().strftime("%d %b %Y")
-    
-    try:
-        memory_df = load_memory(config.MEMORY_FILE)
-    except Exception:
-        memory_df = pd.DataFrame(columns=["ticker"])
-        
-    highest = [p for p in results if p["score"] >= 80]
-    high = [p for p in results if p["score"] < 80]
-    
-    # Optional LLM qualitative analysis for highest conviction picks
-    formatted_highest = []
-    for p in highest:
-        ai_note = None
-        if config.GROQ_API_KEY and generate_ai_thesis:
-            ai_note = generate_ai_thesis(p["ticker"], p["score"], p["reasons"], config.GROQ_API_KEY)
-            
-            # Prevent markdown formatting issues in telegram if AI uses asterisks
-            if ai_note:
-                ai_note = ai_note.replace('*', '').replace('_', '')
-                
-        formatted_highest.append(format_pick(p, memory_df, ai_note))
+    if profile.send_telegram:
+        today_str = datetime.now().strftime("%d %b %Y")
 
-    header = f"👁 *Argus Daily Scan — {today_str}*\n{'─'*30}\n"
-    
-    alerts = monitor_portfolio()
-    alerts_block = ""
-    if alerts:
-        alerts_block = "*🚨 PORTFOLIO ALERTS*\n" + "\n".join(alerts) + f"\n\n{'─'*30}\n"
-        
-    highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
-    high_block = ("\n*📌 High scoring picks*\n" + "\n".join([format_pick(p, memory_df) for p in high])) if high else ""
-    footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
-    body = highest_block + high_block
-    send_ok = send_telegram(header + alerts_block + body + footer)
-    if not send_ok:
-        logger.warning("Telegram delivery failed for main scan message — scan results saved, continuing.")
-    
-    _send_combined_enrichment(results)
+        try:
+            memory_df = load_memory(config.MEMORY_FILE)
+        except Exception:
+            memory_df = pd.DataFrame(columns=["ticker"])
+
+        highest = [p for p in results if p["score"] >= 80]
+        high = [p for p in results if p["score"] < 80]
+
+        # Optional LLM qualitative analysis for highest conviction picks
+        formatted_highest = []
+        for p in highest:
+            ai_note = None
+            if config.GROQ_API_KEY and generate_ai_thesis:
+                ai_note = generate_ai_thesis(p["ticker"], p["score"], p["reasons"], config.GROQ_API_KEY)
+
+                # Prevent markdown formatting issues in telegram if AI uses asterisks
+                if ai_note:
+                    ai_note = ai_note.replace('*', '').replace('_', '')
+
+            formatted_highest.append(format_pick(p, memory_df, ai_note))
+
+        header = f"👁 *Argus Daily Scan — {today_str}*\n{'─'*30}\n"
+
+        alerts_block = ""
+        if profile.run_portfolio_monitor:
+            alerts = monitor_portfolio()
+            if alerts:
+                alerts_block = "*🚨 PORTFOLIO ALERTS*\n" + "\n".join(alerts) + f"\n\n{'─'*30}\n"
+
+        highest_block = "*🚀 Highest scoring picks*\n" + ("\n".join(formatted_highest) if formatted_highest else "_None today_")
+        high_block = ("\n*📌 High scoring picks*\n" + "\n".join([format_pick(p, memory_df) for p in high])) if high else ""
+        footer = f"\n{'─'*30}\n_Scanned {scanned_count} tickers • Top {len(results)} picks shown_"
+        body = highest_block + high_block
+        send_ok = send_telegram(header + alerts_block + body + footer)
+        if not send_ok:
+            logger.warning("Telegram delivery failed for main scan message — scan results saved, continuing.")
+
+        _send_combined_enrichment(results)
 
     # ── Watchlist monitor ──
     run_watchlist_monitor()

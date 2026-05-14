@@ -23,44 +23,84 @@ def get_recent_news_summary(ticker):
     except Exception as e:
         logger.warning(f"Failed to fetch news for {ticker}: {e}")
         return "News fetch failed."
-def get_sentiment_score(ticker, groq_api_key):
+_CATALYST_TAGS = [
+    "FDA", "defense_contract", "govt_award", "partnership", "ai_robotics",
+    "clinical_trial", "earnings_beat", "merger_acquisition",
+]
+
+_CATALYST_TAG_WEIGHTS = {
+    "FDA": 4,
+    "defense_contract": 4,
+    "govt_award": 4,
+    "partnership": 3,
+    "ai_robotics": 3,
+    "clinical_trial": 3,
+    "earnings_beat": 2,
+    "merger_acquisition": 2,
+}
+
+
+def get_llm_catalyst_analysis(ticker, groq_api_key, fmp_context=None):
     """
-    Fetches latest news via yfinance and calls Groq to compute sentiment.
-    Returns integer score from -15 (bearish) to +15 (bullish).
+    Fetch news and call Groq for structured catalyst analysis.
+    Returns dict: {"sentiment": int, "catalysts": list[str], "urgency": str}
+    sentiment is -10 to +10.
     """
     if not groq_api_key:
-        return 0
-    
+        return {"sentiment": 0, "catalysts": [], "urgency": "longterm"}
+
     try:
+        import json as _json
         news_summary = get_recent_news_summary(ticker)
         if not news_summary or news_summary == "No recent news available." or "Error" in news_summary:
-            return 0
-            
-        client = Groq(api_key=groq_api_key)
-        prompt = f"""
-Analyze the recent news headlines for the stock {ticker} and provide a direct sentiment score.
-Headlines:
-{news_summary}
+            return {"sentiment": 0, "catalysts": [], "urgency": "longterm"}
 
-Respond with ONLY a single integer from -15 (very bearish) to +15 (very bullish).
-Do not include any explanation or other text, just the number.
-"""
-        
+        fmp_context_str = ""
+        if fmp_context:
+            fmp_context_str = f"\nAdditional context: {fmp_context}"
+
+        client = Groq(api_key=groq_api_key)
+        tags_str = ", ".join(_CATALYST_TAGS)
+        prompt = (
+            f"You are a quantitative analyst. Analyze these news headlines for {ticker}.\n"
+            f"Headlines: {news_summary}"
+            f"{fmp_context_str}\n\n"
+            f"Return ONLY valid JSON (no markdown):\n"
+            f'{{\"sentiment\": <integer -10 to +10>, \"catalysts\": [<list of tags from: {tags_str}>], '
+            f'\"urgency\": \"<imminent|near|longterm>\"}}\n\n'
+            f"Rules:\n"
+            f"- sentiment: overall news tone (-10=very bearish, 0=neutral, +10=very bullish)\n"
+            f"- catalysts: only include if clearly evidenced in headlines\n"
+            f"- urgency: imminent if event is <30 days away, near if <90 days, longterm otherwise"
+        )
+
         response = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama-3.1-8b-instant",
             temperature=0.2,
-            max_tokens=10,
+            max_tokens=120,
         )
-        
-        score_str = response.choices[0].message.content.strip()
-        sentiment_score = int(score_str)
-        # Clamp to valid range
-        sentiment_score = max(-15, min(15, sentiment_score))
-        return sentiment_score
+
+        raw = response.choices[0].message.content.strip()
+        result = _json.loads(raw)
+        sentiment = int(result.get("sentiment", 0))
+        sentiment = max(-10, min(10, sentiment))
+        catalysts = [t for t in result.get("catalysts", []) if t in _CATALYST_TAGS]
+        urgency = result.get("urgency", "longterm")
+        if urgency not in ("imminent", "near", "longterm"):
+            urgency = "longterm"
+        return {"sentiment": sentiment, "catalysts": catalysts, "urgency": urgency}
     except Exception as e:
-        logger.warning(f"Sentiment analysis failed for {ticker}: {e}")
-        return 0
+        logger.warning(f"LLM catalyst analysis failed for {ticker}: {e}")
+        return {"sentiment": 0, "catalysts": [], "urgency": "longterm"}
+
+
+def get_sentiment_score(ticker, groq_api_key):
+    """
+    Backward-compatible wrapper. Returns integer sentiment from -10 to +10.
+    """
+    result = get_llm_catalyst_analysis(ticker, groq_api_key)
+    return result["sentiment"]
 def generate_ai_thesis(ticker, score, reasons, groq_api_key):
     """Call Groq to generate a 3-bullet thesis."""
     if not groq_api_key:

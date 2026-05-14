@@ -149,6 +149,140 @@ def get_insider_buys(ticker, days=30):
         return []
 
 
+# ── Insider Cluster Score ────────────────────────────────
+def get_insider_cluster_score(ticker, days=14):
+    """Return (score, reasons) based on insider buy clustering within `days`."""
+    try:
+        buys = get_insider_buys(ticker, days=days)
+        if not buys:
+            return 0, []
+
+        score, reasons = 0, []
+
+        distinct_insiders = {b["name"] for b in buys}
+        count = len(distinct_insiders)
+
+        if count >= 3:
+            score += 5
+            reasons.append(f"Insider cluster ({count}x)")
+        elif count == 2:
+            score += 3
+            reasons.append("Dual insider buy")
+        else:
+            score += 1
+
+        # CEO/CFO bonus
+        exec_roles = {"Chief Executive", "CEO", "Chief Financial", "CFO"}
+        for b in buys:
+            role = b.get("role", "")
+            if any(r in role for r in exec_roles):
+                score += 2
+                reasons.append(f"Exec buy ({role})")
+                break  # one bonus only
+
+        score = min(6, score)
+        return score, reasons
+    except Exception as e:
+        logger.debug(f"get_insider_cluster_score({ticker}) failed: {e}")
+        return 0, []
+
+
+# ── Form 8-K Fetcher ─────────────────────────────────────
+_8K_ITEM_LABELS = {
+    "1.01": "Material Agreement",
+    "1.02": "Termination of Agreement",
+    "2.01": "Asset Acquisition",
+    "2.02": "Earnings Results",
+    "5.02": "Officer/Director Change",
+    "7.01": "Reg FD Disclosure",
+    "8.01": "Other Events",
+}
+
+_8K_ITEM_POINTS = {
+    "1.01": 3,
+    "7.01": 3,
+    "8.01": 3,
+    "2.01": 2,
+    "2.02": 2,
+}
+
+
+def fetch_recent_8k(ticker, days=10):
+    """Return list of recent 8-K filings as [{date, items, description}]."""
+    try:
+        cik = get_cik(ticker)
+        if not cik:
+            return []
+
+        cik_int = int(cik)
+        cutoff = datetime.now() - timedelta(days=days)
+
+        r = requests.get(
+            f"https://data.sec.gov/submissions/CIK{cik}.json",
+            headers=_EDGAR_HEADERS,
+            timeout=12,
+        )
+        if r.status_code != 200:
+            return []
+
+        recent = r.json().get("filings", {}).get("recent", {})
+        forms = recent.get("form", [])
+        dates = recent.get("filingDate", [])
+        items_list = recent.get("items", [])
+
+        filings = []
+        for form, date_str, items_raw in zip(forms, dates, items_list):
+            if form != "8-K":
+                continue
+            try:
+                filing_date = datetime.strptime(date_str, "%Y-%m-%d")
+            except ValueError:
+                continue
+            if filing_date < cutoff:
+                break
+
+            items_str = str(items_raw) if items_raw else ""
+            item_codes = [i.strip() for i in items_str.replace(",", " ").split() if i.strip()]
+            descriptions = [_8K_ITEM_LABELS.get(c, "Other") for c in item_codes]
+            filings.append({
+                "date": date_str,
+                "items": item_codes,
+                "description": ", ".join(descriptions) if descriptions else "8-K Filing",
+            })
+
+        return filings
+    except Exception as e:
+        logger.debug(f"fetch_recent_8k({ticker}) failed: {e}")
+        return []
+
+
+def get_8k_catalyst_score(ticker, days=10):
+    """Return (score, reasons) from recent 8-K filings."""
+    try:
+        filings = fetch_recent_8k(ticker, days=days)
+        if not filings:
+            return 0, []
+
+        score, reasons = 0, []
+        items_counted = 0
+
+        for filing in filings:
+            for code in filing.get("items", []):
+                if items_counted >= 3:
+                    break
+                pts = _8K_ITEM_POINTS.get(code, 1)
+                label = _8K_ITEM_LABELS.get(code, "8-K Event")
+                score += pts
+                reasons.append(f"8-K: {label}")
+                items_counted += 1
+
+        score = min(5, score)
+        return score, reasons
+    except Exception as e:
+        logger.debug(f"get_8k_catalyst_score({ticker}) failed: {e}")
+        return 0, []
+
+
 # ── Telegram Block Formatter ─────────────────────────────
 def format_edgar_block(ticker, buys):
     lines = [f"\n\U0001f3db *EDGAR Insider Activity \u2014 {ticker}*\n{'─' * 28}"]

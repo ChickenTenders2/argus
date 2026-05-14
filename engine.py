@@ -332,7 +332,7 @@ def save_memory(df, filepath=None):
 
 def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_file=None):
     cols = [
-        "ticker", "sector", "score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score",
+        "ticker", "sector", "score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score", "c_score",
         "tier", "price", "mkt_cap_m",
         "reason_count", "scan_date", "scan_timestamp", "run_type",
     ]
@@ -356,6 +356,7 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
             "m_score":        float(pick.get("m_score", 0)),
             "s_score":        float(pick.get("s_score", 0)),
             "p_score":        float(pick.get("p_score", 0)),
+            "c_score":        float(pick.get("c_score", 0)),
             "tier":           pick.get("tier", ""),
             "price":          float(pick.get("price", 0)),
             "mkt_cap_m":      mkt_cap_m,
@@ -413,7 +414,7 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
                         not data["Close"].dropna().empty
                         and data["Close"].iloc[-1] > config.PRICE_FLOOR
                         and (config.PRICE_CEILING is None or data["Close"].iloc[-1] <= config.PRICE_CEILING)
-                        and data["Volume"].mean() > config.VOL_FLOOR
+                        and data["Volume"].mean() > max(200_000, data["Close"].iloc[-1] * 50_000 if not data["Close"].dropna().empty else config.VOL_FLOOR)
                     ):
                         valid_tickers.append(t)
                         if scan_limit and len(valid_tickers) >= scan_limit:
@@ -480,6 +481,10 @@ def get_market_regime():
         yield_inverted = macro.get("yield_curve", {}).get("inverted", False)
         cpi_hot = macro.get("cpi", {}).get("accelerating", False)
         fg_val = macro.get("fear_greed", {}).get("value", 50)
+        breadth = macro.get("small_cap_breadth", {})
+        sc_leading = breadth.get("small_cap_leading", False)
+        sc_stress  = breadth.get("small_cap_stress", False)
+        hy_widening = macro.get("hy_spread", {}).get("widening", False)
 
         # Stagflation: bear + hot CPI + inverted yield curve (takes priority over Bear)
         if yield_inverted and cpi_hot and spy_price < spy_ma200 and regime not in ("Extreme Fear",):
@@ -487,7 +492,7 @@ def get_market_regime():
             multiplier = 0.65
             reason = "Inverted yield curve + accelerating CPI + SPY below 200MA"
         else:
-            # Incremental adjustments: max -0.15 combined penalty
+            # Incremental adjustments
             adj = 0.0
             if yield_inverted:
                 adj -= 0.05
@@ -495,11 +500,24 @@ def get_market_regime():
                 adj -= 0.05
             if fg_val < 25:
                 adj -= 0.05
+            # Small-cap specific signals
+            if sc_leading:
+                adj += 0.05   # IWM outperforming QQQ → boost small-cap universe
+            if hy_widening:
+                adj -= 0.05   # HY spreads widening → risk-off, hurts small-caps first
             if adj != 0.0:
                 multiplier = max(0.50, round(multiplier + adj, 2))
                 reason += f" (macro adj {adj:+.2f})"
 
-        return {"regime": regime, "multiplier": multiplier, "reason": reason, **extra, "macro": macro}
+        return {
+            "regime":            regime,
+            "multiplier":        multiplier,
+            "reason":            reason,
+            "small_cap_stress":  sc_stress,
+            "small_cap_leading": sc_leading,
+            **extra,
+            "macro":             macro,
+        }
 
     except Exception as e:
         logger.warning(f"Market regime check failed: {e}")
@@ -966,7 +984,8 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
     train["target_hit"] = (train["fwd_return"] >= target_return).astype(int)
 
     # Feature selection
-    possible_features = ["score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score", "reason_count", "mkt_cap_m"]
+    possible_features = ["score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score",
+                         "c_score", "reason_count", "mkt_cap_m", "float_m", "short_pct", "score_velocity"]
     features = [f for f in possible_features if f in train.columns]
 
     global_prob = float(train["target_hit"].mean())
@@ -1095,6 +1114,7 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
         "feature_importance": feature_importance,
         "confusion_matrix": cm,
         "X_sample": train[features],
+        "runner_similarity_available": True,
     }
 
 def add_predictions(df_results, model):
@@ -1246,11 +1266,23 @@ def add_risk_guidance(df_results, model, risk_per_trade_pct=0.75, max_position_p
 
 def _check_red_flags(info, stock):
     flags = []
-    if (info.get("debtToEquity", 0) or 0) > 500:
+    de = (info.get("debtToEquity", 0) or 0)
+    if de > 800:
         flags.append("Extreme debt")
+    elif de > 500:
+        interest_coverage = info.get("interestCoverage", 10) or 10
+        try:
+            ebitda = info.get("ebitda", 0) or 0
+            interest_exp = info.get("totalInterestExpense", 0) or 0
+            if ebitda > 0 and interest_exp > 0:
+                interest_coverage = ebitda / interest_exp
+        except Exception:
+            pass
+        if interest_coverage < 1.5:
+            flags.append("Extreme debt")
     if (info.get("shortPercentOfFloat", 0) or 0) > 0.45:
         flags.append("High short interest")
-    if (info.get("sharesPercentSharesOut", 0) or 0) > 0.15:
+    if (info.get("sharesPercentSharesOut", 0) or 0) > 0.25:
         flags.append("Dilution risk")
     try:
         earnings = stock.calendar
@@ -1260,12 +1292,19 @@ def _check_red_flags(info, stock):
                 last_rep = earnings['Reported EPS'].dropna().iloc[-1] if len(earnings['Reported EPS'].dropna()) > 0 else 0
                 if last_est > 0 and last_rep / last_est < 0.90:
                     flags.append("Earnings miss")
-    except:
+    except Exception:
+        pass
+    try:
+        float_shares = info.get("floatShares", None)
+        short_pct = info.get("shortPercentOfFloat", 0) or 0
+        if float_shares is not None and float_shares < 1_000_000 and short_pct > 0.30:
+            flags.append("Micro-float pump risk")
+    except Exception:
         pass
     return flags
 
 def _score_fundamentals(info, stock, config=None):
-    """Score: revenue growth (max 20), ROCE (max 7), gross margin (max 5), FCF (max 3) = 35 pts max."""
+    """Score fundamentals — max 18 pts for established, 8 pts pre-revenue alt-path."""
     score, reasons = 0, []
 
     rev_high  = getattr(config, "REV_GROWTH_HIGH",   0.30)
@@ -1274,7 +1313,40 @@ def _score_fundamentals(info, stock, config=None):
     gm_high   = getattr(config, "GROSS_MARGIN_HIGH", 0.60)
     gm_low    = getattr(config, "GROSS_MARGIN_LOW",  0.40)
 
-    # ── Revenue Growth ──────────────────────────────────────
+    total_revenue = info.get("totalRevenue", 0) or 0
+    is_pre_revenue = total_revenue < 5_000_000
+
+    if is_pre_revenue:
+        try:
+            cash = info.get("totalCash", 0) or 0
+            opcf = info.get("operatingCashflow", 0) or 0
+            if cash > 0 and opcf < 0:
+                quarterly_burn = abs(opcf) / 4
+                runway_quarters = cash / quarterly_burn if quarterly_burn > 0 else 99
+                if runway_quarters >= 8:
+                    score += 3; reasons.append(f"Cash runway {runway_quarters:.0f}q")
+                elif runway_quarters >= 4:
+                    score += 1; reasons.append(f"Cash runway {runway_quarters:.0f}q")
+        except Exception:
+            pass
+
+        gross_margin = info.get("grossMargins", 0) or 0
+        if gross_margin > gm_high:
+            score += 3; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+        elif gross_margin > gm_low:
+            score += 1; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+
+        try:
+            rd = info.get("researchAndDevelopmentToRevenue", 0) or 0
+            if rd > 0.5:
+                score += 2; reasons.append("Heavy R&D")
+        except Exception:
+            pass
+
+        reasons.append("Pre-revenue")
+        return score, reasons
+
+    # Revenue Growth — max 10 pts
     try:
         financials = stock.quarterly_financials
         if "Total Revenue" in financials.index and financials.shape[1] >= 5:
@@ -1283,24 +1355,23 @@ def _score_fundamentals(info, stock, config=None):
             growth   = (rev_now - rev_prev) / abs(rev_prev) if rev_prev != 0 else 0
         else:
             growth = info.get("revenueGrowth", 0) or 0
-    except:
+    except Exception:
         growth = info.get("revenueGrowth", 0) or 0
 
-    if growth >= rev_high:   score += 20; reasons.append(f"Rev growth {growth*100:.0f}%")
-    elif growth >= rev_low:  score += 12; reasons.append(f"Rev growth {growth*100:.0f}%")
+    if growth >= rev_high:   score += 10; reasons.append(f"Rev growth {growth*100:.0f}%")
+    elif growth >= rev_low:  score += 6;  reasons.append(f"Rev growth {growth*100:.0f}%")
+    elif growth >= 0.10:     score += 2;  reasons.append(f"Rev growth {growth*100:.0f}%")
 
-    # ── ROCE ────────────────────────────────────────────────
+    # ROCE — max 4 pts
     roce = info.get("returnOnCapitalEmployed", info.get("returnOnCapital", 0)) or 0
-    if roce > roce_thr: score += 7; reasons.append(f"ROCE {roce*100:.0f}%")
+    if roce > roce_thr: score += 4; reasons.append(f"ROCE {roce*100:.0f}%")
 
-    # ── Gross Margin ────────────────────────────────────────
-    # Strongest single predictor of durable competitive advantage.
+    # Gross Margin — max 3 pts
     gross_margin = info.get("grossMargins", 0) or 0
-    if gross_margin > gm_high:   score += 5; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
-    elif gross_margin > gm_low:  score += 3; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+    if gross_margin > gm_high:   score += 3; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
+    elif gross_margin > gm_low:  score += 1; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
 
-    # ── Free Cash Flow ──────────────────────────────────────
-    # Positive FCF separates real businesses from burn-rate stories.
+    # FCF — max 1 pt
     try:
         cf = stock.quarterly_cashflow
         if "Free Cash Flow" in cf.index:
@@ -1310,16 +1381,16 @@ def _score_fundamentals(info, stock, config=None):
                        - abs(cf.loc["Capital Expenditure"].iloc[:4].sum()))
         else:
             ttm_fcf = info.get("freeCashflow", None)
-    except:
+    except Exception:
         ttm_fcf = info.get("freeCashflow", None)
 
     if ttm_fcf is not None and ttm_fcf > 0:
-        score += 3; reasons.append("FCF positive")
+        score += 1; reasons.append("FCF positive")
 
     return score, reasons
 
 def _score_momentum(hist, ticker):
-    """Score: 6mo momentum (8), 50MA (4), 200MA (4), volume spike (8), IWM RS (6) = 30 pts max."""
+    """Score momentum — max 34 pts (tiered gates for explosive-runner detection)."""
     score, reasons = 0, []
     if hist.empty or len(hist) < 50:
         return score, reasons
@@ -1330,15 +1401,22 @@ def _score_momentum(hist, ticker):
     vol_avg    = hist["Volume"].rolling(30).mean().iloc[-1]
     vol_today  = hist["Volume"].iloc[-1]
 
-    # 6-month price momentum
-    if price_now > price_6mo * 1.15:
-        score += 8; reasons.append("6mo Momentum")
+    # 6-month price momentum — tiered, max 10 pts
+    mom_6mo = (price_now / price_6mo - 1) if price_6mo > 0 else 0
+    if mom_6mo >= 0.25:
+        score += 10; reasons.append(f"6mo Momentum +{mom_6mo*100:.0f}%")
+    elif mom_6mo >= 0.15:
+        score += 8;  reasons.append(f"6mo Momentum +{mom_6mo*100:.0f}%")
+    elif mom_6mo >= 0.10:
+        score += 5;  reasons.append(f"6mo Momentum +{mom_6mo*100:.0f}%")
+    elif mom_6mo >= 0.05:
+        score += 2;  reasons.append(f"6mo Momentum +{mom_6mo*100:.0f}%")
 
-    # Price above 50-day MA
+    # Price above 50-day MA — 4 pts
     if price_now > ma50:
         score += 4; reasons.append("Above 50MA")
 
-    # Price above 200-day MA (trend health check)
+    # Price above 200-day MA — 4 pts
     if len(hist) >= 200:
         ma200 = hist["Close"].rolling(200).mean().iloc[-1]
         if price_now > ma200:
@@ -1346,14 +1424,14 @@ def _score_momentum(hist, ticker):
     else:
         logger.debug(f"{ticker}: fewer than 200 days of history — 200MA check skipped")
 
-    # Unusual volume spike
-    if vol_today > vol_avg * 2:
-        score += 8; reasons.append("⚡ Volume spike")
+    # Volume spike — 8 pts (lowered threshold to 1.5x to catch earlier breakouts)
+    if vol_today > vol_avg * 2.0:
+        score += 8; reasons.append("⚡ Volume spike 2x")
+    elif vol_today > vol_avg * 1.5:
+        score += 4; reasons.append("⚡ Volume spike 1.5x")
 
-    # Relative Strength vs IWM (Russell 2000 benchmark)
-    # +6 pts if the stock has outperformed IWM by 20%+ over the last 3 months.
+    # Relative Strength vs IWM — tiered, max 8 pts
     try:
-        # Use the last ~63 trading days as a proxy for 3 months
         if len(hist) >= 63:
             import time as _time
             stock_3mo_return = (price_now / hist["Close"].iloc[-63]) - 1
@@ -1368,8 +1446,14 @@ def _score_momentum(hist, ticker):
             if iwm_hist is not None and not iwm_hist.empty:
                 iwm_return = (iwm_hist["Close"].iloc[-1] / iwm_hist["Close"].iloc[0]) - 1
                 rs_delta   = stock_3mo_return - iwm_return
-                if rs_delta >= 0.20:
+                if rs_delta >= 0.35:
+                    score += 8; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
+                elif rs_delta >= 0.20:
                     score += 6; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
+                elif rs_delta >= 0.10:
+                    score += 4; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
+                elif rs_delta >= 0.05:
+                    score += 2; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
     except Exception as e:
         logger.debug(f"{ticker}: IWM relative strength check failed — {e}")
 
@@ -1389,41 +1473,77 @@ def score_stock(ticker, memory_df, config, regime_info=None):
 
         score, reasons = 0, []
 
+        # Fetch history once — needed by momentum and smart money
+        hist = stock.history(period="1y")
+
         # 1. Fundamentals (rev growth + ROCE + gross margin + FCF)
         f_score, f_reasons = _score_fundamentals(info, stock, config)
         score += f_score; reasons.extend(f_reasons)
 
-        # 2. Valuation (max 10 pts: PEG 6 + P/S 4)
+        # 2. Valuation (max 6 pts: PEG 4 + P/S 2)
         v_score = 0
         peg = info.get("pegRatio", 2)
-        if 0 < peg < 1: v_score += 6; reasons.append(f"PEG {peg:.1f}")
+        if 0 < peg < 1: v_score += 4; reasons.append(f"PEG {peg:.1f}")
         ps = info.get("priceToSalesTrailing12Months", 10)
-        if 0 < ps < 4: v_score += 4; reasons.append(f"P/S {ps:.1f}x")
+        if 0 < ps < 4: v_score += 2; reasons.append(f"P/S {ps:.1f}x")
         score += v_score
 
-        # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS — max 30 pts)
-        hist = stock.history(period="1y")  # 1y gives enough data for 200MA
+        # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS — max 34 pts)
         m_score, m_reasons = _score_momentum(hist, ticker)
         score += m_score; reasons.extend(m_reasons)
 
-        # 4. Smart Money & Cap (max 20 pts: inst ownership 13 + cap range 7)
+        # 4. Smart Money, Cap & Float (max 22 pts)
         s_score = 0
         inst_ceil = getattr(config, "INST_OWN_CEILING", 0.40)
         mkt_min   = getattr(config, "MKT_CAP_MIN", 50e6)
         mkt_max   = getattr(config, "MKT_CAP_MAX", 10e9)
         inst_own = info.get("heldPercentInstitutions", 1) or 1
-        if inst_own < inst_ceil: s_score += 13; reasons.append(f"Inst. {inst_own*100:.0f}%")
+        if inst_own < 0.10:       s_score += 10; reasons.append(f"Inst. {inst_own*100:.0f}% (undiscovered)")
+        elif inst_own < inst_ceil: s_score += 7;  reasons.append(f"Inst. {inst_own*100:.0f}%")
+        elif inst_own < 0.60:     s_score += 2;  reasons.append(f"Inst. {inst_own*100:.0f}%")
         mkt_cap = info.get("marketCap", 0) or 0
-        if mkt_min < mkt_cap < mkt_max: s_score += 7; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
+        if mkt_min < mkt_cap < mkt_max: s_score += 6; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
+
+        float_shares = info.get("floatShares", 0) or 0
+        short_pct    = info.get("shortPercentOfFloat", 0) or 0
+        short_ratio  = info.get("shortRatio", 0) or 0
+        price_now_sm = hist["Close"].iloc[-1] if not hist.empty else 0
+        ma50_sm = hist["Close"].rolling(50).mean().iloc[-1] if len(hist) >= 50 else price_now_sm
+        if float_shares > 0 and float_shares < 5_000_000:
+            s_score += 3; reasons.append(f"Tight float {float_shares/1e6:.1f}M shares")
+        if short_pct > 0.20 and short_ratio > 3 and price_now_sm > ma50_sm:
+            s_score += 3; reasons.append(f"Squeeze setup ({short_pct*100:.0f}% short, {short_ratio:.1f}d cover)")
+
         score += s_score
 
-        # 5. Persistence Bonus (max 5 pts — unchanged)
+        # 5. Persistence Bonus (max 5 pts — continuous, with score velocity bonus)
         p_score = 0
         prev = memory_df[memory_df["ticker"] == ticker]
-        if not prev.empty and int(prev["times_flagged"].values[0]) >= 3:
-            p_score += 5
-            reasons.append("\U0001f501 Persistence bonus")
+        score_velocity = 0
+        if not prev.empty:
+            times_flagged = int(prev["times_flagged"].values[0])
+            last_score_mem = float(prev["last_score"].values[0]) if "last_score" in prev.columns else 0
+            p_score = min(5, round(times_flagged * 1.5))
+            if p_score > 0:
+                reasons.append(f"\U0001f501 Persistence x{times_flagged}")
+            score_velocity = score - last_score_mem
+            if score_velocity >= 10:
+                p_score = min(5, p_score + 2)
+                reasons.append(f"↑ Score velocity +{score_velocity:.0f}")
+            elif score_velocity >= 5:
+                p_score = min(5, p_score + 1)
+                reasons.append(f"↑ Rising score")
         score += p_score
+
+        # 4.5. Catalyst Score (EDGAR cluster buys + 8-K + options flow — max 15 pts)
+        c_score, c_reasons = 0, []
+        try:
+            from catalysts import compute_catalyst_score
+            c_score, c_reasons = compute_catalyst_score(ticker)
+            score += c_score
+            reasons.extend(c_reasons)
+        except Exception as _ce:
+            logger.debug(f"{ticker}: catalyst score unavailable — {_ce}")
 
         # Capture raw quality score before regime adjustment for MIN_SCORE gating.
         # The regime multiplier adjusts the *displayed* score to reflect market context
@@ -1457,19 +1577,25 @@ def score_stock(ticker, memory_df, config, regime_info=None):
             return None
 
         return {
-            "ticker":     ticker,
-            "sector":     info.get("sector", "Unknown"),
-            "score":      score,
-            "raw_score":  raw_score,
-            "f_score":    f_score,
-            "v_score":    v_score,
-            "m_score":    m_score,
-            "s_score":    s_score,
-            "p_score":    p_score,
-            "tier":       "\U0001f7e2 HIGH CONVICTION" if score >= 80 else "\U0001f7e1 WATCHLIST",
-            "reasons":    reasons,
-            "price":      round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
-            "mkt_cap":    f"${mkt_cap/1e6:.0f}M"
+            "ticker":              ticker,
+            "sector":              info.get("sector", "Unknown"),
+            "score":               score,
+            "raw_score":           raw_score,
+            "raw_score_pre_regime": quality_score,
+            "f_score":             f_score,
+            "v_score":             v_score,
+            "m_score":             m_score,
+            "s_score":             s_score,
+            "p_score":             p_score,
+            "c_score":             c_score,
+            "tier":                "\U0001f7e2 HIGH CONVICTION" if score >= 80 else "\U0001f7e1 WATCHLIST",
+            "reasons":             reasons,
+            "price":               round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,
+            "mkt_cap":             f"${mkt_cap/1e6:.0f}M",
+            "float_shares":        float_shares,
+            "short_pct":           short_pct,
+            "days_to_cover":       short_ratio,
+            "score_velocity":      score_velocity,
         }
     except Exception as e:
         logger.warning(f"score_stock failed for {ticker}: {e}")
@@ -1541,6 +1667,80 @@ def get_universe():
         "SERV", "LIDR", "OUST", "AEVA", "MVIS", "KOPN", "XPOF",
         "CELH", "VNCE", "VSCO", "LOVE", "CURV", "BURL"
     ]
+
+def get_universe_extended(mode="combined"):
+    """Extended universe: IWM + Nasdaq micro-cap (<$1B) + recent IPOs (last 12mo).
+
+    mode: "core" = IWM only (calls get_universe())
+           "rockets" = Nasdaq micro-cap + IPOs only
+           "combined" = all sources merged, deduplicated
+    """
+    import ssl, io, urllib.request, json
+    from datetime import datetime, timedelta
+
+    _ssl_ctx = ssl.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = ssl.CERT_NONE
+    _opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=_ssl_ctx))
+
+    tickers_set = set()
+
+    if mode in ("core", "combined"):
+        try:
+            core = get_universe()
+            tickers_set.update(core)
+        except Exception as e:
+            logger.warning(f"get_universe() failed in extended mode: {e}")
+
+    if mode in ("rockets", "combined"):
+        try:
+            url = "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=3000&exchange=NASDAQ&marketcap=Small|Micro"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)"})
+            resp = _opener.open(req, timeout=15).read()
+            data = json.loads(resp)
+            rows = data.get("data", {}).get("table", {}).get("rows", [])
+            for row in rows:
+                sym = str(row.get("symbol", "")).strip()
+                if sym and sym.isalpha() and 1 < len(sym) <= 5:
+                    tickers_set.add(sym)
+            logger.info(f"Nasdaq micro screener: {len(tickers_set)} tickers after merge")
+        except Exception as e:
+            logger.warning(f"Nasdaq screener failed: {e}")
+            try:
+                url2 = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
+                raw = _opener.open(url2, timeout=15).read().decode("utf-8")
+                for line in raw.split("\n")[1:]:
+                    parts = line.split("|")
+                    if len(parts) >= 2:
+                        sym = parts[0].strip()
+                        if sym and sym.isalpha() and 1 < len(sym) <= 5:
+                            tickers_set.add(sym)
+                logger.info(f"nasdaqtrader fallback: added tickers, total {len(tickers_set)}")
+            except Exception as e2:
+                logger.warning(f"nasdaqtrader fallback failed: {e2}")
+
+        try:
+            fmp_key = os.environ.get("FMP_API_KEY", "")
+            if fmp_key:
+                from_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+                to_date   = datetime.now().strftime("%Y-%m-%d")
+                url = f"https://financialmodelingprep.com/api/v3/ipo_calendar?from={from_date}&to={to_date}&apikey={fmp_key}"
+                resp = _opener.open(url, timeout=15).read()
+                ipos = json.loads(resp)
+                ipo_count = 0
+                for ipo in ipos:
+                    sym = str(ipo.get("symbol", "")).strip()
+                    if sym and sym.isalpha() and 1 < len(sym) <= 5:
+                        tickers_set.add(sym)
+                        ipo_count += 1
+                logger.info(f"FMP IPO calendar: {ipo_count} recent IPOs added")
+        except Exception as e:
+            logger.warning(f"FMP IPO fetch failed: {e}")
+
+    result = list(tickers_set)
+    logger.info(f"get_universe_extended(mode={mode!r}): {len(result)} total tickers")
+    return result
+
 
 def optimize_portfolio(tickers: list, risk_free_rate: float = 0.04) -> dict:
     """Phase 4: Mean-variance optimization (Max Sharpe + Min Volatility) via scipy SLSQP."""

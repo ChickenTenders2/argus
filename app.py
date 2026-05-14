@@ -381,13 +381,27 @@ def update_unit_value_pref():
     st.session_state.prefs["unit_value"] = st.session_state.unit_value_input
     save_prefs(st.session_state.prefs)
 
+from theme import ENHANCED_CSS, REGIME_COLORS as _THEME_REGIME_COLORS
+from ui_components import (
+    render_sparkline, render_catalyst_pills, render_velocity_badge,
+    render_rr_chip, render_score_waterfall, render_hero_card,
+    render_sector_heatmap, render_catalyst_calendar,
+)
+try:
+    from pattern_match import get_runner_similarity, get_nearest_runners
+    _PATTERN_MATCH_AVAILABLE = True
+except Exception:
+    _PATTERN_MATCH_AVAILABLE = False
+    def get_runner_similarity(pick): return None
+    def get_nearest_runners(pick, top_n=3): return []
+
 st.set_page_config(
     page_title="Argus Investment Workstation",
     page_icon="👁",
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+st.markdown(ENHANCED_CSS, unsafe_allow_html=True)
 st.markdown(
     f"""<div style="border-left:4px solid #00b4d8;padding:12px 18px;margin-bottom:4px;
         background:linear-gradient(90deg,rgba(0,180,216,0.06) 0%,transparent 72%);
@@ -1117,7 +1131,26 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
                     st.markdown(f"**:{color}[{row['tier']}]**")
 
                 sig_label, sig_color = get_signal_label(score_val)
-                st.markdown(f"**:{sig_color}[{sig_label}]**")
+                # Score velocity + catalyst pills inline
+                _vel = row.get("score_velocity", 0) or 0
+                _vel_html = render_velocity_badge(_vel)
+                _reasons_raw_card = row.get("reasons", [])
+                if isinstance(_reasons_raw_card, str):
+                    try:
+                        _reasons_raw_card = json.loads(_reasons_raw_card) if _reasons_raw_card.startswith("[") else [_reasons_raw_card]
+                    except Exception:
+                        _reasons_raw_card = [_reasons_raw_card]
+                _cat_pills_html = render_catalyst_pills(_reasons_raw_card if isinstance(_reasons_raw_card, list) else [])
+                _sig_color_map = {"green":"26d97f","blue":"00d4ff","orange":"ffb547","gray":"8ea0ba","red":"ff5a7a"}
+                _sig_hex = _sig_color_map.get(sig_color, "8ea0ba")
+                _inline_html = f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0">'
+                _inline_html += f'<span style="font-size:0.82rem;font-weight:600;color:#{_sig_hex}">{sig_label}</span>'
+                if _vel_html:
+                    _inline_html += _vel_html
+                _inline_html += '</div>'
+                if _cat_pills_html:
+                    _inline_html += _cat_pills_html
+                st.markdown(_inline_html, unsafe_allow_html=True)
 
                 if "scan_count" in row and pd.notna(row["scan_count"]) and int(row["scan_count"]) > 1:
                     st.caption(f"🔁 Scanned {int(row['scan_count'])} times today")
@@ -1164,6 +1197,40 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
                         render_metric_badges(reasons)
                     else:
                         render_metric_badges([str(reasons)]) if reasons else None
+
+                # Score breakdown waterfall
+                _has_scores = any(row.get(k) for k in ["f_score", "m_score", "s_score"])
+                if _has_scores and not compact:
+                    with st.expander("📊 Score Breakdown", expanded=False):
+                        render_score_waterfall(dict(row))
+
+                # R/R chip
+                _sl = row.get("stop_loss_pct", 0) or 0
+                _tp = row.get("take_profit_pct", 0) or 0
+                _rr_html = render_rr_chip(_sl, _tp)
+                if _rr_html:
+                    st.markdown(_rr_html, unsafe_allow_html=True)
+
+                # Runner similarity badge
+                if _PATTERN_MATCH_AVAILABLE and not compact:
+                    try:
+                        _sim = get_runner_similarity(dict(row))
+                        if _sim is not None and _sim > 0:
+                            _sim_int = int(_sim)
+                            _sim_col = "#26d97f" if _sim >= 65 else ("#ffb547" if _sim >= 40 else "#8ea0ba")
+                            _nearest = get_nearest_runners(dict(row), top_n=2)
+                            _near_str = ", ".join(r["ticker"] for r in _nearest) if _nearest else ""
+                            _tip = f"Similarity to historical 3-5x runners ({_near_str})" if _near_str else "Similarity to historical 3-5x runners"
+                            _sim_html = (
+                                f'<span class="argus-badge" style="border-color:rgba(38,217,127,0.25)">'
+                                f'<span style="color:{_sim_col};font-weight:700">🏆 {_sim_int}</span>'
+                                f'<span style="color:#8ea0ba;font-size:0.68rem"> runner sim</span>'
+                                f'<span class="argus-tip">{_tip}</span>'
+                                f'</span>'
+                            )
+                            st.markdown(f'<div class="argus-badge-wrap">{_sim_html}</div>', unsafe_allow_html=True)
+                    except Exception:
+                        pass
 
                 # ── Enrichment: earnings, analyst target, insider ──
                 try:
@@ -1306,6 +1373,19 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.divider()
+
+    # Progressive disclosure: Beginner / Standard / Power
+    _ui_mode = st.radio(
+        "Interface Mode",
+        ["Beginner", "Standard", "Power"],
+        index=["Beginner", "Standard", "Power"].index(
+            st.session_state.get("ui_mode", "Standard")
+        ),
+        horizontal=True,
+        key="ui_mode",
+        help="Beginner: simplified controls  ·  Standard: all common settings  ·  Power: full control over every parameter.",
+    )
+
     st.header("Global Presets")
     
     preset_options = [
@@ -1341,7 +1421,23 @@ with st.sidebar:
             help="Number of tickers to scan. ~200 ≈ 1 min · ~400 ≈ 2 min · ~800 ≈ 4 min.")
         _scan_shuffle = (universe_mode == "🎲 Random")
 
-    with st.expander("Advanced Filters & Constraints"):
+    # Defaults so Beginner mode doesn't NameError — widgets override when visible
+    price_floor      = st.session_state.get("price_floor", 2.00)
+    price_ceiling    = st.session_state.get("price_ceiling", 0.0)
+    vol_floor        = st.session_state.get("vol_floor", 500000)
+    horizon_days     = st.session_state.get("horizon_days", 63)
+    target_return    = st.session_state.get("target_return", 10) / 100.0
+    risk_per_trade_pct = st.session_state.get("risk_per_trade_pct", 0.75)
+    max_position_pct   = st.session_state.get("max_position_pct", 8.00)
+    rev_growth_high  = st.session_state.get("rev_growth_high", 30) / 100
+    rev_growth_low   = st.session_state.get("rev_growth_low", 20) / 100
+    roce_threshold   = st.session_state.get("roce_threshold", 20) / 100
+    gross_margin_high = st.session_state.get("gross_margin_high", 60) / 100
+    gross_margin_low  = st.session_state.get("gross_margin_low", 40) / 100
+    inst_own_ceiling  = st.session_state.get("inst_own_ceiling", 40) / 100
+
+    if st.session_state.get("ui_mode", "Standard") in ("Standard", "Power"):
+     with st.expander("Advanced Filters & Constraints"):
         price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor",
             help="Minimum stock price to include. Filters out very cheap penny stocks that may have high volatility or low quality. Default: $2.00.")
         price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling",
@@ -1349,13 +1445,15 @@ with st.sidebar:
         vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor",
             help="Minimum average daily trading volume. Higher values ensure you can enter/exit positions without slippage. Default: 500,000 shares/day.")
 
-    with st.expander("ML Prediction Horizons"):
+    if st.session_state.get("ui_mode", "Standard") in ("Standard", "Power"):
+     with st.expander("ML Prediction Horizons"):
         horizon_days = st.selectbox("Horizon days", [21, 42, 63, 84, 126], key="horizon_days",
             help="The future time window (in trading days) the ML model uses to assess whether a stock hit the target return. 63 days ≈ 1 quarter. Longer horizons capture slower trends; shorter ones target quick breakouts.")
         target_return = st.slider("Target return (%)", 1, 100, key="target_return",
             help="The minimum % gain the ML model considers a 'hit'. A stock is labeled a success if it returns ≥ this value within the Horizon Days. Higher targets are harder to hit but filter for stronger momentum.") / 100.0
 
-    with st.expander("Advanced Risk Rules"):
+    if st.session_state.get("ui_mode", "Standard") == "Power":
+     with st.expander("Advanced Risk Rules"):
         risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct",
             help="The maximum % of your total portfolio you are willing to lose if a position hits its stop-loss. Argus uses this to compute the suggested position size. Lower = more conservative. Default: 0.75%.")
         max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
@@ -1370,7 +1468,8 @@ with st.sidebar:
             help="1 unit = this £ amount. Used for unit-based buying suggestions. Default: £250.",
         )
 
-    with st.expander("Scoring Thresholds"):
+    if st.session_state.get("ui_mode", "Standard") == "Power":
+     with st.expander("Scoring Thresholds"):
         st.caption("Tune the quality bars used in the scoring algorithm.")
         rev_growth_high = st.slider("Rev Growth (full pts, %)", 10, 50, key="rev_growth_high",
             help="Revenue growth ≥ this → 20 pts. Default: 30%.") / 100
@@ -1476,19 +1575,16 @@ _strip_color_map = {
     "Bull": "#2E8B57", "Neutral": "#4169E1", "Bear": "#FF8C00",
     "Extreme Fear": "#DC143C", "Stagflation": "#8B008B",
 }
-_sc = _strip_color_map.get(_strip_regime["regime"], "#555555")
-_strip_vix = _strip_regime.get("vix_level")
-_tip_style = "text-decoration:underline dotted;cursor:help"
+_sc          = _strip_color_map.get(_strip_regime["regime"], "#555555")
+_strip_vix   = _strip_regime.get("vix_level")
+_strip_mult  = _strip_regime["multiplier"]
+_sc_leading  = _strip_regime.get("small_cap_leading", False)
+_sc_stress   = _strip_regime.get("small_cap_stress", False)
+_tip_style   = "text-decoration:underline dotted;cursor:help"
 _strip_vix_str = (
-    f' · <abbr title="CBOE Volatility Index — market fear gauge. &lt;18 = calm, 18–25 = elevated, &gt;25 = high fear" style="{_tip_style}">'
+    f'<abbr title="CBOE Volatility Index — market fear gauge. &lt;18 = calm, 18–25 = elevated, &gt;25 = high fear" style="{_tip_style}">'
     f'VIX {_strip_vix:.1f}</abbr>'
-    if _strip_vix else ""
-)
-_strip_mult = _strip_regime["multiplier"]
-_strip_mult_str = (
-    f'<abbr title="Score multiplier: all Argus scores are scaled by this factor in the current regime. '
-    f'&gt;1.0 = bull boost, &lt;1.0 = bear penalty, 1.0 = neutral" style="{_tip_style}">'
-    f'×{_strip_mult}</abbr>'
+    if _strip_vix else "VIX —"
 )
 _strip_reason_str = re.sub(
     r'(50-day|200-day)',
@@ -1497,24 +1593,33 @@ _strip_reason_str = re.sub(
 )
 _strip_reason_str = re.sub(
     r'(macro adj [+\-]?\d+\.\d+)',
-    rf'<abbr title="Macro adjustment: the multiplier was shifted by macro signals — yield curve inversion, elevated CPI, or extreme fear reading." style="{_tip_style}">\1</abbr>',
+    rf'<abbr title="Macro adjustment: multiplier shifted by yield curve / CPI / HY spreads / extreme fear." style="{_tip_style}">\1</abbr>',
     _strip_reason_str,
 )
+_sc_chips = ""
+if _sc_leading:
+    _sc_chips += '<span class="argus-regime-chip" title="IWM outperforming QQQ over 20 days">📈 SC Leading</span>'
+if _sc_stress:
+    _sc_chips += '<span class="argus-regime-chip" title="IWM realized vol > 1.5× SPY — small-cap stress">⚡ SC Stress</span>'
 _regime_tip_box = (
     '<span class="argus-regime-tip-box">'
-    '<strong>\u00d7mult</strong> \u2014 score multiplier (&gt;1\u202fbull boost, &lt;1\u202fbear penalty)<br>'
-    '<strong>VIX</strong> \u2014 CBOE fear gauge (&lt;18\u202fcalm\u202f\u00b7\u202f18\u201325\u202felevated\u202f\u00b7\u202f&gt;25\u202fhigh fear)<br>'
-    '<strong>50/200-day MA</strong> \u2014 price above moving average\u202f=\u202fuptrend<br>'
-    '<strong>macro adj</strong> \u2014 multiplier shift from yield curve\u202f/\u202fCPI\u202f/\u202fFear&amp;Greed'
+    '<strong>×mult</strong> — score multiplier (&gt;1 bull boost, &lt;1 bear penalty)<br>'
+    '<strong>VIX</strong> — CBOE fear gauge (&lt;18 calm · 18–25 elevated · &gt;25 high fear)<br>'
+    '<strong>SC Leading</strong> — IWM outperforming QQQ by &gt;3% over 20d → +0.05 multiplier<br>'
+    '<strong>SC Stress</strong> — IWM realized vol &gt;1.5× SPY → small-cap stress flag<br>'
+    '<strong>macro adj</strong> — shift from yield curve / CPI / HY spreads / Fear&amp;Greed'
     '</span>'
 )
 st.markdown(
-    f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:4px;'
-    f'padding:5px 12px;margin-bottom:10px;font-size:0.82rem;">'
-    f'<strong>{_strip_regime["regime"]}</strong> regime'
-    f' \u00b7 {_strip_mult_str}{_strip_vix_str}'
-    f' \u00b7 <em>{_strip_reason_str}</em>'
-    f' <span class="argus-regime-tip">\u24d8{_regime_tip_box}</span>'
+    f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:6px;'
+    f'padding:8px 14px;margin-bottom:10px;">'
+    f'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    f'<span style="font-size:1rem;font-weight:700;color:{_sc}">{_strip_regime["regime"]}</span>'
+    f'<span style="font-size:0.82rem;color:#8ea0ba">×{_strip_mult} · {_strip_vix_str}</span>'
+    f'{_sc_chips}'
+    f'<span style="font-size:0.78rem;color:#8ea0ba;font-style:italic;flex:1">{_strip_reason_str}</span>'
+    f'<span class="argus-regime-tip">ⓘ{_regime_tip_box}</span>'
+    f'</div>'
     f'</div>',
     unsafe_allow_html=True,
 )
@@ -1552,34 +1657,31 @@ if active_tab == "Overview":
             )
             st.caption(f"Last scan: **{scan_date_display}** · Refreshes every hour")
 
-    _SECTOR_SHORT = {
-        "Technology": "Tech", "Communication Services": "Comm.",
-        "Consumer Cyclical": "Cons.Cyc.", "Consumer Defensive": "Cons.Def.",
-        "Healthcare": "Health", "Financial Services": "Fin.",
-        "Basic Materials": "Matls", "Real Estate": "RE",
-        "Energy": "Energy", "Industrials": "Ind.", "Utilities": "Utils",
-    }
     with _bc2:
         with st.container(border=True):
-            st.markdown("**🏆 Top Picks Today**")
+            st.markdown("**🏆 Top 3 Today**")
             if not latest_df.empty:
-                _top5 = latest_df.sort_values("score", ascending=False).head(5)
-                _tp_cols = st.columns(5)
-                for _i, (_, _tr) in enumerate(_top5.iterrows()):
+                _top3 = latest_df.sort_values("score", ascending=False).head(3)
+                for _ri, (_, _tr) in enumerate(_top3.iterrows(), 1):
                     _sig_lbl, _sig_col = get_signal_label(_tr.get("score", 0))
-                    _sig_icon = _sig_lbl.split()[0]
-                    _raw_sec = _tr.get("sector", "")
-                    _sec_short = _SECTOR_SHORT.get(_raw_sec, _raw_sec[:6] if _raw_sec else "")
-                    with _tp_cols[_i]:
-                        st.markdown(
-                            f"**{_tr['ticker']}**  \n"
-                            f":{_sig_col}[{_sig_icon} {_tr['score']:.0f}]"
-                            + (f"  \n*{_sec_short}*" if _sec_short else ""),
-                        )
+                    _vel = _tr.get("score_velocity", 0) or 0
+                    _vel_html = render_velocity_badge(_vel)
+                    _cat_html = render_catalyst_pills(
+                        json.loads(_tr["reasons"]) if isinstance(_tr.get("reasons"), str) and _tr["reasons"].startswith("[") else (_tr.get("reasons") or [])
+                    )
+                    st.markdown(
+                        f'<div style="margin-bottom:6px;padding:6px 8px;background:#111e35;border-radius:6px;border:1px solid rgba(0,212,255,0.12)">'
+                        f'<span style="font-weight:700;color:#e8eef7">#{_ri} {_tr["ticker"]}</span>'
+                        f'<span style="float:right;font-weight:700;color:#00d4ff">{int(_tr["score"])}</span>'
+                        f'<br><span style="font-size:0.72rem;color:#8ea0ba">{_tr.get("sector","")}</span>'
+                        f'{" " + _vel_html if _vel_html else ""}'
+                        f'{("<br>" + _cat_html) if _cat_html else ""}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
                 st.caption(f"Scan: **{scan_date_display}**")
             else:
                 st.caption("No scan data yet — run a scan to see picks.")
-                st.caption("&nbsp;", unsafe_allow_html=True)
 
     with _bc3:
         with st.container(border=True):
@@ -1736,6 +1838,16 @@ if active_tab == "Overview":
                 _cap_pct,
                 help=f"How much of the £{UNIT_DAILY_CAP * _uv:,} daily hard cap is being used.",
             )
+
+        # ── Sector conviction heatmap ─────────────────────────────────────────
+        with st.expander("🗺️ Sector Conviction Heatmap", expanded=False):
+            render_sector_heatmap(subset_view)
+
+        # ── Catalyst calendar (earnings this week for HC picks) ───────────────
+        _hc_picks = subset_view[subset_view.get("tier", "").str.contains("HIGH CONVICTION", na=False)] if "tier" in subset_view.columns else pd.DataFrame()
+        if not _hc_picks.empty:
+            with st.expander("📅 Earnings Calendar (HC Picks)", expanded=False):
+                render_catalyst_calendar(_hc_picks)
 
         # Display the visual card grid instead of a flat table
         display_cards(subset_view, cols_per_row=5, compact=True)

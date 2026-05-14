@@ -19,3 +19,4 @@ streamlit-aggrid
 st-annotated-text
 streamlit-lottie
 streamlit-extras
+httpx

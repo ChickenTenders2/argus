@@ -170,16 +170,70 @@ def get_fred_macro():
             "signal": "🔴 Tight" if val >= 5.0 else ("🟡 Elevated" if val >= 3.0 else "✅ Accommodative"),
         }
 
+    # ── HY Credit Spread (BAMLH0A0HYM2) ──────────────────
+    hy = _fetch_fred_series("BAMLH0A0HYM2", limit=25)
+    if hy and len(hy) >= 2:
+        val_now  = hy[0]
+        val_20d  = hy[min(20, len(hy) - 1)]
+        widening = val_now - val_20d  # positive = spread widened (risk-off)
+        result["hy_spread"] = {
+            "value":    round(val_now, 2),
+            "widening_20d": round(widening, 2),
+            "widening": widening > 0.50,
+            "signal":   "🔴 Widening" if widening > 0.50 else ("🟡 Stable" if abs(widening) <= 0.50 else "✅ Tightening"),
+        }
+
     return result
+
+
+def get_small_cap_breadth():
+    """
+    Fetch IWM/QQQ relative strength and IWM realized volatility vs SPY.
+    Returns dict with:
+      - iwm_qqq_rs_20d: IWM 20-day return minus QQQ 20-day return (positive = small-cap leading)
+      - iwm_vol_ratio: IWM 30-day realized vol / SPY 30-day realized vol (>1.5 = small-cap stress)
+      - small_cap_leading: bool
+      - small_cap_stress: bool
+    """
+    try:
+        import yfinance as yf
+        import numpy as np
+        data = yf.download(["IWM", "QQQ", "SPY"], period="3mo", progress=False)["Close"]
+        if data.empty or len(data) < 22:
+            return {}
+        iwm = data["IWM"].dropna()
+        qqq = data["QQQ"].dropna()
+        spy = data["SPY"].dropna()
+
+        iwm_20d = float((iwm.iloc[-1] / iwm.iloc[-21] - 1)) if len(iwm) >= 21 else 0.0
+        qqq_20d = float((qqq.iloc[-1] / qqq.iloc[-21] - 1)) if len(qqq) >= 21 else 0.0
+        rs_20d  = round(iwm_20d - qqq_20d, 4)
+
+        iwm_vol  = float(iwm.pct_change().dropna().tail(30).std() * (252 ** 0.5)) if len(iwm) >= 31 else 0.0
+        spy_vol  = float(spy.pct_change().dropna().tail(30).std() * (252 ** 0.5)) if len(spy) >= 31 else 0.0
+        vol_ratio = round(iwm_vol / spy_vol, 2) if spy_vol > 0 else 1.0
+
+        return {
+            "iwm_qqq_rs_20d":   rs_20d,
+            "iwm_vol_ratio":    vol_ratio,
+            "small_cap_leading": rs_20d > 0.03,
+            "small_cap_stress":  vol_ratio > 1.5,
+        }
+    except Exception as e:
+        logger.warning(f"get_small_cap_breadth failed: {e}")
+        return {}
 
 
 def build_macro_context():
     """
-    Combine FRED macro indicators with the Fear & Greed index into one dict.
+    Combine FRED macro indicators, Fear & Greed, and small-cap breadth into one dict.
     All fields are optional — callers must use .get() with defaults.
     """
     macro = get_fred_macro()
     fg = get_fear_greed()
     if fg:
         macro["fear_greed"] = fg
+    breadth = get_small_cap_breadth()
+    if breadth:
+        macro["small_cap_breadth"] = breadth
     return macro
