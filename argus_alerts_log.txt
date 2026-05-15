@@ -1506,3 +1506,18 @@ _None today_
 ──────────────────────────────
 _Scanned 946 tickers • Top 12 picks shown_
 
+--- 2026-05-15 22:45:22 ---
+👁 *Argus Daily Scan — 15 May 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*HYLN* — Score: *63/100*
+⚡ _Previously flagged 3x since 12 May 2026 — signals strengthening_
+💰 Price: $4.67 | Cap: $833M
+📊 Rev growth 130% | 6mo Momentum +178% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +122% | Inst. 24% | Cap $833M | 🔁 Persistence x2 | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 628 tickers • Top 1 picks shown_
+
