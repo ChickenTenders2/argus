@@ -111,6 +111,7 @@ def get_db_connection():
                             id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
                             raw_score REAL,
                             f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                            c_score REAL,
                             tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
                             scan_date TEXT, scan_timestamp TEXT, run_type TEXT)"""))
                         try:
@@ -173,6 +174,7 @@ def get_db_connection():
                         id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, sector TEXT, score REAL,
                         raw_score REAL,
                         f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
+                        c_score REAL,
                         tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
                         scan_date TEXT, scan_timestamp TEXT, run_type TEXT)""")
                     try:
@@ -367,21 +369,27 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
         })
     df = pd.DataFrame(rows)
     conn = get_db_connection()
-    # Lazy migration: ensure raw_score column exists (handles pre-existing Supabase tables)
-    try:
-        import sqlalchemy as _sa
-        conn.execute(_sa.text("ALTER TABLE features ADD COLUMN IF NOT EXISTS raw_score REAL"))
-        conn.commit()
-    except Exception:
+    # Lazy migration: add any columns that didn't exist in older schema versions.
+    # Each ALTER is wrapped individually so one failure doesn't block the rest.
+    _new_cols = [
+        ("raw_score", "REAL"),
+        ("c_score",   "REAL"),
+    ]
+    for _col, _typ in _new_cols:
         try:
-            conn.rollback()
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE features ADD COLUMN raw_score REAL")
+            import sqlalchemy as _sa
+            conn.execute(_sa.text(f"ALTER TABLE features ADD COLUMN IF NOT EXISTS {_col} {_typ}"))
             conn.commit()
         except Exception:
-            pass
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                conn.execute(f"ALTER TABLE features ADD COLUMN {_col} {_typ}")
+                conn.commit()
+            except Exception:
+                pass
     df.to_sql("features", conn, if_exists="append", index=False)
     conn.close()
 
