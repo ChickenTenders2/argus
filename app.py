@@ -1384,19 +1384,6 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.divider()
-
-    # Progressive disclosure: Beginner / Standard / Power
-    _ui_mode = st.radio(
-        "Interface Mode",
-        ["Beginner", "Standard", "Power"],
-        index=["Beginner", "Standard", "Power"].index(
-            st.session_state.get("ui_mode", "Standard")
-        ),
-        horizontal=True,
-        key="ui_mode",
-        help="Beginner: simplified controls  ·  Standard: all common settings  ·  Power: full control over every parameter.",
-    )
-
     st.header("Global Presets")
     
     preset_options = [
@@ -1413,6 +1400,17 @@ with st.sidebar:
     st.markdown(
         f"<div style='background:#2b2b2b;border-left:3px solid #888;border-radius:4px;padding:10px 14px;font-size:0.82rem;color:#ccc;margin-bottom:6px;'>{st.session_state.preset_desc}</div>",
         unsafe_allow_html=True,
+    )
+
+    _ui_mode = st.radio(
+        "Interface Mode",
+        ["Beginner", "Standard", "Power"],
+        index=["Beginner", "Standard", "Power"].index(
+            st.session_state.get("ui_mode", "Standard")
+        ),
+        horizontal=True,
+        key="ui_mode",
+        help="Beginner: quick scan only  ·  Standard: + advanced filters  ·  Power: all controls",
     )
 
     st.header("Quick Scan Settings")
@@ -1568,7 +1566,8 @@ _history_has_today = (
     and "scan_date" in history_df.columns
     and history_df["scan_date"].astype(str).str[:10].eq(_today_str).any()
 )
-_has_scan_today = (_latest_scan_date == _today_str) or _history_has_today
+_prefs_scan_date = st.session_state.prefs.get("last_auto_scan_date", "")
+_has_scan_today = (_latest_scan_date == _today_str) or _history_has_today or (_prefs_scan_date == _today_str)
 
 _auto_scan_ran = False
 if not _has_scan_today and not st.session_state.get("_auto_scan_done_today", False):
@@ -1587,6 +1586,8 @@ if not _has_scan_today and not st.session_state.get("_auto_scan_done_today", Fal
                 feature_file=config.FEATURES_FILE,
             )
             st.session_state["_auto_scan_done_today"] = True
+            st.session_state.prefs["last_auto_scan_date"] = _today_str
+            save_prefs(st.session_state.prefs)
             _n_auto = len(_auto_payload["results"])
             _auto_st.update(label=f"✅ Auto-scan complete — {_n_auto} picks found.", state="complete")
             _auto_scan_ran = True
