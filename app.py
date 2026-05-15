@@ -1198,11 +1198,10 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
                     else:
                         render_metric_badges([str(reasons)]) if reasons else None
 
-                # Score breakdown waterfall
+                # Score breakdown waterfall (no inner expander — Streamlit forbids nesting)
                 _has_scores = any(row.get(k) for k in ["f_score", "m_score", "s_score"])
                 if _has_scores and not compact:
-                    with st.expander("📊 Score Breakdown", expanded=False):
-                        render_score_waterfall(dict(row))
+                    render_score_waterfall(dict(row))
 
                 # R/R chip
                 _sl = row.get("stop_loss_pct", 0) or 0
