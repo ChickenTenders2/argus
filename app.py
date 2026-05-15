@@ -1845,9 +1845,10 @@ if active_tab == "Overview":
         subset_view = latest_view[[c for c in display_cols if c in latest_view.columns]].copy()
 
         # ── Unit Sizing ────────────────────────────────────────────────────────
-        _uv = st.session_state.prefs.get("unit_value", 250)
+        _uv    = st.session_state.prefs.get("unit_value", 250)
+        _udcap = st.session_state.prefs.get("daily_unit_cap", 12)
         with st.spinner("Computing unit allocations…"):
-            subset_view = compute_unit_sizing(subset_view, unit_value=_uv, daily_cap=st.session_state.prefs.get('daily_unit_cap', 12))
+            subset_view = compute_unit_sizing(subset_view, unit_value=_uv, daily_cap=_udcap)
 
         _total_units = int(subset_view["units_final"].sum()) if "units_final" in subset_view.columns else 0
         _total_capital = _total_units * _uv
