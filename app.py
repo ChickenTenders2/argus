@@ -362,9 +362,13 @@ def load_prefs():
             prefs = json.load(f)
         if "unit_value" not in prefs:
             prefs["unit_value"] = 250
+        if "portfolio_size" not in prefs:
+            prefs["portfolio_size"] = 10000
+        if "daily_unit_cap" not in prefs:
+            prefs["daily_unit_cap"] = 12
         return prefs
     except:
-        return {"send_to_telegram": False, "unit_value": 250}
+        return {"send_to_telegram": False, "unit_value": 250, "portfolio_size": 10000, "daily_unit_cap": 12}
 
 def save_prefs(prefs):
     with open(PREFS_FILE, "w") as f:
@@ -379,6 +383,14 @@ def update_telegram_pref():
 
 def update_unit_value_pref():
     st.session_state.prefs["unit_value"] = st.session_state.unit_value_input
+    save_prefs(st.session_state.prefs)
+
+def _save_portfolio_size_pref():
+    st.session_state.prefs["portfolio_size"] = st.session_state.portfolio_size_input
+    save_prefs(st.session_state.prefs)
+
+def _save_daily_cap_pref():
+    st.session_state.prefs["daily_unit_cap"] = st.session_state.daily_unit_cap_input
     save_prefs(st.session_state.prefs)
 
 from theme import ENHANCED_CSS, REGIME_COLORS as _THEME_REGIME_COLORS
@@ -669,7 +681,7 @@ def _is_overextended(ticker: str) -> bool:
         return False
 
 
-def compute_unit_sizing(df: pd.DataFrame, unit_value: int = 250) -> pd.DataFrame:
+def compute_unit_sizing(df: pd.DataFrame, unit_value: int = 250, daily_cap: int = 12) -> pd.DataFrame:
     """
     Compute rank-based unit buying suggestions for each ticker.
 
@@ -762,8 +774,8 @@ def compute_unit_sizing(df: pd.DataFrame, unit_value: int = 250) -> pd.DataFrame
     out["units_timing"] = timing_list
 
     total_units = sum(final_list)
-    if total_units > UNIT_DAILY_CAP:
-        excess = total_units - UNIT_DAILY_CAP
+    if total_units > daily_cap:
+        excess = total_units - daily_cap
         for idx in out.sort_values("_rank", ascending=False).index:
             if excess <= 0:
                 break
@@ -1250,7 +1262,7 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
                     pass
 
                 # ── Unit Sizing block (rendered if compute_unit_sizing was called) ──
-                if "units_final" in row and pd.notna(row.get("units_final")):
+                if "units_final" in row and pd.notna(row.get("units_final")) and int(row.get("units_final", 0)) > 0:
                     _uf = int(row["units_final"])
                     _ub = int(row.get("units_base", 0))
                     _umods = row.get("units_modifiers", [])
@@ -1457,15 +1469,7 @@ with st.sidebar:
             help="The maximum % of your total portfolio you are willing to lose if a position hits its stop-loss. Argus uses this to compute the suggested position size. Lower = more conservative. Default: 0.75%.")
         max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
             help="Hard cap on how large any single position can be as a % of your total portfolio. Prevents over-concentration even when the risk formula suggests a larger size. Default: 8.0%.")
-        unit_value = st.number_input(
-            "Unit Value (£)",
-            min_value=50, max_value=2000,
-            value=st.session_state.prefs.get("unit_value", 250),
-            step=50,
-            key="unit_value_input",
-            on_change=update_unit_value_pref,
-            help="1 unit = this £ amount. Used for unit-based buying suggestions. Default: £250.",
-        )
+
 
     if st.session_state.get("ui_mode", "Standard") == "Power":
      with st.expander("Scoring Thresholds"):
@@ -1482,6 +1486,33 @@ with st.sidebar:
             help="Gross margin > this → 3 pts. Default: 40%.") / 100
         inst_own_ceiling = st.slider("Inst. Ownership ceiling (%)", 20, 80, key="inst_own_ceiling",
             help="Institutional ownership < this → 13 pts (undiscovered signal). Default: 40%.") / 100
+
+    st.divider()
+    st.markdown("#### 💷 Capital & Sizing")
+    unit_value_sidebar = st.number_input(
+        "Unit Value (£)",
+        min_value=50, max_value=5000, step=50,
+        value=st.session_state.prefs.get("unit_value", 250),
+        key="unit_value_input",
+        on_change=update_unit_value_pref,
+        help="1 unit = this £ amount. Argus allocates 1–5 units per HC pick.",
+    )
+    portfolio_size = st.number_input(
+        "Total Portfolio Size (£)",
+        min_value=0, max_value=10_000_000, step=500,
+        value=st.session_state.prefs.get("portfolio_size", 10000),
+        key="portfolio_size_input",
+        on_change=_save_portfolio_size_pref,
+        help="Used to calculate position size % from unit allocations.",
+    )
+    daily_unit_cap = st.slider(
+        "Daily Unit Cap",
+        min_value=3, max_value=30, step=1,
+        value=st.session_state.prefs.get("daily_unit_cap", 12),
+        key="daily_unit_cap_input",
+        on_change=_save_daily_cap_pref,
+        help="Maximum total units that can be allocated in a single scan.",
+    )
 
     st.divider()
     send_to_telegram = st.checkbox(
@@ -1815,17 +1846,17 @@ if active_tab == "Overview":
         # ── Unit Sizing ────────────────────────────────────────────────────────
         _uv = st.session_state.prefs.get("unit_value", 250)
         with st.spinner("Computing unit allocations…"):
-            subset_view = compute_unit_sizing(subset_view, unit_value=_uv)
+            subset_view = compute_unit_sizing(subset_view, unit_value=_uv, daily_cap=st.session_state.prefs.get('daily_unit_cap', 12))
 
         _total_units = int(subset_view["units_final"].sum()) if "units_final" in subset_view.columns else 0
         _total_capital = _total_units * _uv
-        _cap_pct = f"{(_total_capital / (UNIT_DAILY_CAP * _uv)) * 100:.0f}%" if UNIT_DAILY_CAP * _uv > 0 else "0%"
+        _cap_pct = f"{(_total_capital / (_udcap * _uv)) * 100:.0f}%" if _udcap * _uv > 0 else "0%"
         with st.container(border=True):
             _su1, _su2, _su3 = st.columns(3)
             _su1.metric(
                 "📦 Scan Total Units",
-                f"{_total_units} / {UNIT_DAILY_CAP}",
-                help=f"Total units allocated across all HIGH CONVICTION picks. Daily hard cap is {UNIT_DAILY_CAP} units.",
+                f"{_total_units} / {_udcap}",
+                help=f"Total units allocated across all HIGH CONVICTION picks. Daily hard cap is {_udcap} units.",
             )
             _su2.metric(
                 "💷 Capital to Deploy",
@@ -1835,7 +1866,7 @@ if active_tab == "Overview":
             _su3.metric(
                 "📊 Cap Usage",
                 _cap_pct,
-                help=f"How much of the £{UNIT_DAILY_CAP * _uv:,} daily hard cap is being used.",
+                help=f"How much of the £{_udcap * _uv:,} daily hard cap is being used.",
             )
 
         # ── Sector conviction heatmap ─────────────────────────────────────────
@@ -1992,12 +2023,12 @@ if active_tab == "Scans":
             df_res = format_pct_columns(df_res, ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"])
             _uv_scan = st.session_state.prefs.get("unit_value", 250)
             with st.spinner("Computing unit allocations…"):
-                df_res = compute_unit_sizing(df_res, unit_value=_uv_scan)
+                df_res = compute_unit_sizing(df_res, unit_value=_uv_scan, daily_cap=st.session_state.prefs.get('daily_unit_cap', 12))
             _scan_total_units = int(df_res["units_final"].sum()) if "units_final" in df_res.columns else 0
             _scan_total_capital = _scan_total_units * _uv_scan
             with st.container(border=True):
                 _ms1, _ms2, _ms3 = st.columns(3)
-                _ms1.metric("📦 Total Units", f"{_scan_total_units} / {UNIT_DAILY_CAP}")
+                _ms1.metric("📦 Total Units", f"{_scan_total_units} / {st.session_state.prefs.get('daily_unit_cap', 12)}")
                 _ms2.metric("💷 Capital to Deploy", f"£{_scan_total_capital:,}")
                 _ms3.metric("1 Unit =", f"£{_uv_scan:,}")
             if "reasons" in df_res.columns:
@@ -2143,13 +2174,14 @@ if active_tab == "Scans":
                     day_df["Return (%)"] = (((day_df["Current Price"] - day_df["price"]) / day_df["price"]) * 100).round(2)
 
             _uv_hist = st.session_state.prefs.get("unit_value", 250)
+            _udcap_hist = st.session_state.prefs.get("daily_unit_cap", 12)
             with st.spinner("Computing unit allocations…"):
-                day_df = compute_unit_sizing(day_df, unit_value=_uv_hist)
+                day_df = compute_unit_sizing(day_df, unit_value=_uv_hist, daily_cap=_udcap_hist)
             _hist_total_units = int(day_df["units_final"].sum()) if "units_final" in day_df.columns else 0
             _hist_total_capital = _hist_total_units * _uv_hist
             with st.container(border=True):
                 _hs1, _hs2, _hs3 = st.columns(3)
-                _hs1.metric("📦 Total Units", f"{_hist_total_units} / {UNIT_DAILY_CAP}")
+                _hs1.metric("📦 Total Units", f"{_hist_total_units} / {_udcap_hist}")
                 _hs2.metric("💷 Capital to Deploy", f"£{_hist_total_capital:,}")
                 _hs3.metric("1 Unit =", f"£{_uv_hist:,}")
 
