@@ -8,6 +8,10 @@ __pycache__/
 *.py[cod]
 *.class
 
+# Claude Code local config (contains secrets and context — never commit)
+.claude/settings.json
+.claude/CLAUDE.md
+
 # Local App Settings
 argus_prefs.json
 data/metadata_cache.json

@@ -25,11 +25,11 @@ The project is designed to run automatically via local cron or GitHub Actions, s
 
 ## 🚀 Features
 
-*   **Sleek Multi-Tab Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI, interactive AgGrid history tables, annotated metric badges, and styled metric cards for professional-grade navigation and data consumption.
-*   **Quantitative Scoring:** Ranks tickers (0–100) using a multi-factor `score_stock()` algorithm across five components: Fundamentals (35 pts), Valuation (10 pts), Momentum (30 pts), Smart Money (20 pts), Persistence (5 pts). Score is regime-adjusted (Bull ×1.05 → Bear ×0.7) before the minimum-score gate is applied. Signal labels: 🟢 Strong Buy ≥85 · 🔵 Buy ≥75 · 🟡 Moderate Buy ≥65 · ⚪ Hold ≥55 · 🔴 Avoid <55.
+*   **Modern Fintech Dashboard:** Built entirely in Streamlit featuring a **Visual Card Grid** UI with equal-height card rows, sticky regime strip, hero Top 3 panel, sector conviction heatmap, score-velocity sparklines, and catalyst pill badges — all on a deep-slate dark theme.
+*   **Quantitative Scoring:** Ranks tickers (0–100) using a multi-factor `score_stock()` algorithm across six components: Fundamentals (18 pts), Valuation (6 pts), Momentum (34 pts), Smart Money (22 pts), Catalyst (15 pts), Persistence (5 pts). Score is regime-adjusted (×0.9–1.15) before the minimum-score gate is applied. Signal labels: 🟢 Strong Buy ≥85 · 🔵 Buy ≥75 · 🟡 Moderate Buy ≥65 · ⚪ Hold ≥55 · 🔴 Avoid <55.
 *   **Market Regime Panel:** Overview tab displays the current regime (Bull/Bear/Neutral/Extreme Fear), live VIX level with trend arrow, SPY vs 200-day MA gap, last scan date, and automatic bear-transition warnings. A hoverable **ⓘ** icon in the regime strip defines all metrics (×mult, VIX, 50/200-day MA, macro adj) on demand.
 *   **Two-Panel Price & Score Chart:** Ticker Detail tab shows a stacked Plotly chart — price on top, Argus score on bottom with colour-coded bands (🟢 ≥75, 🟡 50–75, 🔴 <50) so you immediately understand where a score sits in context.
-*   **Flexible Scan Universe:** Three universe modes — **Fixed Top** (same top-weighted R2000 names each run), **Random** (different subset each run for broader coverage over time), or **Full Universe** (all ~2000 R2000 tickers, ~5–10 min). Scheduled nightly scans always run the full universe. The scan engine shuffles tickers before prefiltering so no names are systematically skipped.
+*   **Flexible Scan Universe:** Three universe modes — **Core** (IWM holdings, ~2000 R2000 tickers), **Rockets** (Nasdaq sub-$1B + recent IPOs, ~800–1200 names), or **Combined** (both merged, ~2500+). Scheduled scans always run a full pass. Live scan progress bar shows current ticker and count during any manual or auto-scan.
 *   **Deep Dive Integrations:** Seamlessly navigate to a specific ticker via table clicks and interactive callbacks to review technical setups, AI thesis, and execution guidance.
 *   **Portfolio Analytics Journal:** Built-in quantitative logbook tracking Total Invested, Net Returns, SPY Benchmark Comparisons, and Sector Exposure Pie Charts. Journal entries are stored locally and are **never overwritten** by GitHub Actions.
 *   **Telegram Alerts + Alerts Log:** Opt-in automated push notifications sending top 'High Conviction' tickers to your phone. The Alerts Log tab displays all historical messages, including those sent by the daily GitHub Action.
@@ -39,13 +39,20 @@ The project is designed to run automatically via local cron or GitHub Actions, s
 
 ## 📂 Project Structure
 
-*   **`engine.py`**: The core quantitative brain. Handles `yfinance` data fetching, XGBoost ML routing, the Macro Market Regime filter, the Portfolio Optimizer, and mathematical rules.
-*   **`app.py`**: The Streamlit user interface featuring 6 tabs: Overview, Ticker Detail, Scans (Manual Scan + History), Journal (P&L analytics + Portfolio Optimizer), Prediction Model, and Help.
-*   **`argus.py`**: A lightweight, headless script designed for executing the scan programmatically via GitHub Actions cron scheduling. It bridges results to Telegram using `llm.py`.
-*   **`llm.py`**: Integrated Groq API client to process generative AI summaries based on fresh news URLs and technical data.
-*   **`fmp_fetch.py`**: (Optional) Fetches deeper fundamental company data using Financial Modeling Prep if available.
-*   **`macro_data.py`**: Fetches FRED macro indicators (yield curve, CPI, Fed Funds Rate) and the Alternative.me Fear & Greed Index to power the enhanced regime filter.
-*   **`edgar_fetch.py`**: Fetches SEC EDGAR Form 4 insider trading data (open-market purchases) for HIGH CONVICTION picks after each scan. No API key required.
+*   **`engine.py`**: The core quantitative brain. Handles `yfinance` data fetching, XGBoost ML routing, the Macro Market Regime filter, the Portfolio Optimizer, and mathematical rules. Exposes `run_scan(progress_fn=...)` for live UI progress callbacks.
+*   **`app.py`**: The Streamlit user interface featuring 6 tabs: Overview, Scans, Ticker Detail, Journal, Prediction Model, and Docs. Includes live auto-scan progress bar, equal-height card rows, hero Top 3 panel, and sector heatmap.
+*   **`argus.py`**: A lightweight, headless script designed for executing the scan programmatically via GitHub Actions cron scheduling. Accepts `--profile {premarket,full,postclose,catalyst}` and bridges results to Telegram.
+*   **`theme.py`**: Design tokens and `ENHANCED_CSS` string — deep-slate dark theme, fintech typography, equal-height card flexbox rules.
+*   **`ui_components.py`**: Reusable Streamlit components — sparklines, catalyst pill badges, score waterfall, hero card, sector heatmap renderer.
+*   **`catalysts.py`**: Unified catalyst score aggregator (0–15 pts) combining EDGAR cluster insider buys, Form 8-K events, LLM multi-label tags, and options flow signals.
+*   **`options_flow.py`**: Options flow provider abstraction — Barchart free scraper, Market Chameleon IV rank, and Unusual Whales (opt-in via `UW_API_KEY`).
+*   **`scan_profiles.py`**: `ScanProfile` dataclasses for premarket / full / postclose / catalyst daily slots.
+*   **`llm.py`**: Groq JSON-mode multi-label catalyst classifier — returns `{sentiment, catalysts: [...], urgency}` instead of a bare integer.
+*   **`fmp_fetch.py`**: FMP fundamentals, float, short interest, IPO calendar, and S-3/424B filing detection.
+*   **`macro_data.py`**: FRED macro indicators (yield curve, CPI, Fed Funds, HY spreads), IWM/QQQ breadth, Fear & Greed, small-cap realized volatility.
+*   **`edgar_fetch.py`**: SEC EDGAR Form 4 cluster insider detection and Form 8-K fetcher. No API key required.
+*   **`backtest.py`**: Replay harness — tests any weight vector against `argus_feature_history.csv` for 21/63/126-day forward returns.
+*   **`pattern_match.py`**: Mahalanobis distance similarity vs 8 curated pre-run runner profiles (ONDS, SOUN, RKLB, ASTS, IONQ, HIMS, DAVE, CRDO).
 
 ---
 
@@ -65,11 +72,14 @@ pip install -r requirements.txt
 To activate the AI summaries and Telegram alerts, you must export the following keys in your terminal or store them safely in a `.env` file (or GitHub Action Secrets):
 
 ```bash
-export GROQ_API_KEY="gsk_your_key_here"              # Required for Phase 2 Llama 3 thesis generation
-export TELEGRAM_TOKEN="bot_token_from_botfather"     # Required for Phase 1/4 push alerts 
-export TELEGRAM_CHAT_ID="your_telegram_id"           # Required for Phase 1/4 push alerts
-export FMP_API_KEY="fmp_api_key_here"                # Optional for deeper fundamental reads
-export FRED_API_KEY="your_fred_key_here"             # Optional — free at fred.stlouisfed.org (instant signup)
+export GROQ_API_KEY="gsk_your_key_here"              # Required for LLM catalyst classifier (Groq Llama 3)
+export TELEGRAM_TOKEN="bot_token_from_botfather"     # Required for Telegram push alerts
+export TELEGRAM_CHAT_ID="your_telegram_id"           # Required for Telegram push alerts
+export FMP_API_KEY="fmp_api_key_here"                # Optional — deeper fundamentals, float, IPO calendar
+export FRED_API_KEY="your_fred_key_here"             # Optional — free at fred.stlouisfed.org
+export DATABASE_URL="postgresql://..."               # Optional — Supabase PostgreSQL (SQLite used locally if absent)
+export OPTIONS_FLOW_PROVIDER="barchart_free"         # Optional — barchart_free (default) | market_chameleon | unusual_whales
+export UW_API_KEY="your_uw_key_here"                 # Optional — Unusual Whales API ($48/mo), enables dark-pool flow data
 ```
 
 > **FRED API Key:** Free registration at [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html). When set, Argus adds yield curve, CPI trend, and Fed Funds Rate signals to the macro regime filter, and displays them as metric cards in the Overview dashboard. Without the key, all existing features continue to work unchanged.
@@ -89,12 +99,12 @@ The workstation will launch in your browser at `http://localhost:8502`.
 
 ## 📚 Dashboard Navigation
 
-1. **Overview:** Daily snapshot of the latest scan results as interactive visual metric cards. Displays the current Macro Market Regime, FRED macro signals (yield curve, CPI, Fed Funds), live VIX level, SPY vs 200-day MA gap, last scan date, and automatic bear-transition warnings. Alerts Log (Telegram history) accessible via expander.
-2. **Ticker Detail:** Deep dive into a specific ticker — two-panel stacked Plotly chart (price + Argus score with 🟢/🟡/🔴 bands), quantitative execution guidance, financial snapshot, earnings date, analyst targets, insider activity, and auto-generated Groq AI investment thesis.
-3. **Scans:** On-demand **Manual Scan** at the top — choose Universe Mode (Fixed / Random / Full), set minimum score and universe size, then fire a scan with live progress. Below: full **Scan History** with run-type filter, interactive score trend chart, day-picker, and detailed card grids.
+1. **Overview:** Daily snapshot of the latest scan results — sticky macro regime strip (IWM/QQQ ratio, HY spread chip, small-cap stress flag), hero Top 3 panel with score-velocity sparklines and catalyst pill badges, sector conviction heatmap (11 sectors × 3 score buckets), and full card grid. Auto-scan runs once per calendar day and shows a live progress bar.
+2. **Scans:** Full scan history with run-type filter, interactive score trend chart, day-picker, and detailed card grids with unit-sizing and entry/SL/TP guidance.
+3. **Ticker Detail:** Deep dive into a specific ticker — two-panel stacked Plotly chart (price + Argus score with 🟢/🟡/🔴 bands), quantitative execution guidance, financial snapshot, earnings date, analyst targets, insider activity, and auto-generated Groq AI investment thesis.
 4. **Journal:** Full portfolio management hub. Log BUY/SELL/SCALE_IN/TRIM transactions, import via CSV, track open holdings with live P&L and colour-coded unrealized returns, view realized win-rate, benchmark net return against SPY, and visualize sector exposure via interactive pie chart. **Portfolio Optimizer** (Markowitz Max Sharpe / Min Volatility) accessible via expander.
-5. **Prediction Model:** ML diagnostics — XGBoost hit rates, Brier score, confusion matrix, feature importance table, SHAP global impact plot, score-bucket outcome stats, and calibration table. Activates automatically once 30+ matured samples exist.
-6. **Help:** Full documentation, sidebar settings reference (presets, universe modes, risk rules), ML activation timeline, and curated AI research prompt templates for macro overview, bearish checklist, sector rotation, and individual ticker deep-dives.
+5. **Prediction Model:** Step-by-step activation guide (auto-expands when model isn't ready) plus live status indicator. Once 30+ samples mature: XGBoost hit rates, Brier score, confusion matrix, feature importance, SHAP plots, and score-bucket calibration table.
+6. **Docs:** Quick-access tools at the top (copy HC tickers, Perplexity research prompt, AI deep-dive templates). Full reference documentation (scoring system, sidebar settings, ML timeline) in a collapsed expander below.
 
 ---
 
