@@ -3,7 +3,7 @@
 
 Usage:
   python backtest.py --horizon 63 --threshold 70
-  python backtest.py --horizon 126 --threshold 75 --weights weights_runner.json
+  python backtest.py --horizon 126 --threshold 75 --weights config/weights_runner.json
 
 Reads argus_feature_history.csv and argus_results_history.csv.
 Fetches forward price data from yfinance for each pick.

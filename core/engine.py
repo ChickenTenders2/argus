@@ -29,7 +29,7 @@ except ImportError:
 from dataclasses import dataclass
 from datetime import datetime, date
 
-from llm import get_sentiment_score
+from fetchers.llm import get_sentiment_score
 
 logger = logging.getLogger("Argus.Engine")
 
@@ -481,7 +481,7 @@ def get_market_regime():
         # ── FRED macro overlay ────────────────────────────────────────────────
         macro = {}
         try:
-            from macro_data import build_macro_context
+            from fetchers.macro_data import build_macro_context
             macro = build_macro_context()
         except Exception as _me:
             logger.debug(f"Macro context unavailable: {_me}")
@@ -1551,7 +1551,7 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         # 4.5. Catalyst Score (EDGAR cluster buys + 8-K + options flow — max 15 pts)
         c_score, c_reasons = 0, []
         try:
-            from catalysts import compute_catalyst_score
+            from fetchers.catalysts import compute_catalyst_score
             c_score, c_reasons = compute_catalyst_score(ticker)
             score += c_score
             reasons.extend(c_reasons)
