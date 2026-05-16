@@ -12,13 +12,13 @@ try:
 except ImportError:
     pass
 
-from fmp_fetch import run_fmp_enrichment, get_fmp_data, parse_fmp_data, format_fmp_block
-from edgar_fetch import run_edgar_enrichment, get_insider_buys, format_edgar_block
-from engine import Config, run_scan, save_results, load_memory, monitor_portfolio
-from scan_profiles import get_profile
+from fetchers.fmp_fetch import run_fmp_enrichment, get_fmp_data, parse_fmp_data, format_fmp_block
+from fetchers.edgar_fetch import run_edgar_enrichment, get_insider_buys, format_edgar_block
+from core.engine import Config, run_scan, save_results, load_memory, monitor_portfolio
+from core.scan_profiles import get_profile
 
 try:
-    from llm import generate_ai_thesis
+    from fetchers.llm import generate_ai_thesis
 except ImportError:
     generate_ai_thesis = None
 

@@ -25,7 +25,7 @@ def compute_catalyst_score(ticker: str, fmp_context: dict = None) -> tuple:
 
     # 1. EDGAR insider cluster buys
     try:
-        from edgar_fetch import get_insider_cluster_score
+        from fetchers.edgar_fetch import get_insider_cluster_score
         iscore, ireasons = get_insider_cluster_score(ticker)
         total += iscore
         reasons.extend(ireasons)
@@ -34,7 +34,7 @@ def compute_catalyst_score(ticker: str, fmp_context: dict = None) -> tuple:
 
     # 2. Form 8-K catalyst
     try:
-        from edgar_fetch import get_8k_catalyst_score
+        from fetchers.edgar_fetch import get_8k_catalyst_score
         kscore, kreasons = get_8k_catalyst_score(ticker)
         total += kscore
         reasons.extend(kreasons)
@@ -43,7 +43,7 @@ def compute_catalyst_score(ticker: str, fmp_context: dict = None) -> tuple:
 
     # 3. Options unusual activity
     try:
-        from options_flow import get_options_flow
+        from fetchers.options_flow import get_options_flow
         flow = get_options_flow(ticker)
         if flow.get("bullish"):
             iv_rank = flow.get("iv_rank")

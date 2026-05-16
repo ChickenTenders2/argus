@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-from engine import (
+from core.engine import (
     Config,
     run_scan,
     save_results,
@@ -265,7 +265,7 @@ def cached_market_regime():
 def cached_macro_data():
     """Standalone macro fetch — used as fallback when regime macro dict is empty."""
     try:
-        from macro_data import build_macro_context
+        from fetchers.macro_data import build_macro_context
         return build_macro_context()
     except Exception:
         return {}
@@ -393,14 +393,14 @@ def _save_daily_cap_pref():
     st.session_state.prefs["daily_unit_cap"] = st.session_state.daily_unit_cap_input
     save_prefs(st.session_state.prefs)
 
-from theme import ENHANCED_CSS, REGIME_COLORS as _THEME_REGIME_COLORS
-from ui_components import (
+from ui.theme import ENHANCED_CSS, REGIME_COLORS as _THEME_REGIME_COLORS
+from ui.ui_components import (
     render_sparkline, render_catalyst_pills, render_velocity_badge,
     render_rr_chip, render_score_waterfall, render_hero_card,
     render_sector_heatmap, render_catalyst_calendar,
 )
 try:
-    from pattern_match import get_runner_similarity, get_nearest_runners
+    from analysis.pattern_match import get_runner_similarity, get_nearest_runners
     _PATTERN_MATCH_AVAILABLE = True
 except Exception:
     _PATTERN_MATCH_AVAILABLE = False
@@ -2243,7 +2243,7 @@ if active_tab == "Ticker Detail":
     if _run_manual and _manual_ticker_input:
         with st.spinner(f"Fetching and scoring {_manual_ticker_input}..."):
             try:
-                from engine import score_stock, load_memory
+                from core.engine import score_stock, load_memory
                 _mem_df = load_memory()
                 _live_regime = cached_market_regime()
                 _manual_result = score_stock(_manual_ticker_input, _mem_df, config, _live_regime)
@@ -2465,7 +2465,7 @@ if active_tab == "Ticker Detail":
 
                 if _groq_avail and _thesis_key not in st.session_state and _thesis_err_key not in st.session_state:
                     try:
-                        from llm import generate_ai_thesis as _gen_thesis
+                        from fetchers.llm import generate_ai_thesis as _gen_thesis
                         _api_key = Config().GROQ_API_KEY
                         _reasons_raw = latest_ticker_row["reasons"].iloc[0]
                         if isinstance(_reasons_raw, str):
@@ -2953,7 +2953,7 @@ if active_tab == "Journal":
                 st.error("Please select at least 2 tickers.")
             else:
                 with st.spinner("Downloading 1-year history and optimizing..."):
-                    from engine import optimize_portfolio
+                    from core.engine import optimize_portfolio
                     _opt_result = optimize_portfolio(_opt_tickers)
                     if "error" in _opt_result:
                         st.error(_opt_result["error"])
