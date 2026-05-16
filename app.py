@@ -1376,15 +1376,14 @@ with st.sidebar:
         f'<p style="font-size:0.77rem;margin:0 0 6px;opacity:0.72;" title="{_db_badge_help}">{_db_badge_text}</p>',
         unsafe_allow_html=True,
     )
-    st.markdown("### 👁 Navigate")
+    st.markdown('<p style="font-size:0.9rem;font-weight:700;margin:0 0 4px">👁 Navigate</p>', unsafe_allow_html=True)
     active_tab = st.radio(
         "Navigate",
-        ["Overview", "Ticker Detail", "Scans", "Journal", "Prediction Model", "Help"],
+        ["Overview", "Scans", "Ticker Detail", "Journal", "Prediction Model", "Docs"],
         key="main_tabs",
         label_visibility="collapsed",
     )
-    st.divider()
-    st.header("Global Presets")
+    st.markdown('<p style="font-size:0.82rem;font-weight:700;margin:8px 0 2px;color:#aaa;text-transform:uppercase;letter-spacing:0.05em">Global Presets</p>', unsafe_allow_html=True)
     
     preset_options = [
         "Default", "High Conviction", "Liquidity Focus", 
@@ -1402,18 +1401,17 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    _ui_mode = st.radio(
+    _ui_mode = st.selectbox(
         "Interface Mode",
         ["Beginner", "Standard", "Power"],
         index=["Beginner", "Standard", "Power"].index(
             st.session_state.get("ui_mode", "Standard")
         ),
-        horizontal=True,
         key="ui_mode",
-        help="Beginner: quick scan only  ·  Standard: + advanced filters  ·  Power: all controls",
+        help="Beginner: quick scan only  ·  Standard: + advanced filters & ML  ·  Power: full control",
     )
 
-    st.header("Quick Scan Settings")
+    st.markdown('<p style="font-size:0.82rem;font-weight:700;margin:8px 0 2px;color:#aaa;text-transform:uppercase;letter-spacing:0.05em">Quick Scan</p>', unsafe_allow_html=True)
     min_score = st.slider("Minimum Score", 50, 95, key="min_score")
     universe_mode = st.radio(
         "Universe Mode",
@@ -1485,8 +1483,7 @@ with st.sidebar:
         inst_own_ceiling = st.slider("Inst. Ownership ceiling (%)", 20, 80, key="inst_own_ceiling",
             help="Institutional ownership < this → 13 pts (undiscovered signal). Default: 40%.") / 100
 
-    st.divider()
-    st.markdown("#### 💷 Capital & Sizing")
+    st.markdown('<p style="font-size:0.82rem;font-weight:700;margin:8px 0 2px;color:#aaa;text-transform:uppercase;letter-spacing:0.05em">💷 Capital & Sizing</p>', unsafe_allow_html=True)
     unit_value_sidebar = st.number_input(
         "Unit Value (£)",
         min_value=50, max_value=5000, step=50,
@@ -1574,7 +1571,24 @@ if not _has_scan_today and not st.session_state.get("_auto_scan_done_today", Fal
     with st.status("🔄 Running today's auto-scan…", expanded=True) as _auto_st:
         st.write(f"No scan found for today ({_today_str}). Starting automated scan…")
         try:
-            _auto_payload = run_scan(config=config, scan_limit=scan_limit, shuffle=_scan_shuffle, update_memory=True, run_type="auto")
+            _prog_bar = st.progress(0, text="Initialising scan…")
+            _prog_text = st.empty()
+
+            def _auto_progress(current, total, ticker):
+                pct = int(current / total * 100) if total else 0
+                _prog_bar.progress(pct / 100, text=f"Scanning {current}/{total} — {ticker}")
+                _prog_text.caption(f"⏳ {total - current} tickers remaining")
+
+            _auto_payload = run_scan(
+                config=config,
+                scan_limit=scan_limit,
+                shuffle=_scan_shuffle,
+                update_memory=True,
+                run_type="auto",
+                progress_fn=_auto_progress,
+            )
+            _prog_bar.progress(1.0, text="✅ Scan complete")
+            _prog_text.empty()
             save_results(
                 results=_auto_payload["results"],
                 scan_date=_auto_payload["scan_date"],
@@ -1597,8 +1611,6 @@ if not _has_scan_today and not st.session_state.get("_auto_scan_done_today", Fal
 
 if _auto_scan_ran:
     st.rerun()
-
-st.markdown("<br>", unsafe_allow_html=True)
 
 # ── Persistent regime strip (shown on all tabs) ───────────────────────────
 _strip_regime = cached_market_regime()
@@ -2975,8 +2987,39 @@ if active_tab == "Journal":
 
 if active_tab == "Prediction Model":
     st.subheader("📈 ML Prediction Model Quality")
+
+    with st.expander("📖 How to activate the Prediction Model", expanded=not model.get("ready", False)):
+        st.markdown("""
+**The prediction model is an XGBoost classifier** that learns which stocks went on to gain ≥10% within 63 days of being flagged by Argus.
+
+### Why it shows N/A right now
+The model trains on *historical scan data* — it needs at least **30 stocks** in the database that have a price history long enough to measure a forward return. On a fresh deployment this takes roughly **2–3 months** of daily scans to accumulate.
+
+### How it builds up automatically
+1. Every scan (manual or scheduled) writes a feature snapshot to the `features` table in your database.
+2. After `horizon_days` (default 63 trading days ≈ 3 months), each snapshot gets a forward-return label computed from yfinance.
+3. Once 30+ labelled samples exist, the model trains on the oldest 80% and validates on the newest 20%.
+4. From that point on, every card shows a **ML Upside %** — the model's estimated probability the stock gains ≥10% in the next 63 days.
+
+### How to speed it up
+- Run daily scans consistently (GitHub Actions handles this automatically at 07:00, 10:00, 17:30 ET Mon–Fri).
+- Lower the **Horizon Days** slider to 21 days — this means samples mature faster (21 days vs 63), so the model can train sooner. Trade-off: it predicts shorter-term moves.
+- Lower **Target Return** to 5% — more samples will hit the target, giving the model more positive examples to learn from.
+
+### What the model learns
+It uses these features per stock: overall score, sub-scores (Fundamentals, Momentum, Smart Money, Catalyst, Persistence), market cap, float size, short interest, and score velocity. The most predictive features will appear in the **Feature Importance** chart below once training completes.
+""")
+
+    if model.get("ready", False):
+        _n_samples = model.get("n_train", "?")
+        _brier = model.get("brier_score")
+        _brier_str = f" · Brier score {_brier:.3f}" if _brier is not None else ""
+        st.success(f"✅ Model active — trained on {_n_samples} samples{_brier_str}")
+    else:
+        _reason = model.get("reason", "Insufficient history")
+        st.info(f"⏳ Model not yet active — {_reason}. Upside probabilities shown are statistical estimates based on score buckets.")
+
     if not model.get("ready"):
-        st.info(model.get("reason", "Model is not ready yet."))
         st.caption("The model activates once 30+ scan samples have matured past the forward-return horizon. Keep running daily scans.")
 
         # Show whatever feature history exists so far
@@ -3088,9 +3131,124 @@ if active_tab == "Prediction Model":
         st.markdown("**Calibration table**")
         st.dataframe(calibration, use_container_width=True)
 
-if active_tab == "Help":
-    st.subheader("❓ Help & Documentation")
-    st.markdown('''
+if active_tab == "Docs":
+    st.title("📚 Docs & Reference")
+
+    # ── Quick-access: Copy Tickers ────────────────────────────────────────
+    with st.expander("📋 Copy Today's Scan Tickers", expanded=False):
+        st.caption("Quickly copy tickers from the latest scan to paste into the AI research prompts below.")
+        if not latest_df.empty:
+            _help_tickers_all = ", ".join(latest_df["ticker"].tolist())
+            _help_top10 = latest_df.sort_values("score", ascending=False).head(10)["ticker"].tolist()
+            _help_tickers_top10 = ", ".join(_help_top10)
+            _ht1, _ht2 = st.columns(2)
+            with _ht1:
+                st.markdown(f"**All picks ({len(latest_df)})**")
+                st.code(_help_tickers_all, language=None)
+            with _ht2:
+                st.markdown(f"**Top 10 by score**")
+                st.code(_help_tickers_top10, language=None)
+            st.markdown("**Pre-filled Watchlist Impact Prompt (M3):**")
+            _help_prompt = (
+                f"The following stocks are on my active watchlist: {_help_tickers_top10}.\n"
+                f"Today is [TODAY'S DATE]. For each ticker, briefly answer:\n"
+                f"1. Is there any major news or catalyst in the last 5 days that directly affects this company?\n"
+                f"2. Does any broad macro event meaningfully change the risk/reward for this stock?\n"
+                f"3. Flag any ticker I should be especially cautious about right now, and why.\n"
+                f"Format as a bullet list per ticker."
+            )
+            st.code(_help_prompt, language="text")
+        else:
+            st.info("No scan data yet — run a scan first to populate tickers here.")
+
+    # ── Quick-access: Ask Perplexity ──────────────────────────────────────
+    with st.expander("🤖 AI Research Tools & Prompts", expanded=False):
+        st.markdown("### 💬 AI Chat Assistants")
+        st.caption("Quick links to AI chat platforms for researching your stocks.")
+        st.link_button("🔍 Ask Perplexity", "https://www.perplexity.ai/spaces/argus-AFO1vOM6R8mv1YzjC8vWzw", help="Opens your personal Argus Perplexity Space for in-depth stock research with live web search.")
+
+        st.markdown("---")
+        st.markdown("### 🌍 Market Condition Prompts")
+        st.caption("Use these to get a fast read on the current macro environment and whether you should be cautious or aggressive.")
+
+        st.markdown("#### M1. Today's Market Overview")
+        st.code("""Today is [TODAY'S DATE]. Give me a concise macro market overview for a U.S. equity investor.
+Cover:
+1. S&P 500 and Nasdaq current trend vs their 50-day and 200-day moving averages.
+2. VIX level — is fear elevated or complacent?
+3. The most important macroeconomic headline from the past 48 hours (Fed, inflation, jobs, geopolitics).
+4. Overall risk-on or risk-off sentiment verdict.
+5. One sector you would overweight and one you would underweight right now, with brief reasoning.
+Keep it professional, factual, and under 250 words.""", language="text")
+
+        st.markdown("#### M2. Should I Be Worried or Excited Right Now?")
+        st.code("""Today is [TODAY'S DATE]. Act as a senior portfolio manager reviewing current market conditions.
+Tell me:
+- The top 2 macro risks that could cause a meaningful correction in U.S. equities in the next 30–60 days.
+- The top 2 bullish tailwinds that could drive a continued rally.
+- Net verdict: should a medium-risk equity investor be adding, holding, or reducing exposure right now?
+Be direct and concrete — avoid vague disclaimers. Give me a clear signal.""", language="text")
+
+        st.markdown("#### M3. Argus Watchlist Impact Check")
+        st.code("""The following stocks are on my active watchlist: [TICKER1, TICKER2, TICKER3, ...].
+Today is [TODAY'S DATE]. For each ticker, briefly answer:
+1. Is there any major news or catalyst in the last 5 days that directly affects this company?
+2. Does any broad macro event (rate decisions, earnings cycle, sector rotation) meaningfully change the risk/reward for this stock?
+3. Flag any ticker I should be especially cautious about right now, and why.
+Format as a bullet list per ticker.""", language="text")
+
+        st.markdown("#### M4. Bearish Signal Checklist")
+        st.code("""Today is [TODAY'S DATE]. Run through the following bearish checklist for U.S. equities and rate each signal as Red / Yellow / Green:
+- VIX trend (3-week change): rising sharply = Red
+- SPY vs 200-day MA: below = Red, within 5% = Yellow, healthy buffer = Green
+- Credit spreads (HYG vs LQD): widening = Red
+- Yield curve (10Y–2Y): deeply inverted = Red
+- Fed posture: hawkish surprise = Red, neutral/dovish = Green
+- Recent earnings trend: majority misses = Red
+
+Summarize the overall market health verdict in one sentence.""", language="text")
+
+        st.markdown("#### M5. Sector Rotation Insight")
+        st.code("""Today is [TODAY'S DATE]. Based on the current macro cycle stage (early recovery / mid-cycle / late cycle / contraction), which U.S. equity sectors are typically in favour and which are typically out of favour?
+
+Map this to the current market conditions. Which of these sectors are showing relative strength vs the S&P 500 right now:
+Technology, Healthcare, Financials, Energy, Consumer Staples, Consumer Discretionary, Industrials, Utilities, Real Estate, Materials, Communication Services?
+
+Rank the top 3 to overweight and bottom 3 to underweight, with one-line justification each.""", language="text")
+
+        st.markdown("---")
+        st.markdown("### 📈 Individual Ticker Research Prompts")
+
+        st.markdown("#### 1. Fundamental & Deep Research")
+        st.code("""I am researching the stock [TICKER]. Please provide a comprehensive
+overview of its business model, primary revenue streams, recent
+financial performance (last two earnings reports), and any
+significant regulatory or macroeconomic headwinds it is
+currently facing.""", language="text")
+
+        st.markdown("#### 2. Buy & Sell Strategy Validation")
+        st.code("""I am considering taking a position in [TICKER]. Given the current
+macroeconomic climate and the stock's recent price action, what
+are the most critical support and resistance levels to watch?
+Suggest a logical stop-loss percentage and a realistic price
+target for a 3-month hold.""", language="text")
+
+        st.markdown("#### 3. Upcoming Catalysts & Speculations")
+        st.code("""What are the major upcoming catalysts, product launches, clinical
+trials, or earnings reports for [TICKER] in the next 3 to 6 months?
+How might these events impact the stock price, and what are
+the current market speculations or analyst sentiments
+surrounding them?""", language="text")
+
+        st.markdown("#### 4. Competitive Moat Analysis")
+        st.code("""Analyze the competitive landscape for [TICKER]. Who are its top 3
+direct competitors? Compare [TICKER]'s market share, unique
+competitive advantages (moat), and profit margins against these
+competitors. Is [TICKER] gaining or losing ground?""", language="text")
+
+    # ── Documentation wall ────────────────────────────────────────────────
+    with st.expander("📖 Full Documentation", expanded=False):
+      st.markdown('''
     ### Phase & Capabilities Overview
     * **Phase 1: ML Prediction Model:** Uses XGBoost to evaluate hit probabilities based on the accumulation of historical features.
     * **Phase 2: Live AI News Sentiment Scoring:** Connects to the Groq API (Llama 3.1) to dynamically read live news headlines and adjust the quantitative score (up to +/- 15 points) based on real-time sentiment.
@@ -3230,117 +3388,3 @@ if active_tab == "Help":
     * **Risk per Trade:** The % of your total portfolio you're willing to lose if stopped out (Default: 0.75%).
     * **Max Position Size:** Maximum portfolio allocation allowed in a single stock, forcing diversification (Default: 8.0%).
     ''')
-
-    st.divider()
-    st.subheader("📋 Copy Today's Scan Tickers")
-    st.caption("Quickly copy tickers from the latest scan to paste into the AI research prompts below.")
-    if not latest_df.empty:
-        _help_tickers_all = ", ".join(latest_df["ticker"].tolist())
-        _help_top10 = latest_df.sort_values("score", ascending=False).head(10)["ticker"].tolist()
-        _help_tickers_top10 = ", ".join(_help_top10)
-        _ht1, _ht2 = st.columns(2)
-        with _ht1:
-            st.markdown(f"**All picks ({len(latest_df)})**")
-            st.code(_help_tickers_all, language=None)
-        with _ht2:
-            st.markdown(f"**Top 10 by score**")
-            st.code(_help_tickers_top10, language=None)
-        st.markdown("**Pre-filled Watchlist Impact Prompt (M3):**")
-        _help_prompt = (
-            f"The following stocks are on my active watchlist: {_help_tickers_top10}.\n"
-            f"Today is [TODAY'S DATE]. For each ticker, briefly answer:\n"
-            f"1. Is there any major news or catalyst in the last 5 days that directly affects this company?\n"
-            f"2. Does any broad macro event meaningfully change the risk/reward for this stock?\n"
-            f"3. Flag any ticker I should be especially cautious about right now, and why.\n"
-            f"Format as a bullet list per ticker."
-        )
-        st.code(_help_prompt, language="text")
-    else:
-        st.info("No scan data yet — run a scan first to populate tickers here.")
-
-    st.divider()
-    st.subheader("🤖 AI Prompts for Research")
-    st.caption("Copy these templates and paste them into AI tools (Perplexity, ChatGPT, Claude, Grok) for deeper analysis. Replace bracketed placeholders with your data.")
-
-    st.markdown("### 💬 AI Chat Assistants")
-    st.caption("Quick links to AI chat platforms for researching your stocks.")
-    st.link_button("🔍 Ask Perplexity", "https://www.perplexity.ai/spaces/argus-AFO1vOM6R8mv1YzjC8vWzw", help="Opens your personal Argus Perplexity Space for in-depth stock research with live web search.")
-
-    st.markdown("---")
-    st.markdown("### 🌍 Market Condition Prompts")
-    st.caption("Use these to get a fast read on the current macro environment and whether you should be cautious or aggressive.")
-
-    st.markdown("#### M1. Today's Market Overview")
-    st.code("""Today is [TODAY'S DATE]. Give me a concise macro market overview for a U.S. equity investor.
-Cover:
-1. S&P 500 and Nasdaq current trend vs their 50-day and 200-day moving averages.
-2. VIX level — is fear elevated or complacent?
-3. The most important macroeconomic headline from the past 48 hours (Fed, inflation, jobs, geopolitics).
-4. Overall risk-on or risk-off sentiment verdict.
-5. One sector you would overweight and one you would underweight right now, with brief reasoning.
-Keep it professional, factual, and under 250 words.""", language="text")
-
-    st.markdown("#### M2. Should I Be Worried or Excited Right Now?")
-    st.code("""Today is [TODAY'S DATE]. Act as a senior portfolio manager reviewing current market conditions.
-Tell me:
-- The top 2 macro risks that could cause a meaningful correction in U.S. equities in the next 30–60 days.
-- The top 2 bullish tailwinds that could drive a continued rally.
-- Net verdict: should a medium-risk equity investor be adding, holding, or reducing exposure right now?
-Be direct and concrete — avoid vague disclaimers. Give me a clear signal.""", language="text")
-
-    st.markdown("#### M3. Argus Watchlist Impact Check")
-    st.code("""The following stocks are on my active watchlist: [TICKER1, TICKER2, TICKER3, ...].
-Today is [TODAY'S DATE]. For each ticker, briefly answer:
-1. Is there any major news or catalyst in the last 5 days that directly affects this company?
-2. Does any broad macro event (rate decisions, earnings cycle, sector rotation) meaningfully change the risk/reward for this stock?
-3. Flag any ticker I should be especially cautious about right now, and why.
-Format as a bullet list per ticker.""", language="text")
-
-    st.markdown("#### M4. Bearish Signal Checklist")
-    st.code("""Today is [TODAY'S DATE]. Run through the following bearish checklist for U.S. equities and rate each signal as Red / Yellow / Green:
-- VIX trend (3-week change): rising sharply = Red
-- SPY vs 200-day MA: below = Red, within 5% = Yellow, healthy buffer = Green
-- Credit spreads (HYG vs LQD): widening = Red
-- Yield curve (10Y–2Y): deeply inverted = Red
-- Fed posture: hawkish surprise = Red, neutral/dovish = Green
-- Recent earnings trend: majority misses = Red
-
-Summarize the overall market health verdict in one sentence.""", language="text")
-
-    st.markdown("#### M5. Sector Rotation Insight")
-    st.code("""Today is [TODAY'S DATE]. Based on the current macro cycle stage (early recovery / mid-cycle / late cycle / contraction), which U.S. equity sectors are typically in favour and which are typically out of favour?
-
-Map this to the current market conditions. Which of these sectors are showing relative strength vs the S&P 500 right now:
-Technology, Healthcare, Financials, Energy, Consumer Staples, Consumer Discretionary, Industrials, Utilities, Real Estate, Materials, Communication Services?
-
-Rank the top 3 to overweight and bottom 3 to underweight, with one-line justification each.""", language="text")
-
-    st.markdown("---")
-    st.markdown("### 📈 Individual Ticker Research Prompts")
-
-    st.markdown("#### 1. Fundamental & Deep Research")
-    st.code("""I am researching the stock [TICKER]. Please provide a comprehensive 
-overview of its business model, primary revenue streams, recent 
-financial performance (last two earnings reports), and any 
-significant regulatory or macroeconomic headwinds it is 
-currently facing.""", language="text")
-
-    st.markdown("#### 2. Buy & Sell Strategy Validation")
-    st.code("""I am considering taking a position in [TICKER]. Given the current 
-macroeconomic climate and the stock's recent price action, what 
-are the most critical support and resistance levels to watch? 
-Suggest a logical stop-loss percentage and a realistic price 
-target for a 3-month hold.""", language="text")
-
-    st.markdown("#### 3. Upcoming Catalysts & Speculations")
-    st.code("""What are the major upcoming catalysts, product launches, clinical 
-trials, or earnings reports for [TICKER] in the next 3 to 6 months? 
-How might these events impact the stock price, and what are 
-the current market speculations or analyst sentiments 
-surrounding them?""", language="text")
-
-    st.markdown("#### 4. Competitive Moat Analysis")
-    st.code("""Analyze the competitive landscape for [TICKER]. Who are its top 3 
-direct competitors? Compare [TICKER]'s market share, unique 
-competitive advantages (moat), and profit margins against these 
-competitors. Is [TICKER] gaining or losing ground?""", language="text")
