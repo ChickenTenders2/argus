@@ -188,22 +188,31 @@ hr { border-color: rgba(255,255,255,0.08) !important; }
 /* ── Regime strip info tooltip ── */
 .argus-regime-tip {
     position: relative; display: inline-block;
-    cursor: help; opacity: 0.6; font-size: 0.85rem;
+    cursor: help; opacity: 0.7; font-size: 0.85rem;
     margin-left: 6px; vertical-align: middle;
 }
 .argus-regime-tip .argus-regime-tip-box {
     visibility: hidden; opacity: 0;
-    background: #0d1b2e; color: #c9d6e8;
-    text-align: left; border-radius: 7px;
-    padding: 9px 13px; position: absolute;
-    z-index: 9999; bottom: 140%; left: 50%;
-    transform: translateX(-50%);
-    width: 290px; font-size: 0.72rem; line-height: 1.55;
+    background: #0b1929; color: #c9d6e8;
+    text-align: left; border-radius: 8px;
+    padding: 12px 15px; position: absolute;
+    z-index: 9999; bottom: calc(100% + 8px);
+    right: 0; left: auto; transform: none;
+    width: 310px; font-size: 0.74rem; line-height: 1.6;
     border: 1px solid #2a4a6a;
-    box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.65);
     white-space: normal; pointer-events: none;
     transition: opacity 0.15s ease;
 }
+.argus-regime-tip .argus-regime-tip-box .tip-row {
+    display: flex; gap: 7px; padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.argus-regime-tip .argus-regime-tip-box .tip-row:last-child { border-bottom: none; }
+.argus-regime-tip .argus-regime-tip-box .tip-label {
+    color: #00d4ff; font-weight: 600; white-space: nowrap; min-width: 76px;
+}
+.argus-regime-tip .argus-regime-tip-box .tip-desc { color: #9ab0cc; }
 .argus-regime-tip:hover .argus-regime-tip-box { visibility: visible; opacity: 1; }
 </style>
 """
@@ -1646,11 +1655,16 @@ if _sc_stress:
     _sc_chips += '<span class="argus-regime-chip" title="IWM realized vol > 1.5× SPY — small-cap stress">⚡ SC Stress</span>'
 _regime_tip_box = (
     '<span class="argus-regime-tip-box">'
-    '<strong>×mult</strong> — score multiplier (&gt;1 bull boost, &lt;1 bear penalty)<br>'
-    '<strong>VIX</strong> — CBOE fear gauge (&lt;18 calm · 18–25 elevated · &gt;25 high fear)<br>'
-    '<strong>SC Leading</strong> — IWM outperforming QQQ by &gt;3% over 20d → +0.05 multiplier<br>'
-    '<strong>SC Stress</strong> — IWM realized vol &gt;1.5× SPY → small-cap stress flag<br>'
-    '<strong>macro adj</strong> — shift from yield curve / CPI / HY spreads / Fear&amp;Greed'
+    '<div class="tip-row"><span class="tip-label">×mult</span>'
+    '<span class="tip-desc">Score multiplier — &gt;1 bull boost, &lt;1 bear penalty</span></div>'
+    '<div class="tip-row"><span class="tip-label">VIX</span>'
+    '<span class="tip-desc">CBOE fear gauge — &lt;18 calm · 18–25 elevated · &gt;25 high fear</span></div>'
+    '<div class="tip-row"><span class="tip-label">SC Leading</span>'
+    '<span class="tip-desc">IWM outperforming QQQ &gt;3% over 20d → +0.05 multiplier</span></div>'
+    '<div class="tip-row"><span class="tip-label">SC Stress</span>'
+    '<span class="tip-desc">IWM realized vol &gt;1.5× SPY → small-cap stress flag</span></div>'
+    '<div class="tip-row"><span class="tip-label">macro adj</span>'
+    '<span class="tip-desc">Multiplier shift from yield curve, CPI, HY spreads &amp; Fear/Greed</span></div>'
     '</span>'
 )
 st.markdown(
