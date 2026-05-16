@@ -221,6 +221,7 @@ def _run():
             update_memory=profile.update_memory,
             run_type=profile.run_type,
             tickers=[ticker],
+            universe_mode=profile.universe_mode,
         )
         results = scan_payload["results"]
         if results and results[0]["score"] >= profile.min_score_override:
@@ -247,6 +248,7 @@ def _run():
         scan_limit=profile.scan_limit,
         update_memory=profile.update_memory,
         run_type=profile.run_type,
+        universe_mode=profile.universe_mode,
     )
     results = scan_payload["results"]
     scan_date = scan_payload["scan_date"]
@@ -256,6 +258,25 @@ def _run():
     # Apply min_score filter for profiles that override it (e.g. premarket)
     if min_score is not None:
         results = [r for r in results if r.get("score", 0) >= min_score]
+
+    # B5: post-close portfolio TP/SL check (only when profile flags it)
+    if profile.run_portfolio_monitor:
+        try:
+            logger.info("Running portfolio monitor (TP/SL check)...")
+            alerts = monitor_portfolio()
+            if alerts:
+                logger.info(f"Portfolio monitor: {len(alerts)} alert(s) generated")
+                _alert_msg = (
+                    f"🚨 *Argus Portfolio Alerts — {datetime.now().strftime('%d %b %Y %H:%M')}*\n"
+                    + ("─" * 30) + "\n"
+                    + "\n".join(str(a) for a in alerts)
+                )
+                if profile.send_telegram:
+                    send_telegram(_alert_msg)
+            else:
+                logger.info("Portfolio monitor: no TP/SL triggers")
+        except Exception as _me:
+            logger.warning(f"Portfolio monitor failed: {_me}")
 
     if not results:
         if profile.send_telegram:

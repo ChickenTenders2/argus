@@ -1,13 +1,14 @@
-name: Argus 8-K Catalyst Poller
+name: Argus 8-K Catalyst Rescore
 
+# Dispatch-only: a previous scheduled cron fired every 30 min with an empty
+# ticker, which silently noop'd 32× per trading day. A real auto-poller that
+# queries SEC EDGAR for recent 8-Ks and dispatches per filer is a follow-up.
 on:
-  schedule:
-    - cron: '*/30 13-21 * * 1-5'  # Every 30 min, 08:00–16:30 ET (13:00–21:30 UTC)
   workflow_dispatch:
     inputs:
       ticker:
-        description: 'Ticker to rescore'
-        required: false
+        description: 'Ticker to rescore (required)'
+        required: true
 
 jobs:
   catalyst-check:
@@ -25,8 +26,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run 8-K catalyst check
-        run: python argus.py --profile catalyst --ticker "${{ github.event.inputs.ticker || '' }}"
+      - name: Run 8-K catalyst rescore
+        run: python argus.py --profile catalyst --ticker "${{ github.event.inputs.ticker }}"
         env:
           DATABASE_URL:     ${{ secrets.DATABASE_URL }}
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
