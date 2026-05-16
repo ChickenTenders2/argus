@@ -573,7 +573,7 @@ def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", 
     
     return header + alerts_block + highest_block + high_block + footer
 
-def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_callback=None, run_type: str = "manual"):
+def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_callback=None, run_type: str = "manual", progress_fn=None):
     """
     Execute Argus scan and return standardized payload.
     This is used by both scheduled runs and Streamlit manual runs.
@@ -612,6 +612,11 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
             ticker = future_to_ticker[future]
             if progress_callback:
                 progress_callback(ticker, idx, total)
+            if progress_fn is not None:
+                try:
+                    progress_fn(idx + 1, len(valid_tickers), ticker)
+                except Exception:
+                    pass
             pick = future.result()
             if pick:
                 results.append(pick)

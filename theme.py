@@ -210,5 +210,32 @@ hr { border-color: rgba(255,255,255,0.08) !important; }
     transition: opacity 0.15s ease;
 }
 .argus-regime-tip:hover .argus-regime-tip-box { visibility: visible; opacity: 1; }
+
+/* ── Equal-height card columns ── */
+[data-testid="stHorizontalBlock"] {
+    align-items: stretch !important;
+}
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    display: flex !important;
+    flex-direction: column !important;
+}
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > div:first-child {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+[data-testid="stExpander"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+[data-testid="stExpander"] > details {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+[data-testid="stExpander"] > details > div[data-testid="stExpanderDetails"] {
+    flex: 1 !important;
+}
 </style>
 """
