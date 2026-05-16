@@ -38,6 +38,37 @@ os.makedirs("data", exist_ok=True)
 CACHE_FILE = "data/metadata_cache.json"
 DB_FILE = "data/argus.db"
 
+# ── Weight config loader ──────────────────────────────────────────────────
+# Loads scoring component caps from config/weights_*.json. Selected via
+# ARGUS_WEIGHTS_FILE env var (default "default"). Active weights determine the
+# max for each score component — runner_weights tilts toward momentum/catalyst.
+_WEIGHTS_CACHE: dict = {}
+_DEFAULT_WEIGHTS = {
+    "fundamentals_max": 18, "valuation_max": 6, "momentum_max": 34,
+    "smart_money_max": 22, "catalyst_max": 15, "persistence_max": 5,
+    "sentiment_cap": 10,
+}
+def _load_weights(name: str = None) -> dict:
+    name = (name or os.environ.get("ARGUS_WEIGHTS_FILE", "default")).lower().strip()
+    if name in _WEIGHTS_CACHE:
+        return _WEIGHTS_CACHE[name]
+    candidates = [f"config/weights_{name}.json", "config/weights_default.json"]
+    for path in candidates:
+        try:
+            if os.path.exists(path):
+                with open(path) as f:
+                    raw = json.load(f)
+                # Merge with defaults so missing keys don't crash callers
+                merged = {**_DEFAULT_WEIGHTS, **raw}
+                _WEIGHTS_CACHE[name] = merged
+                logger.info(f"Loaded scoring weights from {path}")
+                return merged
+        except Exception as _we:
+            logger.warning(f"Could not load weights from {path}: {_we}")
+    # Last-resort fallback so scoring still works without any config file
+    _WEIGHTS_CACHE[name] = dict(_DEFAULT_WEIGHTS)
+    return _WEIGHTS_CACHE[name]
+
 _DB_ENGINE = None
 _DB_INITIALIZED = False
 _SQLITE_CONN = None
@@ -322,10 +353,13 @@ def load_memory(filepath=None):
         df = pd.read_sql("SELECT * FROM memory", conn)
         conn.close()
         if not df.empty:
+            # Backfill last_seen from first_seen for legacy rows
+            if "last_seen" not in df.columns:
+                df["last_seen"] = df.get("first_seen", "")
             return df
     except:
         pass
-    return pd.DataFrame(columns=["ticker", "first_seen", "times_flagged", "last_score"])
+    return pd.DataFrame(columns=["ticker", "first_seen", "last_seen", "times_flagged", "last_score"])
 
 def save_memory(df, filepath=None):
     conn = get_db_connection()
@@ -573,18 +607,32 @@ def generate_telegram_message(results, scanned_count, title="Argus Daily Scan", 
     
     return header + alerts_block + highest_block + high_block + footer
 
-def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_callback=None, run_type: str = "manual", progress_fn=None):
+def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_callback=None, run_type: str = "manual", progress_fn=None, tickers: list = None, universe_mode: str = "combined"):
     """
     Execute Argus scan and return standardized payload.
     This is used by both scheduled runs and Streamlit manual runs.
+
+    tickers       — optional explicit ticker list. If provided, skips universe lookup and prefilter
+                    entirely (used by catalyst single-ticker rescore).
+    universe_mode — "core" (IWM only), "rockets" (Nasdaq micro + IPOs), or "combined"
     shuffle=True  → random subset each run (Random / Full modes)
     shuffle=False → always scans the top-weighted IWM tickers first (Fixed mode)
     """
     import concurrent.futures
 
-    tickers = get_universe()
+    # Explicit ticker list bypasses universe + prefilter (catalyst rescore path)
+    if tickers is not None and len(tickers) > 0:
+        logger.info(f"Explicit ticker list provided ({len(tickers)} tickers); bypassing universe + prefilter")
+        all_tickers = list(tickers)
+    else:
+        try:
+            all_tickers = get_universe_extended(mode=universe_mode)
+            logger.info(f"Universe mode={universe_mode!r}: {len(all_tickers)} tickers")
+        except Exception as _ue:
+            logger.warning(f"get_universe_extended failed ({_ue}); falling back to get_universe()")
+            all_tickers = get_universe()
     if shuffle:
-        random.shuffle(tickers)
+        random.shuffle(all_tickers)
     memory_df = load_memory(config.MEMORY_FILE)
     scan_date = datetime.now().strftime("%Y-%m-%d")
     scan_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -592,7 +640,11 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
     regime_info = get_market_regime()
     logger.info(f"Market Regime: {regime_info['regime']} ({regime_info['reason']})")
 
-    valid_tickers = _prefilter_tickers(tickers, config, scan_limit=scan_limit)
+    # Skip prefilter when caller passed an explicit ticker list
+    if tickers is not None and len(tickers) > 0:
+        valid_tickers = all_tickers
+    else:
+        valid_tickers = _prefilter_tickers(all_tickers, config, scan_limit=scan_limit)
     results = []
     total = len(valid_tickers)
     filtered_count = 0
@@ -629,15 +681,20 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
 
     if update_memory and results:
         today = datetime.now().strftime("%d %b %Y")
+        # Ensure last_seen column exists (lazy migration for legacy memory files)
+        if "last_seen" not in memory_df.columns:
+            memory_df["last_seen"] = memory_df.get("first_seen", "")
         for pick in results:
             ticker = pick["ticker"]
             if ticker in memory_df["ticker"].values:
                 memory_df.loc[memory_df["ticker"] == ticker, "times_flagged"] += 1
                 memory_df.loc[memory_df["ticker"] == ticker, "last_score"] = pick["score"]
+                memory_df.loc[memory_df["ticker"] == ticker, "last_seen"] = today
             else:
                 new_row = pd.DataFrame([{
                     "ticker": ticker,
                     "first_seen": today,
+                    "last_seen": today,
                     "times_flagged": 1,
                     "last_score": pick["score"],
                 }])
@@ -1181,6 +1238,7 @@ _VOL_CACHE_TTL = 3600
 _iwm_cache: dict = {}
 _iwm_cache_ts: float = 0.0
 _IWM_CACHE_TTL = 3600
+_iwm_cache_lock = threading.Lock()
 
 def _volatility_proxy(ticker: str) -> float:
     """Return approximate 1-month volatility (%). Cached per ticker for 1 hour."""
@@ -1316,6 +1374,34 @@ def _check_red_flags(info, stock):
         pass
     return flags
 
+# ── FMP fallback helper ────────────────────────────────────────────────
+# yfinance frequently omits pegRatio / P/S / ROCE / FCF for small-caps. Falling
+# back to a missing-value sentinel (None) instead of a punishing default lets
+# the scorer skip the sub-score rather than zeroing it — which would systematically
+# under-rank micro-caps whose APIs simply don't expose the field.
+_fmp_ratios_cache: dict = {}
+_fmp_cache_lock = threading.Lock()
+def _get_metric_with_fallback(info, ticker, yf_key, fmp_key=None):
+    """Try yfinance first; if missing, fall back to FMP ratios. Return None if both miss."""
+    val = info.get(yf_key) if info else None
+    if val is not None:
+        return val
+    if not fmp_key:
+        return None
+    try:
+        with _fmp_cache_lock:
+            if ticker in _fmp_ratios_cache:
+                ratios = _fmp_ratios_cache[ticker]
+            else:
+                from fetchers.fmp_fetch import get_fmp_data
+                fmp = get_fmp_data(ticker) or {}
+                ratios = fmp.get("ratios") or {}
+                _fmp_ratios_cache[ticker] = ratios
+        return ratios.get(fmp_key)
+    except Exception:
+        return None
+
+
 def _score_fundamentals(info, stock, config=None):
     """Score fundamentals — max 18 pts for established, 8 pts pre-revenue alt-path."""
     score, reasons = 0, []
@@ -1375,16 +1461,22 @@ def _score_fundamentals(info, stock, config=None):
     elif growth >= rev_low:  score += 6;  reasons.append(f"Rev growth {growth*100:.0f}%")
     elif growth >= 0.10:     score += 2;  reasons.append(f"Rev growth {growth*100:.0f}%")
 
-    # ROCE — max 4 pts
-    roce = info.get("returnOnCapitalEmployed", info.get("returnOnCapital", 0)) or 0
-    if roce > roce_thr: score += 4; reasons.append(f"ROCE {roce*100:.0f}%")
+    # ROCE — max 4 pts. Try yfinance ROCE → yfinance ROC → FMP returnOnCapitalEmployedTTM.
+    # If all three miss, skip the sub-score rather than zeroing it.
+    ticker_sym = info.get("symbol", "")
+    roce = info.get("returnOnCapitalEmployed") or info.get("returnOnCapital")
+    if roce is None:
+        roce = _get_metric_with_fallback(info, ticker_sym, "returnOnCapitalEmployed",
+                                          fmp_key="returnOnCapitalEmployedTTM")
+    if roce is not None and roce > roce_thr:
+        score += 4; reasons.append(f"ROCE {roce*100:.0f}%")
 
     # Gross Margin — max 3 pts
     gross_margin = info.get("grossMargins", 0) or 0
     if gross_margin > gm_high:   score += 3; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
     elif gross_margin > gm_low:  score += 1; reasons.append(f"Gross margin {gross_margin*100:.0f}%")
 
-    # FCF — max 1 pt
+    # FCF — max 1 pt. Try statement-derived → yfinance freeCashflow → FMP freeCashFlowTTM.
     try:
         cf = stock.quarterly_cashflow
         if "Free Cash Flow" in cf.index:
@@ -1396,6 +1488,9 @@ def _score_fundamentals(info, stock, config=None):
             ttm_fcf = info.get("freeCashflow", None)
     except Exception:
         ttm_fcf = info.get("freeCashflow", None)
+    if ttm_fcf is None:
+        ttm_fcf = _get_metric_with_fallback(info, ticker_sym, "freeCashflow",
+                                             fmp_key="freeCashFlowTTM")
 
     if ttm_fcf is not None and ttm_fcf > 0:
         score += 1; reasons.append("FCF positive")
@@ -1437,10 +1532,14 @@ def _score_momentum(hist, ticker):
     else:
         logger.debug(f"{ticker}: fewer than 200 days of history — 200MA check skipped")
 
-    # Volume spike — 8 pts (lowered threshold to 1.5x to catch earlier breakouts)
-    if vol_today > vol_avg * 2.0:
+    # Volume spike — 8 pts. Require a meaningful absolute baseline so a 5-day-old
+    # IPO with vol_avg≈30k doesn't tag a spike on any day with >60k shares traded.
+    # 200k matches the prefilter floor in _prefilter_tickers().
+    MIN_VOL_BASELINE = 200_000
+    effective_vol_avg = max(float(vol_avg or 0), MIN_VOL_BASELINE)
+    if vol_today > effective_vol_avg * 2.0:
         score += 8; reasons.append("⚡ Volume spike 2x")
-    elif vol_today > vol_avg * 1.5:
+    elif vol_today > effective_vol_avg * 1.5:
         score += 4; reasons.append("⚡ Volume spike 1.5x")
 
     # Relative Strength vs IWM — tiered, max 8 pts
@@ -1451,10 +1550,18 @@ def _score_momentum(hist, ticker):
 
             global _iwm_cache, _iwm_cache_ts
             _now = _time.time()
-            if not _iwm_cache or (_now - _iwm_cache_ts) > _IWM_CACHE_TTL:
-                _iwm_cache = {"hist": yf.Ticker("IWM").history(period="3mo")}
-                _iwm_cache_ts = _now
-            iwm_hist = _iwm_cache.get("hist")
+            # Hold the lock only for read/write of the cache state; if a refetch is
+            # needed, do the yfinance call outside the lock so concurrent workers
+            # don't serialize on the network round-trip.
+            with _iwm_cache_lock:
+                _stale = (not _iwm_cache) or (_now - _iwm_cache_ts) > _IWM_CACHE_TTL
+                iwm_hist = _iwm_cache.get("hist") if not _stale else None
+            if iwm_hist is None:
+                _fresh = yf.Ticker("IWM").history(period="3mo")
+                with _iwm_cache_lock:
+                    _iwm_cache = {"hist": _fresh}
+                    _iwm_cache_ts = _now
+                    iwm_hist = _fresh
 
             if iwm_hist is not None and not iwm_hist.empty:
                 iwm_return = (iwm_hist["Close"].iloc[-1] / iwm_hist["Close"].iloc[0]) - 1
@@ -1484,25 +1591,36 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         if red_flags:
             return None
 
+        weights = _load_weights()
         score, reasons = 0, []
 
         # Fetch history once — needed by momentum and smart money
         hist = stock.history(period="1y")
 
-        # 1. Fundamentals (rev growth + ROCE + gross margin + FCF)
+        # 1. Fundamentals (rev growth + ROCE + gross margin + FCF) — capped by weights
         f_score, f_reasons = _score_fundamentals(info, stock, config)
+        f_score = min(f_score, weights["fundamentals_max"])
         score += f_score; reasons.extend(f_reasons)
 
-        # 2. Valuation (max 6 pts: PEG 4 + P/S 2)
+        # 2. Valuation (max 6 pts: PEG 4 + P/S 2). Skip-on-missing rather than default-to-bad.
         v_score = 0
-        peg = info.get("pegRatio", 2)
-        if 0 < peg < 1: v_score += 4; reasons.append(f"PEG {peg:.1f}")
-        ps = info.get("priceToSalesTrailing12Months", 10)
-        if 0 < ps < 4: v_score += 2; reasons.append(f"P/S {ps:.1f}x")
+        peg = info.get("pegRatio")
+        if peg is None:
+            peg = _get_metric_with_fallback(info, ticker, "pegRatio", fmp_key="pegRatioTTM")
+        if peg is not None and 0 < peg < 1:
+            v_score += 4; reasons.append(f"PEG {peg:.1f}")
+        ps = info.get("priceToSalesTrailing12Months")
+        if ps is None:
+            ps = _get_metric_with_fallback(info, ticker, "priceToSalesTrailing12Months",
+                                            fmp_key="priceToSalesRatioTTM")
+        if ps is not None and 0 < ps < 4:
+            v_score += 2; reasons.append(f"P/S {ps:.1f}x")
+        v_score = min(v_score, weights["valuation_max"])
         score += v_score
 
-        # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS — max 34 pts)
+        # 3. Momentum (6mo, 50MA, 200MA, volume spike, IWM RS) — capped by weights
         m_score, m_reasons = _score_momentum(hist, ticker)
+        m_score = min(m_score, weights["momentum_max"])
         score += m_score; reasons.extend(m_reasons)
 
         # 4. Smart Money, Cap & Float (max 22 pts)
@@ -1527,74 +1645,107 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         if short_pct > 0.20 and short_ratio > 3 and price_now_sm > ma50_sm:
             s_score += 3; reasons.append(f"Squeeze setup ({short_pct*100:.0f}% short, {short_ratio:.1f}d cover)")
 
+        s_score = min(s_score, weights["smart_money_max"])
         score += s_score
 
-        # 5. Persistence Bonus (max 5 pts — continuous, with score velocity bonus)
+        # 5. Persistence Bonus (max 5 pts — continuous, time-decayed, with score velocity bonus)
+        # Formula: min(5, times_flagged * 1.5 * 0.95^days_since_last_seen)
+        # An old pick that hasn't re-flagged in 30 days has decay = 0.95^30 ≈ 0.21, so a stock
+        # flagged 5 times back then contributes 5 * 1.5 * 0.21 = 1.6 → rounds to 2 pts.
         p_score = 0
         prev = memory_df[memory_df["ticker"] == ticker]
         score_velocity = 0
         if not prev.empty:
             times_flagged = int(prev["times_flagged"].values[0])
             last_score_mem = float(prev["last_score"].values[0]) if "last_score" in prev.columns else 0
-            p_score = min(5, round(times_flagged * 1.5))
-            if p_score > 0:
-                reasons.append(f"\U0001f501 Persistence x{times_flagged}")
+            # Days since last seen — falls back to first_seen, then 0 if neither column exists
+            _last_str = None
+            for _col in ("last_seen", "first_seen"):
+                if _col in prev.columns:
+                    _v = prev[_col].values[0]
+                    if _v is not None and str(_v) not in ("", "nan", "NaT"):
+                        _last_str = _v
+                        break
+            days_since = 0
+            if _last_str:
+                try:
+                    days_since = max(0, (datetime.now().date() - pd.to_datetime(_last_str).date()).days)
+                except Exception:
+                    days_since = 0
+            decay = 0.95 ** days_since
+            raw_p = times_flagged * 1.5 * decay
+            _p_cap = float(weights["persistence_max"])
+            p_score = min(_p_cap, raw_p)
+            if p_score >= 1:
+                reasons.append(f"\U0001f501 Persistence x{times_flagged} (decay {decay:.2f})")
             score_velocity = score - last_score_mem
             if score_velocity >= 10:
-                p_score = min(5, p_score + 2)
+                p_score = min(_p_cap, p_score + 2)
                 reasons.append(f"↑ Score velocity +{score_velocity:.0f}")
             elif score_velocity >= 5:
-                p_score = min(5, p_score + 1)
+                p_score = min(_p_cap, p_score + 1)
                 reasons.append(f"↑ Rising score")
-        score += p_score
+        score += round(p_score)
 
-        # 4.5. Catalyst Score (EDGAR cluster buys + 8-K + options flow — max 15 pts)
+        # 4.5. Catalyst Score (EDGAR cluster buys + 8-K + options flow) — capped by weights
         c_score, c_reasons = 0, []
         try:
             from fetchers.catalysts import compute_catalyst_score
             c_score, c_reasons = compute_catalyst_score(ticker)
+            c_score = min(c_score, weights["catalyst_max"])
             score += c_score
             reasons.extend(c_reasons)
         except Exception as _ce:
             logger.debug(f"{ticker}: catalyst score unavailable — {_ce}")
 
-        # Capture raw quality score before regime adjustment for MIN_SCORE gating.
-        # The regime multiplier adjusts the *displayed* score to reflect market context
-        # but must not make the threshold unachievable (e.g. 0.7 × max-100 = 70 < 72).
+        # Capture the pre-regime, pre-sentiment quality score. This is the true measure
+        # of stock quality and is what we gate against — the regime multiplier and the
+        # sentiment delta are display adjustments on top.
         quality_score = score
+        _regime_mult = regime_info.get("multiplier", 1.0) if regime_info else 1.0
 
         # 6. Market Regime Modification (Phase 3)
-        if regime_info and regime_info.get("multiplier", 1.0) != 1.0:
-            score *= regime_info["multiplier"]
+        if regime_info and _regime_mult != 1.0:
+            score *= _regime_mult
             reasons.append(f"{regime_info['regime']} Regime Adj")
 
         score = int(round(score))
 
-        # 7. AI News Sentiment Score (Only if preliminary math score is decent to save API)
+        # 7. AI News Sentiment Score — scaled by regime multiplier so the bonus is
+        # dampened in bear markets (when headline noise is high) and amplified in bull.
+        # Capped at ± weights["sentiment_cap"] so a single headline can't dominate.
+        sentiment_delta = 0
         if score >= 60 and config.GROQ_API_KEY:
             sentiment = get_sentiment_score(ticker, config.GROQ_API_KEY)
             if sentiment != 0:
-                score += sentiment
-                reasons.append(f"AI Sentiment {sentiment:+d}")
+                _scaled = sentiment * _regime_mult
+                _cap = float(weights["sentiment_cap"])
+                sentiment_delta = int(round(max(-_cap, min(_cap, _scaled))))
+                score += sentiment_delta
+                reasons.append(f"AI Sentiment {sentiment_delta:+d}")
 
-        # raw_score is the unclamped total — used as tiebreaker when multiple picks hit 100
-        raw_score = score
+        # final_unclamped — used as tiebreaker when multiple picks hit 100
+        final_unclamped = score
         score = min(100, score)
 
-        # Gate on pre-multiplier quality score, adjusted for the regime multiplier so that
-        # borderline stocks are not rejected before the multiplier can push them over MIN_SCORE.
-        # e.g. MIN_SCORE=75, Bull ×1.05 → gate = 71.4, letting quality_score 72 → 75.6 pass.
-        _gate_mult = regime_info.get("multiplier", 1.0) if regime_info else 1.0
-        _gate_threshold = config.MIN_SCORE / max(_gate_mult, 0.01)
-        if quality_score < _gate_threshold:
+        # Gate on the pre-regime, pre-sentiment quality score.
+        # The regime multiplier adjusts the *displayed* score for market context but
+        # must not change the entry bar — otherwise the gate becomes unreachable in
+        # bear markets (75 / 0.7 = 107) and silently rejects every pick.
+        if quality_score < config.MIN_SCORE:
             return None
 
         return {
             "ticker":              ticker,
             "sector":              info.get("sector", "Unknown"),
             "score":               score,
-            "raw_score":           raw_score,
-            "raw_score_pre_regime": quality_score,
+            # raw_score now matches its name: pre-regime, pre-sentiment quality.
+            # This is what the ML pipeline should train on for a clean signal.
+            "raw_score":           quality_score,
+            "raw_score_pre_regime": quality_score,    # alias retained for back-compat
+            "final_unclamped":     final_unclamped,   # post-everything, pre-clamp — tiebreaker
+            "regime_multiplier":   _regime_mult,
+            "sentiment_delta":     sentiment_delta,
             "f_score":             f_score,
             "v_score":             v_score,
             "m_score":             m_score,
