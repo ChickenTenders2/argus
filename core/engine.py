@@ -871,14 +871,37 @@ def delete_journal(journal_name, journal_file=None):
         logger.error(f"Failed to delete journal '{journal_name}': {e}")
         return False
 
+def _fetch_gbpusd() -> float:
+    """Fetch the live GBP/USD exchange rate. Falls back to 1.27 if unavailable."""
+    try:
+        fx = yf.download("GBPUSD=X", period="2d", progress=False, auto_adjust=True)
+        if not fx.empty:
+            col = fx["Close"] if "Close" in fx.columns else fx.iloc[:, 0]
+            rate = float(col.dropna().iloc[-1])
+            if rate > 0:
+                return rate
+    except Exception:
+        pass
+    return 1.27  # safe fallback
+
+
 def monitor_portfolio():
     """
     Auto-Pilot Monitor:
     Reads the journal table (active positions), fetches current prices,
     and checks against Stop-Loss and Take-Profit levels.
+
+    Journal entry prices are stored in GBP. yfinance returns USD prices for
+    US-listed stocks, so we fetch the live GBP/USD rate and divide all
+    yfinance prices by it before comparing against journal entries.
     """
     alerts = []
-    
+
+    # Journal entry_price is in GBP; yfinance returns USD.
+    # Convert all yfinance prices → GBP for apples-to-apples comparison.
+    gbpusd = _fetch_gbpusd()
+    logger.info(f"monitor_portfolio: using GBP/USD = {gbpusd:.4f}")
+
     try:
         conn = get_db_connection()
         journal_df = pd.read_sql("SELECT * FROM journal", conn)
@@ -955,52 +978,63 @@ def monitor_portfolio():
         if ticker not in current_prices:
             continue
 
-        curr_price = float(current_prices[ticker])
-        entry = float(pos["avg_buy"])
+        # current_prices holds raw USD values from yfinance.
+        # Journal entry_price is in GBP → convert USD → GBP for comparison.
+        _usd_price = float(current_prices[ticker])
+        if ticker.upper().endswith(".L"):
+            # LSE stocks come back in pence from yfinance; convert to GBP
+            curr_price_gbp = _usd_price / 100
+        else:
+            curr_price_gbp = _usd_price / gbpusd
+
+        entry = float(pos["avg_buy"])  # GBP
         if entry <= 0:
             continue
 
         sl_pct = float(pos.get("sl_pct", 5.0) or 5.0)
         tp_pct = float(pos.get("take_profit_pct", 20.0) or 20.0)
 
-        static_sl = entry * (1 - sl_pct / 100)
-        tp_price  = entry * (1 + tp_pct / 100)
+        static_sl = entry * (1 - sl_pct / 100)   # GBP
+        tp_price  = entry * (1 + tp_pct / 100)   # GBP
 
         # Trailing stop: trail the peak close since entry at the same sl_pct distance.
-        # If the stock has risen, trail_sl > static_sl — locking in gains.
-        # If it never went above entry, static_sl is the floor.
-        peak_price = entry
+        # Convert peak from USD → GBP so it's comparable to the GBP entry.
+        peak_price_gbp = entry  # floor at entry cost basis
         entry_date = pos.get("entry_date")
         if ticker in hist_by_ticker and entry_date is not None:
             h = hist_by_ticker[ticker]
             try:
                 h_since = h[h.index >= pd.Timestamp(entry_date).tz_localize(None)]
                 if not h_since.empty:
-                    peak_price = float(h_since["Close"].max())
+                    _usd_peak = float(h_since["Close"].max())
+                    if ticker.upper().endswith(".L"):
+                        peak_price_gbp = _usd_peak / 100
+                    else:
+                        peak_price_gbp = _usd_peak / gbpusd
             except Exception:
                 pass
 
-        trail_sl       = peak_price * (1 - sl_pct / 100)
+        trail_sl       = peak_price_gbp * (1 - sl_pct / 100)
         effective_sl   = max(static_sl, trail_sl)
         is_trailing    = trail_sl > static_sl
 
-        pct_move = ((curr_price - entry) / entry) * 100
+        pct_move = ((curr_price_gbp - entry) / entry) * 100
 
-        if curr_price <= effective_sl:
+        if curr_price_gbp <= effective_sl:
             if is_trailing:
                 alerts.append(
-                    f"🔴 *TRAILING STOP TRIGGERED:* {ticker} hit ${curr_price:.2f} "
-                    f"(Peak: ${peak_price:.2f}, Trail SL: ${effective_sl:.2f}, {pct_move:.1f}% from entry)"
+                    f"🔴 *TRAILING STOP TRIGGERED:* {ticker} hit £{curr_price_gbp:.2f} "
+                    f"(Peak: £{peak_price_gbp:.2f}, Trail SL: £{effective_sl:.2f}, {pct_move:.1f}% from entry)"
                 )
             else:
                 alerts.append(
-                    f"🔴 *STOP LOSS BROKEN:* {ticker} hit ${curr_price:.2f} "
-                    f"(Entry: ${entry:.2f}, {pct_move:.1f}%)"
+                    f"🔴 *STOP LOSS BROKEN:* {ticker} hit £{curr_price_gbp:.2f} "
+                    f"(Entry: £{entry:.2f}, {pct_move:.1f}%)"
                 )
-        elif curr_price >= tp_price:
+        elif curr_price_gbp >= tp_price:
             alerts.append(
-                f"✅ *TAKE PROFIT REACHED:* {ticker} hit ${curr_price:.2f} "
-                f"(Entry: ${entry:.2f}, +{pct_move:.1f}%)"
+                f"✅ *TAKE PROFIT REACHED:* {ticker} hit £{curr_price_gbp:.2f} "
+                f"(Entry: £{entry:.2f}, +{pct_move:.1f}%)"
             )
 
     return alerts
