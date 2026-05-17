@@ -2260,26 +2260,28 @@ if active_tab == "Ticker Detail":
                 from core.engine import score_stock, load_memory
                 _mem_df = load_memory()
                 _live_regime = cached_market_regime()
-                _manual_result = score_stock(_manual_ticker_input, _mem_df, config, _live_regime)
+                # display_only=True: skip MIN_SCORE gate & hard red-flag rejection so
+                # any valid ticker (e.g. NVDA, AAPL) can be fully analysed.
+                _manual_result = score_stock(_manual_ticker_input, _mem_df, config, _live_regime, display_only=True)
                 if _manual_result:
+                    _in_universe = _manual_result.get("in_universe", True)
+                    _filter_reason = _manual_result.get("filter_reason", "")
                     _mr_df = pd.DataFrame([_manual_result])
                     _mr_df = add_predictions(_mr_df, model)
                     _mr_df = add_risk_guidance(_mr_df, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
                     _sig_lbl, _sig_col = get_signal_label(_manual_result.get("score", 0))
-                    st.success(f"**{_manual_ticker_input}** — Score: **{_manual_result['score']}/100** | **:{_sig_col}[{_sig_lbl}]**")
+                    if _in_universe:
+                        st.success(f"**{_manual_ticker_input}** — Score: **{_manual_result['score']}/100** | **:{_sig_col}[{_sig_lbl}]**")
+                    else:
+                        st.warning(
+                            f"⚠️ **{_manual_ticker_input} is outside the Argus small-cap universe** — shown for reference only.\n\n"
+                            f"Reason: {_filter_reason}"
+                        )
+                        st.info(f"Score: **{_manual_result['score']}/100** | {_sig_lbl} — scoring reflects how this ticker rates on Argus criteria, not an active Argus signal.")
                     display_cards(_mr_df)
                     st.dataframe(_mr_df.T, use_container_width=True)
                 else:
-                    st.warning(f"{_manual_ticker_input} did not pass Argus filters (score too low, invalid ticker, or red flags detected).")
-                    try:
-                        _info = yf.Ticker(_manual_ticker_input).info
-                        if _info and _info.get("symbol"):
-                            snap = fetch_financial_snapshot(_manual_ticker_input)
-                            if snap:
-                                st.markdown("##### Basic Financial Snapshot")
-                                st.dataframe(pd.DataFrame(list(snap.items()), columns=["Metric", "Value"]).set_index("Metric"), use_container_width=True)
-                    except Exception:
-                        pass
+                    st.error(f"**{_manual_ticker_input}** — invalid ticker or no market data available.")
             except Exception as _e:
                 st.error(f"Error analysing {_manual_ticker_input}: {_e}")
     st.divider()
