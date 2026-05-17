@@ -1667,6 +1667,12 @@ _regime_tip_box = (
     '<span class="tip-desc">Multiplier shift from yield curve, CPI, HY spreads &amp; Fear/Greed</span></div>'
     '</span>'
 )
+# Embed the ⓘ icon inline — right after the reason string so it sits
+# immediately next to "(macro adj …)" rather than floating far right.
+_strip_reason_with_tip = (
+    f'{_strip_reason_str}'
+    f'<span class="argus-regime-tip" style="margin-left:5px">ⓘ{_regime_tip_box}</span>'
+)
 st.markdown(
     f'<div style="background:{_sc}18;border-left:4px solid {_sc};border-radius:6px;'
     f'padding:8px 14px;margin-bottom:10px;">'
@@ -1674,8 +1680,7 @@ st.markdown(
     f'<span style="font-size:1rem;font-weight:700;color:{_sc}">{_strip_regime["regime"]}</span>'
     f'<span style="font-size:0.82rem;color:#8ea0ba">×{_strip_mult} · {_strip_vix_str}</span>'
     f'{_sc_chips}'
-    f'<span style="font-size:0.78rem;color:#8ea0ba;font-style:italic;flex:1">{_strip_reason_str}</span>'
-    f'<span class="argus-regime-tip">ⓘ{_regime_tip_box}</span>'
+    f'<span style="font-size:0.78rem;color:#8ea0ba;font-style:italic">{_strip_reason_with_tip}</span>'
     f'</div>'
     f'</div>',
     unsafe_allow_html=True,
