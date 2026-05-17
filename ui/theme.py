@@ -200,16 +200,20 @@ hr { border-color: rgba(255,255,255,0.08) !important; }
     visibility: hidden; opacity: 0;
     background: #0d1b2e; color: #c9d6e8;
     text-align: left; border-radius: 7px;
-    padding: 9px 13px; position: absolute;
+    padding: 9px 16px; position: absolute;
     z-index: 9999; bottom: 140%; left: 50%;
     transform: translateX(-50%);
-    width: 310px; font-size: 0.72rem; line-height: 1.55;
+    width: max-content; font-size: 0.72rem; line-height: 1.55;
     border: 1px solid #2a4a6a;
     box-shadow: 0 3px 12px rgba(0,0,0,0.5);
-    white-space: normal; pointer-events: none;
+    white-space: nowrap; pointer-events: none;
     transition: opacity 0.15s ease;
 }
 .argus-regime-tip:hover .argus-regime-tip-box { visibility: visible; opacity: 1; }
+.argus-regime-tip .tip-label {
+    display: inline-block; min-width: 80px;
+    font-weight: 600; color: #7eb8f7; margin-right: 8px;
+}
 
 /* ── Equal-height card columns ── */
 [data-testid="stHorizontalBlock"] {

@@ -1579,8 +1579,15 @@ def _score_momentum(hist, ticker):
 
     return score, reasons
 
-def score_stock(ticker, memory_df, config, regime_info=None):
-    """The central scoring logic used by both Scanner and Streamlit."""
+def score_stock(ticker, memory_df, config, regime_info=None, display_only=False):
+    """The central scoring logic used by both Scanner and Streamlit.
+
+    When display_only=True the MIN_SCORE gate and red-flag hard rejections are
+    skipped so ANY ticker (e.g. NVDA, AAPL) can be scored for display in the
+    Ticker Detail tab.  The returned dict gains two extra fields:
+      - ``in_universe`` (bool) — False when the ticker would normally be gated out
+      - ``filter_reason`` (str) — human-readable reason it's outside universe
+    """
     try:
         stock = yf.Ticker(ticker)
         info  = get_stock_info(ticker)
@@ -1588,7 +1595,7 @@ def score_stock(ticker, memory_df, config, regime_info=None):
             return None
 
         red_flags = _check_red_flags(info, stock)
-        if red_flags:
+        if red_flags and not display_only:
             return None
 
         weights = _load_weights()
@@ -1732,8 +1739,19 @@ def score_stock(ticker, memory_df, config, regime_info=None):
         # The regime multiplier adjusts the *displayed* score for market context but
         # must not change the entry bar — otherwise the gate becomes unreachable in
         # bear markets (75 / 0.7 = 107) and silently rejects every pick.
+        # When display_only=True we skip the gate so any ticker can be shown in
+        # the Ticker Detail tab.
+        _in_universe = True
+        _filter_reason = ""
         if quality_score < config.MIN_SCORE:
-            return None
+            if not display_only:
+                return None
+            _in_universe = False
+            _filter_reason = f"Quality score {quality_score:.0f} < MIN_SCORE {config.MIN_SCORE}"
+        if red_flags and _in_universe:
+            # Red flags were not hard-rejected above (display_only path), mark out-of-universe
+            _in_universe = False
+            _filter_reason = f"Red flags: {', '.join(red_flags)}"
 
         return {
             "ticker":              ticker,
@@ -1760,6 +1778,9 @@ def score_stock(ticker, memory_df, config, regime_info=None):
             "short_pct":           short_pct,
             "days_to_cover":       short_ratio,
             "score_velocity":      score_velocity,
+            # display_only extras — always present so callers don't need try/get
+            "in_universe":         _in_universe,
+            "filter_reason":       _filter_reason,
         }
     except Exception as e:
         logger.warning(f"score_stock failed for {ticker}: {e}")
