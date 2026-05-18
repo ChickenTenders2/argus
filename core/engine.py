@@ -70,13 +70,17 @@ def _load_weights(name: str = None) -> dict:
     return _WEIGHTS_CACHE[name]
 
 _DB_ENGINE = None
-_DB_INITIALIZED = False
+_DB_INITIALIZED_PG = False   # True once Supabase init SQL has run
+_DB_INITIALIZED_SQ = False   # True once SQLite init SQL has run
+_DB_INITIALIZED = False      # legacy alias — kept so external callers don't break
 _SQLITE_CONN = None
+_DB_LAST_ERROR: str = ""     # populated when PostgreSQL connection fails; shown in UI
 import threading
 _DB_INIT_LOCK = threading.Lock()
 
 def get_db_connection():
-    global _DB_ENGINE, _DB_INITIALIZED, _SQLITE_CONN, _DB_INIT_LOCK
+    global _DB_ENGINE, _DB_INITIALIZED, _DB_INITIALIZED_PG, _DB_INITIALIZED_SQ, \
+           _SQLITE_CONN, _DB_INIT_LOCK, _DB_LAST_ERROR
     db_url = os.environ.get("DATABASE_URL")
 
     # ── PostgreSQL path ───────────────────────────────────────────────────────
@@ -96,19 +100,22 @@ def get_db_connection():
                 )
                 with _DB_ENGINE.connect() as _test:
                     _test.execute(sqlalchemy.text("SELECT 1"))
+                _DB_LAST_ERROR = ""   # clear any previous error on success
             except Exception as _pg_err:
+                _DB_LAST_ERROR = f"{type(_pg_err).__name__}: {str(_pg_err)[:400]}"
                 logger.error(
                     f"PostgreSQL connection failed — falling back to SQLite. "
-                    f"Reason: {type(_pg_err).__name__}: {str(_pg_err)[:300]}"
+                    f"Reason: {_DB_LAST_ERROR}"
                 )
                 _DB_ENGINE = None
                 db_url = None
 
     if db_url and _DB_ENGINE is not None:
         conn = _DB_ENGINE.connect()
-        if not _DB_INITIALIZED:
+        # Use a separate flag for PG so SQLite init doesn't suppress PG init
+        if not _DB_INITIALIZED_PG:
             with _DB_INIT_LOCK:
-                if not _DB_INITIALIZED:
+                if not _DB_INITIALIZED_PG:
                     try:
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS memory (
                             ticker TEXT PRIMARY KEY, first_seen TEXT,
@@ -166,7 +173,8 @@ def get_db_connection():
                     except Exception as e:
                         logger.warning(f"Concurrent DB init safely skipped (Phase 2): {e}")
                         conn.rollback()
-                    _DB_INITIALIZED = True
+                    _DB_INITIALIZED_PG = True
+                    _DB_INITIALIZED = True   # keep legacy alias in sync
         return conn
 
     # ── SQLite fallback ───────────────────────────────────────────────────────
@@ -178,9 +186,9 @@ def get_db_connection():
     if _SQLITE_CONN is None:
         _SQLITE_CONN = sqlite3.connect(DB_FILE, check_same_thread=False)
     conn = _SQLITE_CONN
-    if not _DB_INITIALIZED:
+    if not _DB_INITIALIZED_SQ:
         with _DB_INIT_LOCK:
-            if not _DB_INITIALIZED:
+            if not _DB_INITIALIZED_SQ:
                 try:
                     conn.execute("""CREATE TABLE IF NOT EXISTS memory (
                         ticker TEXT PRIMARY KEY, first_seen TEXT,
@@ -227,7 +235,8 @@ def get_db_connection():
                     conn.commit()
                 except Exception:
                     pass
-                _DB_INITIALIZED = True
+                _DB_INITIALIZED_SQ = True
+                _DB_INITIALIZED = True   # keep legacy alias in sync
     return conn
 
 def migrate_csv_to_sqlite():
