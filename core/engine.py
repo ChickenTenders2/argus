@@ -231,39 +231,82 @@ def get_db_connection():
     return conn
 
 def migrate_csv_to_sqlite():
-    """One-time migration script. Safe to call multiple times."""
+    """
+    Seed the database from CSV backups when tables are empty.
+    Safe to call multiple times — only runs per-table when that table has 0 rows.
+
+    Fixes:
+    - _migrate_results_columns is called before to_sql so new columns added
+      since the Supabase schema was last updated don't cause INSERT failures.
+    - Journal migration now runs for Supabase too (previously blocked), so
+      local journal CSV entries can be restored after a Supabase reset.
+    """
     conn = get_db_connection()
     c = Config()
-    
+
+    def _count(table):
+        try:
+            return int(pd.read_sql(f"SELECT COUNT(*) AS n FROM {table}", conn).iloc[0, 0])
+        except Exception:
+            return -1  # table may not exist yet
+
+    def _try_commit():
+        try:
+            conn.commit()
+        except Exception:
+            pass
+
     try:
-        # Check if we've already migrated memory to avoid duplicate inserts
-        db_mem_count = pd.read_sql("SELECT COUNT(*) FROM memory", conn).iloc[0,0]
-        if db_mem_count == 0 and os.path.exists(c.MEMORY_FILE):
+        # ── Memory ────────────────────────────────────────────────────────────
+        if _count("memory") == 0 and os.path.exists(c.MEMORY_FILE):
             df = pd.read_csv(c.MEMORY_FILE)
-            df.to_sql("memory", conn, if_exists="append", index=False)
+            if not df.empty:
+                df.to_sql("memory", conn, if_exists="append", index=False)
+                _try_commit()
+                logger.info(f"migrate_csv_to_sqlite: seeded memory with {len(df)} rows")
 
-        # Migrate journal only for local SQLite — never overwrite Supabase journal
-        if not os.environ.get("DATABASE_URL"):
-            db_jrnl_count = pd.read_sql("SELECT COUNT(*) FROM journal", conn).iloc[0,0]
-            if db_jrnl_count == 0 and os.path.exists(c.JOURNAL_FILE):
-                df = pd.read_csv(c.JOURNAL_FILE)
+        # ── Journal — migrate from CSV regardless of Supabase/SQLite path ────
+        # The previous guard (`if not DATABASE_URL`) meant Supabase journal was
+        # always left empty. Now we seed it when it has 0 rows.
+        if _count("journal") == 0 and os.path.exists(c.JOURNAL_FILE):
+            df = pd.read_csv(c.JOURNAL_FILE)
+            # Strip the sentinel init row if present
+            df = df[df["ticker"] != "_INIT_"]
+            if not df.empty:
                 df.to_sql("journal", conn, if_exists="append", index=False)
+                _try_commit()
+                logger.info(f"migrate_csv_to_sqlite: seeded journal with {len(df)} rows")
 
-        db_feat_count = pd.read_sql("SELECT COUNT(*) FROM features", conn).iloc[0,0]
-        if db_feat_count == 0 and os.path.exists(c.FEATURES_FILE):
+        # ── Features — run column migration before bulk insert ─────────────
+        if _count("features") == 0 and os.path.exists(c.FEATURES_FILE):
             df = pd.read_csv(c.FEATURES_FILE)
-            df.to_sql("features", conn, if_exists="append", index=False)
+            if not df.empty:
+                # Reuse the results column migrator (same logic; table name differs)
+                _migrate_results_columns_for(conn, "features", df)
+                df.to_sql("features", conn, if_exists="append", index=False)
+                _try_commit()
+                logger.info(f"migrate_csv_to_sqlite: seeded features with {len(df)} rows")
 
-        db_res_count = pd.read_sql("SELECT COUNT(*) FROM results", conn).iloc[0,0]
-        if db_res_count == 0 and os.path.exists(c.RESULTS_HISTORY_FILE):
+        # ── Results — run column migration before bulk insert ──────────────
+        if _count("results") == 0 and os.path.exists(c.RESULTS_HISTORY_FILE):
             df = pd.read_csv(c.RESULTS_HISTORY_FILE)
-            df.to_sql("results", conn, if_exists="append", index=False)
-            
-        conn.commit()
+            if not df.empty:
+                _migrate_results_columns(conn, df)   # adds any missing cols to results
+                df.to_sql("results", conn, if_exists="append", index=False)
+                _try_commit()
+                logger.info(f"migrate_csv_to_sqlite: seeded results with {len(df)} rows")
+
     except Exception as e:
-        logger.error(f"Migration error: {e}")
+        logger.error(f"migrate_csv_to_sqlite error: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 import threading
 _cache_lock = threading.Lock()
@@ -708,6 +751,42 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
         "scanned_count": len(valid_tickers),
         "filtered_count": filtered_count,
     }
+
+def _migrate_results_columns_for(conn, table, df):
+    """Generic version: lazily add any DataFrame columns missing from *table*."""
+    try:
+        db_url = os.environ.get("DATABASE_URL")
+        if db_url:
+            import sqlalchemy as _sa
+            for col in df.columns:
+                if col == "id":
+                    continue
+                dtype = "TEXT" if df[col].dtype == object else "DOUBLE PRECISION"
+                try:
+                    conn.execute(_sa.text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {dtype}"))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+        else:
+            try:
+                existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            except Exception:
+                existing = set()
+            for col in df.columns:
+                if col in ("id",) or col in existing:
+                    continue
+                dtype = "TEXT" if df[col].dtype == object else "REAL"
+                try:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}")
+                    conn.commit()
+                except Exception:
+                    pass
+    except Exception as _me:
+        logger.warning(f"_migrate_results_columns_for({table}) failed: {_me}")
+
 
 def _migrate_results_columns(conn, df):
     """Lazily add any DataFrame columns missing from the results table to prevent schema mismatch errors."""
