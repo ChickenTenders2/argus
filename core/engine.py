@@ -837,7 +837,14 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
             df["reasons"] = df["reasons"].apply(lambda x: json.dumps(x) if isinstance(x, list) else x)
         # Lazily add any new columns before inserting to prevent schema mismatch errors
         _migrate_results_columns(conn, df)
-        df.to_sql("results", conn, if_exists="append", index=False)
+        try:
+            df.to_sql("results", conn, if_exists="append", index=False)
+            try:
+                conn.commit()
+            except Exception:
+                pass
+        except Exception as _dbe:
+            logger.error(f"save_results: DB insert failed ({type(_dbe).__name__}: {_dbe}) — results saved to CSV only")
 
         # Always append to history CSV for persistence across app restarts.
         # Streamlit Cloud wipes SQLite on redeploy; the committed CSV is the only
