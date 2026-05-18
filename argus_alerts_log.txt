@@ -1529,3 +1529,24 @@ No high-conviction picks found today. Market may be choppy.
 👁 *Argus Daily Scan — 18 May 2026*
 No high-conviction picks found today. Market may be choppy.
 
+--- 2026-05-18 22:47:46 ---
+👁 *Argus Daily Scan — 18 May 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*CGEN* — Score: *66/100*
+⚡ _Previously flagged 1x since 18 May 2026 — signals strengthening_
+💰 Price: $2.86 | Cap: $270M
+📊 Rev growth 4847% | Gross margin 87% | FCF positive | P/S 3.7x | 6mo Momentum +74% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +64% | Inst. 15% | Cap $270M | Bull Regime Adj
+
+🟡 WATCHLIST
+*VUZI* — Score: *63/100*
+⚡ _Previously flagged 1x since 18 May 2026 — signals strengthening_
+💰 Price: $3.65 | Cap: $304M
+📊 Rev growth 394% | 6mo Momentum +62% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +37% | Inst. 37% | Cap $304M | Squeeze setup (21% short, 16.9d cover) | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 526 tickers • Top 2 picks shown_
+
