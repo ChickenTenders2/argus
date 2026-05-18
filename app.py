@@ -18,6 +18,7 @@ from core.engine import (
     generate_telegram_message,
     monitor_portfolio
 )
+import core.engine as _engine_module   # for _DB_LAST_ERROR inspection
 import os
 import re
 import requests
@@ -1380,24 +1381,32 @@ if "auto_preset_applied" not in st.session_state:
 with st.sidebar:
     _db_url = os.environ.get("DATABASE_URL", "")
     if _db_url:
-        # Actually verify the connection rather than trusting the env var alone
+        # Trigger a connection attempt so _DB_LAST_ERROR is populated
         try:
-            import sqlalchemy as _sa
             _test_conn = get_db_connection()
-            _test_conn.execute(_sa.text("SELECT 1"))
             _test_conn.close()
+        except Exception:
+            pass
+        _db_err = getattr(_engine_module, "_DB_LAST_ERROR", "")
+        if not _db_err:
             _db_badge_text = "🟢 &nbsp;Supabase connected"
-            _db_badge_help = "PostgreSQL (Supabase) — live connection verified."
-        except Exception as _dbc_err:
-            _db_badge_text = "🔴 &nbsp;Supabase unreachable — using SQLite"
-            _db_badge_help = f"DATABASE_URL set but connection failed: {str(_dbc_err)[:120]}. Falling back to local SQLite."
+        else:
+            _db_badge_text = "🔴 &nbsp;Supabase — connection failed"
     else:
+        _db_err = ""
         _db_badge_text = "🟡 &nbsp;SQLite (local)"
-        _db_badge_help = "Set DATABASE_URL in .env or Streamlit secrets to use Supabase."
     st.markdown(
-        f'<p style="font-size:0.77rem;margin:0 0 6px;opacity:0.72;" title="{_db_badge_help}">{_db_badge_text}</p>',
+        f'<p style="font-size:0.77rem;margin:0 0 6px;opacity:0.72">{_db_badge_text}</p>',
         unsafe_allow_html=True,
     )
+    if _db_err:
+        with st.expander("⚠️ DB connection error — click to see", expanded=True):
+            st.error(_db_err)
+            st.caption(
+                "Most common fix: go to **Supabase → Settings → Database** and "
+                "copy the **Session pooler** URL (not Direct connection). "
+                "Paste it as `DATABASE_URL` in Streamlit Cloud secrets and GitHub Actions secrets."
+            )
     st.markdown('<p style="font-size:0.9rem;font-weight:700;margin:0 0 4px">👁 Navigate</p>', unsafe_allow_html=True)
     active_tab = st.radio(
         "Navigate",
