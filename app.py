@@ -1379,8 +1379,21 @@ if "auto_preset_applied" not in st.session_state:
 
 with st.sidebar:
     _db_url = os.environ.get("DATABASE_URL", "")
-    _db_badge_text = "🟢 &nbsp;Supabase" if _db_url else "🟡 &nbsp;SQLite (local)"
-    _db_badge_help = "" if _db_url else "Set DATABASE_URL in .env to use Supabase."
+    if _db_url:
+        # Actually verify the connection rather than trusting the env var alone
+        try:
+            import sqlalchemy as _sa
+            _test_conn = get_db_connection()
+            _test_conn.execute(_sa.text("SELECT 1"))
+            _test_conn.close()
+            _db_badge_text = "🟢 &nbsp;Supabase connected"
+            _db_badge_help = "PostgreSQL (Supabase) — live connection verified."
+        except Exception as _dbc_err:
+            _db_badge_text = "🔴 &nbsp;Supabase unreachable — using SQLite"
+            _db_badge_help = f"DATABASE_URL set but connection failed: {str(_dbc_err)[:120]}. Falling back to local SQLite."
+    else:
+        _db_badge_text = "🟡 &nbsp;SQLite (local)"
+        _db_badge_help = "Set DATABASE_URL in .env or Streamlit secrets to use Supabase."
     st.markdown(
         f'<p style="font-size:0.77rem;margin:0 0 6px;opacity:0.72;" title="{_db_badge_help}">{_db_badge_text}</p>',
         unsafe_allow_html=True,
@@ -1615,7 +1628,7 @@ if not _has_scan_today and not st.session_state.get("_auto_scan_done_today", Fal
             _auto_st.update(label=f"✅ Auto-scan complete — {_n_auto} picks found.", state="complete")
             _auto_scan_ran = True
         except Exception as _ae:
-            st.session_state["_auto_scan_done_today"] = True
+            # Do NOT mark done-today on failure — allow the next page load to retry
             _auto_st.update(label=f"⚠️ Auto-scan failed: {_ae}", state="error")
 
 if _auto_scan_ran:
@@ -2030,7 +2043,7 @@ if active_tab == "Scans":
                 run_type="manual",
                 latest_file=config.RESULTS_FILE,
                 history_file=config.RESULTS_HISTORY_FILE,
-                write_latest=False,
+                write_latest=True,
                 feature_file=config.FEATURES_FILE,
             )
 
