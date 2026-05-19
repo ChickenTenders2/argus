@@ -1,42 +1,84 @@
 import requests
 import logging
+import json
+import os
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 logger = logging.getLogger("Argus.EDGAR")
 
-_EDGAR_AGENT = "Argus Investment Workstation/1.0 (argus@local)"
+# SEC EDGAR requires User-Agent in the format: "App Name contact@email.com"
+# A malformed email (e.g. argus@local) causes 403 on all EDGAR endpoints.
+_EDGAR_AGENT = "Argus Investment Workstation contact@argus-scanner.app"
 _EDGAR_HEADERS = {"User-Agent": _EDGAR_AGENT}
-_SEC_HEADERS = {"User-Agent": _EDGAR_AGENT}
+_SEC_HEADERS   = {"User-Agent": _EDGAR_AGENT}
 
 _cik_map: dict = {}
+_CIK_CACHE_FILE = os.path.join("data", "edgar_cik_cache.json")
+_CIK_CACHE_MAX_AGE_H = 24   # refresh the file cache once per day
 
 HIGH_CONVICTION_THRESHOLD = 80
 
 
 # ── CIK Resolution ───────────────────────────────────────
 def _load_cik_map():
-    """Download the full EDGAR company_tickers.json once and cache in memory."""
+    """Load the SEC company_tickers CIK map with a file cache + retry.
+
+    Priority:
+      1. In-process memory dict (fastest — survives within a session)
+      2. File cache at data/edgar_cik_cache.json if < 24 h old
+      3. Live fetch from sec.gov/files/company_tickers.json (with 2 retries)
+    """
     global _cik_map
     if _cik_map:
         return _cik_map
+
+    # ── Try file cache first ──────────────────────────────
     try:
-        r = requests.get(
-            "https://www.sec.gov/files/company_tickers.json",
-            headers=_SEC_HEADERS,
-            timeout=15,
-        )
-        if r.status_code != 200:
-            logger.warning(f"CIK map fetch returned {r.status_code}")
-            return {}
-        for entry in r.json().values():
-            ticker = entry.get("ticker", "").upper()
-            cik = str(entry.get("cik_str", "")).zfill(10)
-            if ticker:
-                _cik_map[ticker] = cik
-        logger.info(f"EDGAR CIK map loaded: {len(_cik_map)} tickers")
-    except Exception as e:
-        logger.warning(f"Failed to load EDGAR CIK map: {e}")
+        if os.path.exists(_CIK_CACHE_FILE):
+            age_h = (time.time() - os.path.getmtime(_CIK_CACHE_FILE)) / 3600
+            if age_h < _CIK_CACHE_MAX_AGE_H:
+                with open(_CIK_CACHE_FILE, "r") as f:
+                    _cik_map = json.load(f)
+                if _cik_map:
+                    logger.info(f"EDGAR CIK map loaded from file cache ({len(_cik_map)} tickers, {age_h:.1f}h old)")
+                    return _cik_map
+    except Exception as _ce:
+        logger.debug(f"CIK file cache read failed: {_ce}")
+
+    # ── Live fetch with retry ─────────────────────────────
+    url = "https://www.sec.gov/files/company_tickers.json"
+    for attempt in range(3):
+        try:
+            r = requests.get(url, headers=_SEC_HEADERS, timeout=15)
+            if r.status_code == 200:
+                for entry in r.json().values():
+                    ticker = entry.get("ticker", "").upper()
+                    cik = str(entry.get("cik_str", "")).zfill(10)
+                    if ticker:
+                        _cik_map[ticker] = cik
+                logger.info(f"EDGAR CIK map fetched from SEC ({len(_cik_map)} tickers)")
+                # Save to file cache
+                try:
+                    os.makedirs("data", exist_ok=True)
+                    with open(_CIK_CACHE_FILE, "w") as f:
+                        json.dump(_cik_map, f)
+                except Exception as _we:
+                    logger.debug(f"CIK file cache write failed: {_we}")
+                return _cik_map
+            elif r.status_code in (403, 429):
+                wait = 2 ** attempt
+                logger.warning(f"EDGAR CIK fetch {r.status_code} (attempt {attempt+1}/3) — retrying in {wait}s")
+                time.sleep(wait)
+            else:
+                logger.warning(f"EDGAR CIK fetch returned {r.status_code}")
+                break
+        except Exception as e:
+            logger.warning(f"EDGAR CIK fetch error (attempt {attempt+1}/3): {e}")
+            time.sleep(2 ** attempt)
+
+    logger.warning("EDGAR CIK map unavailable — catalyst scores will be 0 this run")
     return _cik_map
 
 
@@ -285,7 +327,7 @@ def get_8k_catalyst_score(ticker, days=10):
 
 # ── Telegram Block Formatter ─────────────────────────────
 def format_edgar_block(ticker, buys):
-    lines = [f"\n\U0001f3db *EDGAR Insider Activity \u2014 {ticker}*\n{'─' * 28}"]
+    lines = [f"\n\U0001f3db *EDGAR Insider Activity — {ticker}*\n{'─' * 28}"]
     if not buys:
         lines.append("❌ No open-market purchases in last 30 days")
     else:

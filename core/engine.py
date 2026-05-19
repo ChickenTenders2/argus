@@ -1966,7 +1966,52 @@ def get_universe():
     except Exception as e:
         logger.warning(f"yfinance IWM failed: {e}")
 
-    # Method 4: Hardcoded fallback
+    # Method 4: Nasdaq screener for Small + Micro cap (NYSE + NASDAQ)
+    try:
+        tickers_set: set = set()
+        for _exchange in ("NASDAQ", "NYSE"):
+            _url = (
+                f"https://api.nasdaq.com/api/screener/stocks"
+                f"?tableonly=true&limit=3000&exchange={_exchange}&marketcap=Small|Micro"
+            )
+            _req = urllib.request.Request(
+                _url, headers={"User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)"}
+            )
+            _resp = _opener.open(_req, timeout=15).read()
+            _rows = json.loads(_resp).get("data", {}).get("table", {}).get("rows", []) or []
+            for _row in _rows:
+                sym = str(_row.get("symbol", "")).strip()
+                if sym and sym.isalpha() and 1 < len(sym) <= 5:
+                    tickers_set.add(sym)
+        if len(tickers_set) > 50:
+            logger.info(f"Nasdaq screener (Small/Micro cap): {len(tickers_set)} tickers")
+            return list(tickers_set)
+        raise ValueError(f"Only {len(tickers_set)} tickers from Nasdaq screener")
+    except Exception as e:
+        logger.warning(f"Nasdaq screener fallback failed: {e}")
+
+    # Method 5: nasdaqlisted.txt (all Nasdaq-listed symbols)
+    try:
+        _url5 = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
+        _raw5 = _opener.open(
+            urllib.request.Request(_url5, headers={"User-Agent": "Mozilla/5.0"}),
+            timeout=15,
+        ).read().decode("utf-8")
+        tickers5 = []
+        for _line in _raw5.split("\n")[1:]:
+            _parts = _line.split("|")
+            if len(_parts) >= 2:
+                sym = _parts[0].strip()
+                if sym and sym.isalpha() and 1 < len(sym) <= 5:
+                    tickers5.append(sym)
+        if len(tickers5) > 50:
+            logger.info(f"nasdaqtrader.com: {len(tickers5)} tickers")
+            return tickers5
+        raise ValueError(f"Only {len(tickers5)} from nasdaqlisted.txt")
+    except Exception as e:
+        logger.warning(f"nasdaqtrader fallback failed: {e}")
+
+    # Method 6: Hardcoded fallback
     logger.error("All sources failed — using hardcoded fallback list")
     return [
         "ASTS", "RKLB", "LUNR", "ACHR", "JOBY", "IRDM", "SPIR", "PL",
