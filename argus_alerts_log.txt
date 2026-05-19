@@ -1569,3 +1569,30 @@ _None today_
 ──────────────────────────────
 _Scanned 520 tickers • Top 1 picks shown_
 
+--- 2026-05-19 23:13:10 ---
+👁 *Argus Daily Scan — 19 May 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*VUZI* — Score: *69/100*
+⚡ _Previously flagged 3x since 18 May 2026 — signals strengthening_
+💰 Price: $4.11 | Cap: $342M
+📊 Rev growth 285% | 6mo Momentum +93% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +42% | Inst. 37% | Cap $342M | Squeeze setup (21% short, 16.9d cover) | 🔁 Persistence x2 (decay 1.00) | 8-K: Earnings Results | 8-K: 8-K Event | Bull Regime Adj
+
+🟡 WATCHLIST
+*AMPG* — Score: *65/100*
+⚡ _Previously flagged 1x since 19 May 2026 — signals strengthening_
+💰 Price: $3.99 | Cap: $101M
+📊 Rev growth 649% | P/S 3.8x | 6mo Momentum +31% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +42% | Inst. 24% | Cap $101M | 8-K: Earnings Results | 8-K: 8-K Event | Bull Regime Adj
+
+🟡 WATCHLIST
+*CGEN* — Score: *63/100*
+⚡ _Previously flagged 2x since 18 May 2026 — signals strengthening_
+💰 Price: $2.73 | Cap: $258M
+📊 Rev growth 4847% | Gross margin 87% | FCF positive | P/S 3.5x | 6mo Momentum +72% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +49% | Inst. 15% | Cap $258M | 🔁 Persistence x1 (decay 0.95) | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 723 tickers • Top 3 picks shown_
+
