@@ -1554,3 +1554,18 @@ _Scanned 526 tickers • Top 2 picks shown_
 👁 *Argus Daily Scan — 19 May 2026*
 No high-conviction picks found today. Market may be choppy.
 
+--- 2026-05-19 17:07:33 ---
+👁 *Argus Daily Scan — 19 May 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*VUZI* — Score: *64/100*
+⚡ _Previously flagged 2x since 18 May 2026 — signals strengthening_
+💰 Price: $4.07 | Cap: $339M
+📊 Rev growth 285% | 6mo Momentum +91% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +40% | Inst. 37% | Cap $339M | Squeeze setup (21% short, 16.9d cover) | 🔁 Persistence x1 (decay 0.95) | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 520 tickers • Top 1 picks shown_
+
