@@ -1532,7 +1532,9 @@ def _get_metric_with_fallback(info, ticker, yf_key, fmp_key=None):
 
 
 def _score_fundamentals(info, stock, config=None):
-    """Score fundamentals — max 18 pts for established, 8 pts pre-revenue alt-path."""
+    """Score fundamentals — max 27 pts for established, 8 pts pre-revenue alt-path.
+    Components: Rev growth (10) + EPS growth (6) + ROE (3) + ROCE (4) + Gross margin (3) + FCF (1).
+    ROCE/FCF are skipped (not zeroed) when data is unavailable."""
     score, reasons = 0, []
 
     rev_high  = getattr(config, "REV_GROWTH_HIGH",   0.30)
@@ -1595,6 +1597,21 @@ def _score_fundamentals(info, stock, config=None):
     if growth >= rev_high:   score += 10; reasons.append(f"Rev growth {growth*100:.0f}%")
     elif growth >= rev_low:  score += 6;  reasons.append(f"Rev growth {growth*100:.0f}%")
     elif growth >= 0.10:     score += 2;  reasons.append(f"Rev growth {growth*100:.0f}%")
+
+    # EPS Growth — max 6 pts. yfinance earningsGrowth is TTM vs prior TTM.
+    # Skip (not zero) when missing — common for micro-caps and pre-earnings reporters.
+    eps_growth = info.get("earningsGrowth")
+    if eps_growth is not None:
+        if eps_growth >= 0.50:   score += 6; reasons.append(f"EPS growth {eps_growth*100:.0f}%")
+        elif eps_growth >= 0.20:  score += 3; reasons.append(f"EPS growth {eps_growth*100:.0f}%")
+        elif eps_growth >= 0.10:  score += 1; reasons.append(f"EPS growth {eps_growth*100:.0f}%")
+
+    # ROE — max 3 pts. Strong return on equity signals capital efficiency.
+    # Skip when missing (pre-profit companies often lack this field).
+    roe = info.get("returnOnEquity")
+    if roe is not None:
+        if roe >= 0.20:   score += 3; reasons.append(f"ROE {roe*100:.0f}%")
+        elif roe >= 0.10:  score += 1; reasons.append(f"ROE {roe*100:.0f}%")
 
     # ROCE — max 4 pts. Try yfinance ROCE → yfinance ROC → FMP returnOnCapitalEmployedTTM.
     # If all three miss, skip the sub-score rather than zeroing it.

@@ -1,11 +1,11 @@
 {
   "description": "Balanced scoring weights (default)",
-  "fundamentals_max": 18,
+  "fundamentals_max": 27,
   "valuation_max": 6,
   "momentum_max": 34,
   "smart_money_max": 22,
   "catalyst_max": 15,
   "persistence_max": 5,
   "sentiment_cap": 10,
-  "notes": "Rebalanced for small-cap explosive-growth detection. Momentum and catalyst weighted highest."
+  "notes": "Fundamentals ceiling lifted to 27 (added EPS growth +6, ROE +3). Total system max: 109. MIN_SCORE=50 means a stock must score ~46% of possible points."
 }
