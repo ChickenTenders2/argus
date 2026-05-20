@@ -129,8 +129,15 @@ def _fetch_unusual_whales(ticker: str) -> dict:
 
 
 def get_options_flow(ticker: str) -> dict:
-    """Fetch options flow using the configured provider. Returns {} on failure."""
-    provider = os.environ.get("OPTIONS_FLOW_PROVIDER", "barchart_free").lower()
+    """Fetch options flow using the configured provider. Returns {} on failure.
+
+    Defaults to skipping (returns {}) unless OPTIONS_FLOW_PROVIDER is explicitly
+    set to 'unusual_whales' or 'market_chameleon'. The barchart_free scraper
+    sleeps 1s per ticker and returns no actionable data — it must be opted-in.
+    """
+    provider = os.environ.get("OPTIONS_FLOW_PROVIDER", "").lower().strip()
+    if not provider or provider == "barchart_free":
+        return {}
 
     def _fetch():
         if provider == "unusual_whales":
@@ -138,7 +145,7 @@ def get_options_flow(ticker: str) -> dict:
         elif provider == "market_chameleon":
             return _fetch_market_chameleon(ticker)
         else:
-            return _fetch_barchart_free(ticker)
+            return {}
 
     try:
         return _cached(f"{provider}:{ticker}", _fetch)

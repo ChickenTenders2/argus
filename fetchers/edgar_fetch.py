@@ -18,6 +18,33 @@ _cik_map: dict = {}
 _CIK_CACHE_FILE = os.path.join("data", "edgar_cik_cache.json")
 _CIK_CACHE_MAX_AGE_H = 24   # refresh the file cache once per day
 
+# In-process cache for CIK submissions JSON — shared by insider + 8-K fetchers
+# so the same endpoint is only hit once per ticker per scan run (TTL 5 min).
+_submissions_cache: dict = {}
+_SUBMISSIONS_TTL = 300
+
+
+def _get_submissions(cik: str) -> dict:
+    """Fetch (or return cached) the SEC submissions JSON for a CIK."""
+    now = time.time()
+    if cik in _submissions_cache and now - _submissions_cache[cik]["ts"] < _SUBMISSIONS_TTL:
+        return _submissions_cache[cik]["data"]
+    try:
+        r = requests.get(
+            f"https://data.sec.gov/submissions/CIK{cik}.json",
+            headers=_EDGAR_HEADERS,
+            timeout=12,
+        )
+        if r.status_code != 200:
+            logger.warning(f"EDGAR submissions CIK{cik}: HTTP {r.status_code}")
+            return {}
+        data = r.json()
+        _submissions_cache[cik] = {"data": data, "ts": now}
+        return data
+    except Exception as e:
+        logger.warning(f"EDGAR submissions fetch for CIK{cik} failed: {e}")
+        return {}
+
 HIGH_CONVICTION_THRESHOLD = 80
 
 
@@ -147,16 +174,11 @@ def get_insider_buys(ticker, days=30):
     cutoff = datetime.now() - timedelta(days=days)
 
     try:
-        r = requests.get(
-            f"https://data.sec.gov/submissions/CIK{cik}.json",
-            headers=_EDGAR_HEADERS,
-            timeout=12,
-        )
-        if r.status_code != 200:
-            logger.warning(f"EDGAR submissions {ticker}: HTTP {r.status_code}")
+        sub = _get_submissions(cik)
+        if not sub:
             return []
 
-        recent = r.json().get("filings", {}).get("recent", {})
+        recent = sub.get("filings", {}).get("recent", {})
         forms = recent.get("form", [])
         dates = recent.get("filingDate", [])
         accessions = recent.get("accessionNumber", [])
@@ -259,15 +281,11 @@ def fetch_recent_8k(ticker, days=10):
         cik_int = int(cik)
         cutoff = datetime.now() - timedelta(days=days)
 
-        r = requests.get(
-            f"https://data.sec.gov/submissions/CIK{cik}.json",
-            headers=_EDGAR_HEADERS,
-            timeout=12,
-        )
-        if r.status_code != 200:
+        sub = _get_submissions(cik)
+        if not sub:
             return []
 
-        recent = r.json().get("filings", {}).get("recent", {})
+        recent = sub.get("filings", {}).get("recent", {})
         forms = recent.get("form", [])
         dates = recent.get("filingDate", [])
         items_list = recent.get("items", [])

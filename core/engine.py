@@ -537,9 +537,9 @@ def _apply_sector_diversity(results, top_n, max_per_sector=3):
 def get_market_regime():
     """Phase 3: Macroeconomic & Market Regime Filter — enhanced with FRED macro data."""
     try:
-        # Fetch SPY — try 1y first, fall back to 6mo on error
+        # Fetch SPY — try 2y first (ensures 400+ days for 200MA), fall back to 1y
         spy = pd.DataFrame()
-        for _period in ("1y", "6mo"):
+        for _period in ("2y", "1y"):
             try:
                 spy = yf.Ticker("SPY").history(period=_period)
                 if not spy.empty:
@@ -721,7 +721,7 @@ def run_scan(config, scan_limit=400, shuffle=True, update_memory=True, progress_
     def scan_worker(ticker):
         try:
             import time
-            time.sleep(0.4)
+            time.sleep(0.05)
             return score_stock(ticker, memory_df, config, regime_info)
         except Exception:
             return None
