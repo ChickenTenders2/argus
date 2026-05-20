@@ -9,8 +9,13 @@ __pycache__/
 *.class
 
 # Claude Code local config (contains secrets and context — never commit)
-.claude/settings.json
-.claude/CLAUDE.md
+.claude/
+
+# Local context/reference docs — generated, not source code
+ARGUS_CONTEXT.md
+
+# EDGAR CIK lookup cache — rebuilt automatically on demand
+data/edgar_cik_cache.json
 
 # Local App Settings
 argus_prefs.json

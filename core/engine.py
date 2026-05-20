@@ -508,7 +508,7 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
                         not data["Close"].dropna().empty
                         and data["Close"].iloc[-1] > config.PRICE_FLOOR
                         and (config.PRICE_CEILING is None or data["Close"].iloc[-1] <= config.PRICE_CEILING)
-                        and data["Volume"].mean() > max(200_000, data["Close"].iloc[-1] * 50_000 if not data["Close"].dropna().empty else config.VOL_FLOOR)
+                        and data["Volume"].mean() > config.VOL_FLOOR
                     ):
                         valid_tickers.append(t)
                         if scan_limit and len(valid_tickers) >= scan_limit:
