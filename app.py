@@ -1162,9 +1162,14 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
                 _vel_html = render_velocity_badge(_vel)
                 _reasons_raw_card = row.get("reasons", [])
                 if isinstance(_reasons_raw_card, str):
-                    try:
-                        _reasons_raw_card = json.loads(_reasons_raw_card) if _reasons_raw_card.startswith("[") else [_reasons_raw_card]
-                    except Exception:
+                    if _reasons_raw_card.startswith("["):
+                        try:
+                            _reasons_raw_card = json.loads(_reasons_raw_card)
+                        except Exception:
+                            _reasons_raw_card = [_reasons_raw_card]
+                    elif " \u2022 " in _reasons_raw_card:
+                        _reasons_raw_card = _reasons_raw_card.split(" \u2022 ")
+                    elif _reasons_raw_card:
                         _reasons_raw_card = [_reasons_raw_card]
                 _cat_pills_html = render_catalyst_pills(_reasons_raw_card if isinstance(_reasons_raw_card, list) else [])
                 _sig_color_map = {"green":"26d97f","blue":"00d4ff","orange":"ffb547","gray":"8ea0ba","red":"ff5a7a"}
@@ -2091,11 +2096,11 @@ if active_tab == "Scans":
                 _ms1.metric("📦 Total Units", f"{_scan_total_units} / {st.session_state.prefs.get('daily_unit_cap', 12)}")
                 _ms2.metric("💷 Capital to Deploy", f"£{_scan_total_capital:,}")
                 _ms3.metric("1 Unit =", f"£{_uv_scan:,}")
-            if "reasons" in df_res.columns:
-                df_res["reasons"] = df_res["reasons"].apply(format_reasons)
             display_cards(df_res)
             with st.expander("Show Raw Discovery Table"):
                 _df_res_export = df_res.copy()
+                if "reasons" in _df_res_export.columns:
+                    _df_res_export["reasons"] = _df_res_export["reasons"].apply(format_reasons)
                 if "units_modifiers" in _df_res_export.columns:
                     _df_res_export["units_modifiers"] = _df_res_export["units_modifiers"].apply(
                         lambda x: " · ".join(x) if isinstance(x, list) else str(x)
@@ -2245,14 +2250,13 @@ if active_tab == "Scans":
                 _hs2.metric("💷 Capital to Deploy", f"£{_hist_total_capital:,}")
                 _hs3.metric("1 Unit =", f"£{_uv_hist:,}")
 
-            if "reasons" in day_df.columns:
-                day_df["reasons"] = day_df["reasons"].apply(format_reasons)
-
             # Show cards for better readability
             display_cards(day_df)
 
             with st.expander("Show History Table"):
                 _day_export = day_df.copy()
+                if "reasons" in _day_export.columns:
+                    _day_export["reasons"] = _day_export["reasons"].apply(format_reasons)
                 if "units_modifiers" in _day_export.columns:
                     _day_export["units_modifiers"] = _day_export["units_modifiers"].apply(
                         lambda x: " · ".join(x) if isinstance(x, list) else str(x)
