@@ -537,8 +537,25 @@ def _apply_sector_diversity(results, top_n, max_per_sector=3):
 def get_market_regime():
     """Phase 3: Macroeconomic & Market Regime Filter — enhanced with FRED macro data."""
     try:
-        spy = yf.Ticker("SPY").history(period="1y")
-        vix = yf.Ticker("^VIX").history(period="1mo")
+        # Fetch SPY — try 1y first, fall back to 6mo on error
+        spy = pd.DataFrame()
+        for _period in ("1y", "6mo"):
+            try:
+                spy = yf.Ticker("SPY").history(period=_period)
+                if not spy.empty:
+                    break
+            except Exception as _spy_err:
+                logger.warning(f"SPY history({_period}) failed: {_spy_err}")
+
+        # Fetch VIX — try 1mo first, fall back to 5d on error
+        vix = pd.DataFrame()
+        for _period in ("1mo", "5d"):
+            try:
+                vix = yf.Ticker("^VIX").history(period=_period)
+                if not vix.empty:
+                    break
+            except Exception as _vix_err:
+                logger.warning(f"VIX history({_period}) failed: {_vix_err}")
 
         if spy.empty or vix.empty or len(spy) < 200:
             return {"regime": "Neutral", "multiplier": 1.0, "reason": "Insufficient data",
@@ -614,8 +631,8 @@ def get_market_regime():
         }
 
     except Exception as e:
-        logger.warning(f"Market regime check failed: {e}")
-        return {"regime": "Neutral", "multiplier": 1.0, "reason": "Data fetch error",
+        logger.warning(f"Market regime check failed ({type(e).__name__}): {e}")
+        return {"regime": "Neutral", "multiplier": 1.0, "reason": f"Data fetch error ({type(e).__name__})",
                 "spy_ma200_gap_pct": None, "vix_level": None, "vix_trend": None, "macro": {}}
 
 def format_pick(pick, memory_df):

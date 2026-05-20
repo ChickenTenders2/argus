@@ -1790,6 +1790,7 @@ if active_tab == "Overview":
             st.caption("Auto-monitored vs. open journal positions.")
 
     # ── FRED Macro Signal Cards ───────────────────────────────────────────────
+    _macro_from_regime = bool(regime.get("macro"))
     _macro = regime.get("macro") or cached_macro_data()
     _fm1, _fm2, _fm3, _fm4 = st.columns(4)
     _yc = _macro.get("yield_curve", {})
@@ -1845,6 +1846,9 @@ if active_tab == "Overview":
                     delta_color="off",
                     help=f"Fear & Greed Index. <25 = Extreme Fear (contrarian buy zone). Source: {_fg_src}.",
                 )
+
+    _macro_src_note = "from regime fetch" if _macro_from_regime else "standalone FRED fetch (regime VIX/SPY unavailable)"
+    st.caption(f"⏱ Macro data refreshed {datetime.now().strftime('%H:%M')} · cached ≤30 min · {_macro_src_note} · FRED + alternative.me")
 
     # Bear-transition inline warnings
     if gap is not None:
