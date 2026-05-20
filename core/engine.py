@@ -44,7 +44,7 @@ DB_FILE = "data/argus.db"
 # max for each score component — runner_weights tilts toward momentum/catalyst.
 _WEIGHTS_CACHE: dict = {}
 _DEFAULT_WEIGHTS = {
-    "fundamentals_max": 18, "valuation_max": 6, "momentum_max": 34,
+    "fundamentals_max": 27, "valuation_max": 6, "momentum_max": 34,
     "smart_money_max": 22, "catalyst_max": 15, "persistence_max": 5,
     "sentiment_cap": 10,
 }
@@ -1895,11 +1895,12 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         # the Ticker Detail tab.
         _in_universe = True
         _filter_reason = ""
-        if quality_score < config.MIN_SCORE:
+        _gate_threshold = config.MIN_SCORE / max(_regime_mult, 0.01)
+        if quality_score < _gate_threshold:
             if not display_only:
                 return None
             _in_universe = False
-            _filter_reason = f"Quality score {quality_score:.0f} < MIN_SCORE {config.MIN_SCORE}"
+            _filter_reason = f"Quality score {quality_score:.0f} < gate {_gate_threshold:.1f} (MIN_SCORE {config.MIN_SCORE} / regime {_regime_mult:.2f})"
         if red_flags and _in_universe:
             # Red flags were not hard-rejected above (display_only path), mark out-of-universe
             _in_universe = False
