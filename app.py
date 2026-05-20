@@ -953,8 +953,8 @@ def apply_preset():
     st.session_state.gross_margin_low = 40
     st.session_state.inst_own_ceiling = 70
     if preset == "High Conviction":
-        st.session_state.preset_desc = "**Use when:** You want the fewest, highest-quality picks only. Strict score filter (≥75) in a strong bull market where you are comfortable concentrating capital into 1–3 exceptional setups instead of diversifying broadly."
-        st.session_state.min_score = 75
+        st.session_state.preset_desc = "**Use when:** You want the fewest, highest-quality picks only. Strict score filter (≥65) in a strong bull market where you are comfortable concentrating capital into 1–3 exceptional setups instead of diversifying broadly."
+        st.session_state.min_score = 65
         st.session_state.horizon_days = 63
         st.session_state.target_return = 15
         st.session_state.risk_per_trade_pct = 1.50
@@ -963,7 +963,7 @@ def apply_preset():
         st.session_state.price_floor = 2.0
     elif preset == "Liquidity Focus":
         st.session_state.preset_desc = "**Use when:** You need to enter and exit positions quickly without slippage (e.g. trading large account sizes). Restricts picks to only highly liquid, large-cap names with ≥2M average daily volume."
-        st.session_state.min_score = 65
+        st.session_state.min_score = 55
         st.session_state.horizon_days = 63
         st.session_state.target_return = 10
         st.session_state.risk_per_trade_pct = 0.75
@@ -972,7 +972,7 @@ def apply_preset():
         st.session_state.price_floor = 10.00
     elif preset == "Momentum Sprint":
         st.session_state.preset_desc = "**Use when:** The market is trending hard and you want to catch explosive short-term breakouts. 21-day horizon targets +30% moves. Best used after confirmed momentum weeks, not during chop or reversal."
-        st.session_state.min_score = 65
+        st.session_state.min_score = 55
         st.session_state.horizon_days = 21
         st.session_state.target_return = 30
         st.session_state.risk_per_trade_pct = 1.25
@@ -980,8 +980,8 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Capital Preservation":
-        st.session_state.preset_desc = "**Use when:** VIX is elevated, SPY is below its 200-day MA, or you are in a confirmed bear market. Minimum risk per trade (0.15%), strict score threshold (≥72), and a 6-month horizon to weather volatility."
-        st.session_state.min_score = 72
+        st.session_state.preset_desc = "**Use when:** VIX is elevated, SPY is below its 200-day MA, or you are in a confirmed bear market. Minimum risk per trade (0.15%), strict score threshold (≥62), and a 6-month horizon to weather volatility."
+        st.session_state.min_score = 62
         st.session_state.horizon_days = 126
         st.session_state.target_return = 3
         st.session_state.risk_per_trade_pct = 0.15
@@ -990,7 +990,7 @@ def apply_preset():
         st.session_state.price_floor = 2.0
     elif preset == "Small Cap Hunter":
         st.session_state.preset_desc = "**Use when:** You want exposure to high-growth micro/small-cap names. Lowers price floor to $0.50 and volume floor to 100K. Best used in a bull market where risk appetite is high. Expect higher volatility."
-        st.session_state.min_score = 62
+        st.session_state.min_score = 52
         st.session_state.horizon_days = 84
         st.session_state.target_return = 40
         st.session_state.risk_per_trade_pct = 0.50
@@ -999,7 +999,7 @@ def apply_preset():
         st.session_state.price_floor = 0.50
     elif preset == "Earnings Season":
         st.session_state.preset_desc = "**Use when:** Earnings reports are imminent (typically Jan, Apr, Jul, Oct). 21-day horizon captures pre-earnings momentum and post-earnings gap moves. Tighter risk rules reduce exposure to surprise miss gaps."
-        st.session_state.min_score = 65
+        st.session_state.min_score = 55
         st.session_state.horizon_days = 21
         st.session_state.target_return = 12
         st.session_state.risk_per_trade_pct = 0.75
@@ -1007,8 +1007,8 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Swing Recovery":
-        st.session_state.preset_desc = "**Use when:** The market has pulled back significantly (10–20%) but fundamentals remain intact. Targets beaten-down quality tickers expecting mean-reversion over 6 weeks. Score ≥65 filters out genuine deteriorations."
-        st.session_state.min_score = 65
+        st.session_state.preset_desc = "**Use when:** The market has pulled back significantly (10–20%) but fundamentals remain intact. Targets beaten-down quality tickers expecting mean-reversion over 6 weeks. Score ≥55 filters out genuine deteriorations."
+        st.session_state.min_score = 55
         st.session_state.horizon_days = 42
         st.session_state.target_return = 15
         st.session_state.risk_per_trade_pct = 0.60
@@ -1017,7 +1017,7 @@ def apply_preset():
         st.session_state.price_floor = 2.0
     elif preset == "Aggressive Growth":
         st.session_state.preset_desc = "**Use when:** Market is in a confirmed bull run and you are comfortable with higher risk per trade (1%). Targets +20% moves over 6 weeks. Best suited for growth-oriented accounts not needing capital preservation."
-        st.session_state.min_score = 65
+        st.session_state.min_score = 55
         st.session_state.horizon_days = 42
         st.session_state.target_return = 20
         st.session_state.risk_per_trade_pct = 1.0
@@ -1025,8 +1025,8 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
     elif preset == "Bear Market Defense":
-        st.session_state.preset_desc = "**Use when:** SPY is below the 200-day MA or a recession is likely. Extremely low risk (0.25%), strict score threshold (≥68), and a 3-month horizon. Focuses on defensive names that hold value in downturns."
-        st.session_state.min_score = 68
+        st.session_state.preset_desc = "**Use when:** SPY is below the 200-day MA or a recession is likely. Extremely low risk (0.25%), strict score threshold (≥58), and a 3-month horizon. Focuses on defensive names that hold value in downturns."
+        st.session_state.min_score = 58
         st.session_state.horizon_days = 84
         st.session_state.target_return = 5
         st.session_state.risk_per_trade_pct = 0.25
@@ -1036,7 +1036,7 @@ def apply_preset():
         st.session_state.price_ceiling = 0.0
     elif preset == "Penny Stock High Risk ($1-$10)":
         st.session_state.preset_desc = "**Use when:** You want speculative, high-reward plays with a small, dedicated risk allocation. Constrained to $1–$10 stocks with the highest score-to-volatility ratio. Only deploy a small fraction of your total portfolio here."
-        st.session_state.min_score = 60
+        st.session_state.min_score = 50
         st.session_state.horizon_days = 21
         st.session_state.target_return = 50
         st.session_state.risk_per_trade_pct = 2.0
@@ -1045,8 +1045,8 @@ def apply_preset():
         st.session_state.price_floor = 1.0
         st.session_state.price_ceiling = 10.0
     elif preset == "Default":
-        st.session_state.preset_desc = "**Use when:** Market conditions are neutral or you are unsure which preset to choose. Score ≥60, 63-day horizon, 0.75% risk per trade. A well-rounded starting point for most market environments."
-        st.session_state.min_score = 60
+        st.session_state.preset_desc = "**Use when:** Market conditions are neutral or you are unsure which preset to choose. Score ≥50, 63-day horizon, 0.75% risk per trade. A well-rounded starting point for most market environments."
+        st.session_state.min_score = 50
         st.session_state.horizon_days = 63
         st.session_state.target_return = 10
         st.session_state.risk_per_trade_pct = 0.75
@@ -1058,8 +1058,12 @@ def apply_preset():
 if "price_ceiling" not in st.session_state:
     st.session_state.price_ceiling = 0.0
 
-if "min_score" not in st.session_state:
-    st.session_state.min_score = 60
+# Seed default or migrate legacy sessions with the old 60+ threshold.
+# Scoring recalibrated in May 2026: revenue-growth inflation fixed, so
+# old thresholds (60-75) produce 0 results with accurate fundamentals.
+if "min_score" not in st.session_state or st.session_state.get("_score_version") != 2:
+    st.session_state.min_score = 50
+    st.session_state["_score_version"] = 2
 def nav_to_ticker(t):
     st.session_state["selected_ticker"] = t
     st.session_state["main_tabs"] = "Ticker Detail"
@@ -1323,8 +1327,9 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
             st.code(_ticker_str, language=None)
 
 
-if "min_score" not in st.session_state:
-    st.session_state.min_score = 60
+if "min_score" not in st.session_state or st.session_state.get("_score_version") != 2:
+    st.session_state.min_score = 50
+    st.session_state["_score_version"] = 2
 if "price_ceiling" not in st.session_state:
     st.session_state.price_ceiling = 0.0
 if "horizon_days" not in st.session_state:

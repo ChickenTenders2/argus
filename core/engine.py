@@ -377,7 +377,7 @@ class Config:
     GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
     MEMORY_FILE: str = "data/argus_memory.csv"
     WATCHLIST_FILE: str = "data/argus_watchlist.csv"
-    MIN_SCORE: int = 60
+    MIN_SCORE: int = 50
     TOP_N: int = 12
     PRICE_FLOOR: float = 2.0
     PRICE_CEILING: float = None
@@ -1575,14 +1575,20 @@ def _score_fundamentals(info, stock, config=None):
         return score, reasons
 
     # Revenue Growth — max 10 pts
+    # Use yfinance revenueGrowth as the primary source. Override with a proper
+    # TTM-vs-prior-TTM quarterly calculation ONLY when we have 8+ columns AND
+    # all four prior-year quarters are non-NaN — otherwise iloc[4:8].sum()
+    # would add just 1 real quarter vs 4 current quarters, inflating growth 3-4×.
     try:
+        growth = info.get("revenueGrowth", 0) or 0
         financials = stock.quarterly_financials
-        if "Total Revenue" in financials.index and financials.shape[1] >= 5:
-            rev_now  = financials.loc["Total Revenue"].iloc[:4].sum()
-            rev_prev = financials.loc["Total Revenue"].iloc[4:8].sum()
-            growth   = (rev_now - rev_prev) / abs(rev_prev) if rev_prev != 0 else 0
-        else:
-            growth = info.get("revenueGrowth", 0) or 0
+        if "Total Revenue" in financials.index and financials.shape[1] >= 8:
+            rev_series  = financials.loc["Total Revenue"]
+            rev_prev_4  = rev_series.iloc[4:8]
+            if rev_prev_4.notna().all() and rev_prev_4.sum() > 0:
+                rev_now  = rev_series.iloc[:4].sum()
+                rev_prev = rev_prev_4.sum()
+                growth   = (rev_now - rev_prev) / rev_prev
     except Exception:
         growth = info.get("revenueGrowth", 0) or 0
 
