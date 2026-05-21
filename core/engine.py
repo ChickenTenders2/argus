@@ -1691,7 +1691,7 @@ def _score_fundamentals(info, stock, config=None):
     return score, reasons
 
 def _score_momentum(hist, ticker):
-    """Score momentum — max 34 pts (tiered gates for explosive-runner detection)."""
+    """Score momentum — max 30 pts (tiered gates for explosive-runner detection)."""
     score, reasons = 0, []
     if hist.empty or len(hist) < 50:
         return score, reasons
@@ -1980,12 +1980,12 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         # the Ticker Detail tab.
         _in_universe = True
         _filter_reason = ""
-        _gate_threshold = config.MIN_SCORE / max(_regime_mult, 0.01)
+        _gate_threshold = float(config.MIN_SCORE)
         if quality_score < _gate_threshold:
             if not display_only:
                 return None
             _in_universe = False
-            _filter_reason = f"Quality score {quality_score:.0f} < gate {_gate_threshold:.1f} (MIN_SCORE {config.MIN_SCORE} / regime {_regime_mult:.2f})"
+            _filter_reason = f"Quality score {quality_score:.0f} < MIN_SCORE {config.MIN_SCORE}"
         if red_flags and _in_universe:
             # Red flags were not hard-rejected above (display_only path), mark out-of-universe
             _in_universe = False
