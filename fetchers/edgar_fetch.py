@@ -6,6 +6,14 @@ import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
+# ── Finnhub rate-limit guard ──────────────────────────────
+# Finnhub free tier: 60 calls/minute. A lightweight token bucket shared across
+# all threads prevents bursts that would cause 429 errors on full scans.
+import threading as _threading
+_FINNHUB_LOCK = _threading.Lock()
+_FINNHUB_LAST_CALL: float = 0.0
+_FINNHUB_MIN_GAP = 1.1  # seconds between calls → ~54 calls/min, safely under 60
+
 logger = logging.getLogger("Argus.EDGAR")
 
 # SEC EDGAR requires User-Agent in the format: "App Name contact@email.com"
@@ -213,11 +221,84 @@ def get_insider_buys(ticker, days=30):
         return []
 
 
+# ── Finnhub Insider Fetch (Streamlit Cloud fallback) ─────
+def get_insider_buys_finnhub(ticker: str, days: int = 14) -> list:
+    """Fetch open-market insider purchases from Finnhub's API.
+
+    Used as a fallback when EDGAR is blocked (e.g. Streamlit Cloud shared IPs).
+    Returns the same schema as get_insider_buys: [{name, role, shares, price, date}].
+    Requires FINNHUB_API_KEY env var. Returns [] if key missing or on any error.
+    """
+    global _FINNHUB_LAST_CALL
+    api_key = os.environ.get("FINNHUB_API_KEY", "")
+    if not api_key:
+        return []
+    try:
+        from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        to_date   = datetime.now().strftime("%Y-%m-%d")
+        url = (
+            f"https://finnhub.io/api/v1/stock/insider-transactions"
+            f"?symbol={ticker}&from={from_date}&to={to_date}&token={api_key}"
+        )
+        # Enforce minimum gap between calls so we stay under 60 req/min free-tier limit
+        with _FINNHUB_LOCK:
+            now = time.time()
+            gap = _FINNHUB_MIN_GAP - (now - _FINNHUB_LAST_CALL)
+            if gap > 0:
+                time.sleep(gap)
+            _FINNHUB_LAST_CALL = time.time()
+
+        r = requests.get(url, timeout=10)
+        if r.status_code == 429:
+            logger.debug(f"Finnhub rate limit hit for {ticker} — skipping")
+            return []
+        if r.status_code != 200:
+            logger.debug(f"Finnhub insider fetch for {ticker}: HTTP {r.status_code}")
+            return []
+
+        transactions = r.json().get("data") or []
+        buys = []
+        for tx in transactions:
+            if tx.get("transactionCode") != "P":
+                continue  # only open-market purchases
+            shares = int(tx.get("change", 0) or 0)
+            price  = float(tx.get("transactionPrice", 0) or 0)
+            if shares <= 0 or price <= 0:
+                continue
+            buys.append({
+                "name":   tx.get("name", "Unknown"),
+                "role":   "",  # Finnhub omits role in this endpoint
+                "shares": shares,
+                "price":  price,
+                "date":   tx.get("transactionDate") or tx.get("filingDate", "N/A"),
+            })
+        return buys
+    except Exception as e:
+        logger.debug(f"Finnhub insider fetch failed for {ticker}: {e}")
+        return []
+
+
 # ── Insider Cluster Score ────────────────────────────────
 def get_insider_cluster_score(ticker, days=14):
-    """Return (score, reasons) based on insider buy clustering within `days`."""
+    """Return (score, reasons) based on insider buy clustering within `days`.
+
+    Tries EDGAR first (works on GitHub Actions). Also checks Finnhub (works on
+    Streamlit Cloud where EDGAR is often blocked). Results are combined so
+    neither source can double-count the same transaction.
+    """
     try:
-        buys = get_insider_buys(ticker, days=days)
+        edgar_buys = get_insider_buys(ticker, days=days)
+
+        # Finnhub supplement — fills in when EDGAR returns 0 on Streamlit Cloud
+        finnhub_buys = get_insider_buys_finnhub(ticker, days=days)
+        seen_keys = {(b["name"], b["date"]) for b in edgar_buys}
+        for b in finnhub_buys:
+            key = (b["name"], b["date"])
+            if key not in seen_keys:
+                edgar_buys.append(b)
+                seen_keys.add(key)
+
+        buys = edgar_buys
         if not buys:
             return 0, []
 
@@ -227,24 +308,24 @@ def get_insider_cluster_score(ticker, days=14):
         count = len(distinct_insiders)
 
         if count >= 3:
-            score += 5
+            score += 7
             reasons.append(f"Insider cluster ({count}x)")
         elif count == 2:
-            score += 3
+            score += 4
             reasons.append("Dual insider buy")
         else:
-            score += 1
+            score += 2
 
-        # CEO/CFO bonus
-        exec_roles = {"Chief Executive", "CEO", "Chief Financial", "CFO"}
+        # CEO/CFO bonus — exec buying own company stock is one of the strongest pre-run signals
+        exec_roles = {"Chief Executive", "CEO", "Chief Financial", "CFO", "President"}
         for b in buys:
             role = b.get("role", "")
             if any(r in role for r in exec_roles):
-                score += 2
+                score += 3
                 reasons.append(f"Exec buy ({role})")
                 break  # one bonus only
 
-        score = min(6, score)
+        score = min(9, score)
         return score, reasons
     except Exception as e:
         logger.debug(f"get_insider_cluster_score({ticker}) failed: {e}")
@@ -336,7 +417,7 @@ def get_8k_catalyst_score(ticker, days=10):
                 reasons.append(f"8-K: {label}")
                 items_counted += 1
 
-        score = min(5, score)
+        score = min(7, score)
         return score, reasons
     except Exception as e:
         logger.debug(f"get_8k_catalyst_score({ticker}) failed: {e}")

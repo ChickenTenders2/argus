@@ -30,14 +30,14 @@ class ScanProfile:
 PROFILES: dict[str, ScanProfile] = {
     "premarket": ScanProfile(
         name="premarket",
-        scan_limit=None,
+        scan_limit=400,               # limit to 400 valid tickers — makes this actually light
         run_type="premarket",
         send_telegram=True,
         update_memory=False,          # memory updated by postclose only
         run_portfolio_monitor=False,
         min_score_override=75,        # only alert on strong picks pre-market
         universe_mode="core",         # IWM only for speed
-        description="Pre-market light scan — HC picks only",
+        description="Pre-market light scan — HC picks only (400 ticker limit)",
     ),
     "full": ScanProfile(
         name="full",

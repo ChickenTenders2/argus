@@ -1,11 +1,12 @@
 {
-  "description": "Balanced scoring weights (default)",
-  "fundamentals_max": 27,
-  "valuation_max": 6,
-  "momentum_max": 34,
+  "description": "Balanced scoring weights — tuned for pre-explosion runner detection",
+  "fundamentals_max": 18,
+  "valuation_max": 4,
+  "momentum_max": 30,
   "smart_money_max": 22,
-  "catalyst_max": 15,
+  "catalyst_max": 22,
   "persistence_max": 5,
+  "pattern_sim_max": 5,
   "sentiment_cap": 10,
-  "notes": "Fundamentals ceiling lifted to 27 (added EPS growth +6, ROE +3). Total system max: 109. MIN_SCORE=50 means a stock must score ~46% of possible points."
+  "notes": "Catalyst raised 15→22 (EDGAR cluster buys are the #1 pre-run signal). Fundamentals lowered 27→18 (pre-revenue stocks less penalized). Pattern similarity now contributes up to 5 pts. Total system max ~116. MIN_SCORE=50 means ~43% of possible points."
 }

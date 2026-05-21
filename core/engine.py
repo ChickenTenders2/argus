@@ -44,9 +44,9 @@ DB_FILE = "data/argus.db"
 # max for each score component — runner_weights tilts toward momentum/catalyst.
 _WEIGHTS_CACHE: dict = {}
 _DEFAULT_WEIGHTS = {
-    "fundamentals_max": 27, "valuation_max": 6, "momentum_max": 34,
-    "smart_money_max": 22, "catalyst_max": 15, "persistence_max": 5,
-    "sentiment_cap": 10,
+    "fundamentals_max": 18, "valuation_max": 4, "momentum_max": 30,
+    "smart_money_max": 22, "catalyst_max": 22, "persistence_max": 5,
+    "pattern_sim_max": 5, "sentiment_cap": 10,
 }
 def _load_weights(name: str = None) -> dict:
     name = (name or os.environ.get("ARGUS_WEIGHTS_FILE", "default")).lower().strip()
@@ -118,7 +118,7 @@ def get_db_connection():
                 if not _DB_INITIALIZED_PG:
                     try:
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS memory (
-                            ticker TEXT PRIMARY KEY, first_seen TEXT,
+                            ticker TEXT PRIMARY KEY, first_seen TEXT, last_seen TEXT,
                             times_flagged INTEGER, last_score REAL)"""))
                         conn.execute(sqlalchemy.text("""CREATE TABLE IF NOT EXISTS journal (
                             timestamp TEXT, ticker TEXT, action TEXT, scan_date TEXT,
@@ -128,6 +128,10 @@ def get_db_connection():
                     except Exception as e:
                         logger.warning(f"Concurrent DB init safely skipped (Phase 1): {e}")
                         conn.rollback()
+                    try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE memory ADD COLUMN IF NOT EXISTS last_seen TEXT"))
+                        conn.commit()
+                    except: conn.rollback()
                     try:
                         conn.execute(sqlalchemy.text("ALTER TABLE journal ADD COLUMN shares REAL"))
                         conn.commit()
@@ -149,7 +153,8 @@ def get_db_connection():
                             id SERIAL PRIMARY KEY, ticker TEXT, sector TEXT, score REAL,
                             raw_score REAL,
                             f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                            c_score REAL,
+                            c_score REAL, r_score REAL,
+                            float_m REAL, short_pct REAL, score_velocity REAL,
                             tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
                             scan_date TEXT, scan_timestamp TEXT, run_type TEXT)"""))
                         try:
@@ -191,7 +196,7 @@ def get_db_connection():
             if not _DB_INITIALIZED_SQ:
                 try:
                     conn.execute("""CREATE TABLE IF NOT EXISTS memory (
-                        ticker TEXT PRIMARY KEY, first_seen TEXT,
+                        ticker TEXT PRIMARY KEY, first_seen TEXT, last_seen TEXT,
                         times_flagged INTEGER, last_score REAL)""")
                     conn.execute("""CREATE TABLE IF NOT EXISTS journal (
                         timestamp TEXT, ticker TEXT, action TEXT, scan_date TEXT,
@@ -200,6 +205,10 @@ def get_db_connection():
                     conn.commit()
                 except Exception as e:
                     logger.warning(f"Concurrent local DB init safely skipped (Phase 1): {e}")
+                try:
+                    conn.execute("ALTER TABLE memory ADD COLUMN last_seen TEXT")
+                    conn.commit()
+                except: pass
                 try:
                     conn.execute("ALTER TABLE journal ADD COLUMN shares REAL")
                     conn.commit()
@@ -213,7 +222,8 @@ def get_db_connection():
                         id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, sector TEXT, score REAL,
                         raw_score REAL,
                         f_score REAL, v_score REAL, m_score REAL, s_score REAL, p_score REAL,
-                        c_score REAL,
+                        c_score REAL, r_score REAL,
+                        float_m REAL, short_pct REAL, score_velocity REAL,
                         tier TEXT, price REAL, mkt_cap_m REAL, reason_count INTEGER,
                         scan_date TEXT, scan_timestamp TEXT, run_type TEXT)""")
                     try:
@@ -421,6 +431,7 @@ def save_memory(df, filepath=None):
 def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_file=None):
     cols = [
         "ticker", "sector", "score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score", "c_score",
+        "r_score", "float_m", "short_pct", "score_velocity",
         "tier", "price", "mkt_cap_m",
         "reason_count", "scan_date", "scan_timestamp", "run_type",
     ]
@@ -434,6 +445,7 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
             mkt_cap_m = float(mkt_cap_raw)
         except Exception:
             mkt_cap_m = 0.0
+        float_m = (pick.get("float_shares", 0) or 0) / 1e6
         rows.append({
             "ticker":         pick.get("ticker", ""),
             "sector":         pick.get("sector", "Unknown"),
@@ -445,6 +457,10 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
             "s_score":        float(pick.get("s_score", 0)),
             "p_score":        float(pick.get("p_score", 0)),
             "c_score":        float(pick.get("c_score", 0)),
+            "r_score":        float(pick.get("r_score", 0)),
+            "float_m":        float(float_m),
+            "short_pct":      float(pick.get("short_pct", 0) or 0),
+            "score_velocity": float(pick.get("score_velocity", 0) or 0),
             "tier":           pick.get("tier", ""),
             "price":          float(pick.get("price", 0)),
             "mkt_cap_m":      mkt_cap_m,
@@ -458,8 +474,12 @@ def _append_feature_rows(results, scan_date, scan_timestamp, run_type, feature_f
     # Lazy migration: add any columns that didn't exist in older schema versions.
     # Each ALTER is wrapped individually so one failure doesn't block the rest.
     _new_cols = [
-        ("raw_score", "REAL"),
-        ("c_score",   "REAL"),
+        ("raw_score",      "REAL"),
+        ("c_score",        "REAL"),
+        ("r_score",        "REAL"),
+        ("float_m",        "REAL"),
+        ("short_pct",      "REAL"),
+        ("score_velocity", "REAL"),
     ]
     for _col, _typ in _new_cols:
         try:
@@ -882,6 +902,10 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
                     _hist_combined = pd.concat([_hist_existing, df], ignore_index=True)
                 else:
                     _hist_combined = df.copy()
+                # Deduplicate: same ticker + scan_timestamp = same scan run
+                _dedup_cols = [c for c in ("ticker", "scan_timestamp") if c in _hist_combined.columns]
+                if _dedup_cols:
+                    _hist_combined = _hist_combined.drop_duplicates(subset=_dedup_cols, keep="last")
                 _hist_combined.to_csv(history_file, index=False)
             except Exception as _he:
                 logger.warning(f"save_results: could not update history CSV: {_he}")
@@ -1201,7 +1225,7 @@ def build_prediction_model(features_file=None, horizon_days=63, target_return=0.
 
     # Feature selection
     possible_features = ["score", "raw_score", "f_score", "v_score", "m_score", "s_score", "p_score",
-                         "c_score", "reason_count", "mkt_cap_m", "float_m", "short_pct", "score_velocity"]
+                         "c_score", "r_score", "reason_count", "mkt_cap_m", "float_m", "short_pct", "score_velocity"]
     features = [f for f in possible_features if f in train.columns]
 
     global_prob = float(train["target_hit"].mean())
@@ -1701,7 +1725,7 @@ def _score_momentum(hist, ticker):
     else:
         logger.debug(f"{ticker}: fewer than 200 days of history — 200MA check skipped")
 
-    # Volume spike — 8 pts. Require a meaningful absolute baseline so a 5-day-old
+    # Volume signals — 8 pts max. Require a meaningful absolute baseline so a 5-day-old
     # IPO with vol_avg≈30k doesn't tag a spike on any day with >60k shares traded.
     # 200k matches the prefilter floor in _prefilter_tickers().
     MIN_VOL_BASELINE = 200_000
@@ -1710,6 +1734,19 @@ def _score_momentum(hist, ticker):
         score += 8; reasons.append("⚡ Volume spike 2x")
     elif vol_today > effective_vol_avg * 1.5:
         score += 4; reasons.append("⚡ Volume spike 1.5x")
+    else:
+        # Quiet accumulation: steady elevated volume while price coils below a recent peak.
+        # Classic Wyckoff accumulation pattern before a breakout.
+        try:
+            price_30d_high = hist["Close"].rolling(30).max().iloc[-1]
+            if not pd.isna(price_30d_high) and price_30d_high > 0:
+                coiling = price_now < price_30d_high * 0.92  # >8% below recent 30d high
+                vol_elevated = vol_today > effective_vol_avg * 1.2
+                not_crashing = mom_6mo >= -0.20
+                if vol_elevated and coiling and not_crashing:
+                    score += 3; reasons.append("Volume coiling (pre-breakout)")
+        except Exception:
+            pass
 
     # Relative Strength vs IWM — tiered, max 8 pts
     try:
@@ -1726,14 +1763,17 @@ def _score_momentum(hist, ticker):
                 _stale = (not _iwm_cache) or (_now - _iwm_cache_ts) > _IWM_CACHE_TTL
                 iwm_hist = _iwm_cache.get("hist") if not _stale else None
             if iwm_hist is None:
-                _fresh = yf.Ticker("IWM").history(period="3mo")
+                # 6mo ensures ≥63 trading days are available for a clean 3mo alignment
+                _fresh = yf.Ticker("IWM").history(period="6mo")
                 with _iwm_cache_lock:
                     _iwm_cache = {"hist": _fresh}
                     _iwm_cache_ts = _now
                     iwm_hist = _fresh
 
             if iwm_hist is not None and not iwm_hist.empty:
-                iwm_return = (iwm_hist["Close"].iloc[-1] / iwm_hist["Close"].iloc[0]) - 1
+                # Use same 63-trading-day lookback as the stock so dates align
+                iwm_3mo_start = iwm_hist["Close"].iloc[-63] if len(iwm_hist) >= 63 else iwm_hist["Close"].iloc[0]
+                iwm_return = (iwm_hist["Close"].iloc[-1] / iwm_3mo_start) - 1
                 rs_delta   = stock_3mo_return - iwm_return
                 if rs_delta >= 0.35:
                     score += 8; reasons.append(f"RS vs IWM +{rs_delta*100:.0f}%")
@@ -1804,10 +1844,13 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         inst_ceil = getattr(config, "INST_OWN_CEILING", 0.40)
         mkt_min   = getattr(config, "MKT_CAP_MIN", 50e6)
         mkt_max   = getattr(config, "MKT_CAP_MAX", 10e9)
-        inst_own = info.get("heldPercentInstitutions", 1) or 1
-        if inst_own < 0.10:       s_score += 10; reasons.append(f"Inst. {inst_own*100:.0f}% (undiscovered)")
+        # None = yfinance has no data → treat as potentially undiscovered (award low-ownership pts)
+        inst_own = info.get("heldPercentInstitutions")
+        if inst_own is None:
+            s_score += 7;  reasons.append("Inst. unknown (undiscovered)")
+        elif inst_own < 0.10:      s_score += 10; reasons.append(f"Inst. {inst_own*100:.0f}% (undiscovered)")
         elif inst_own < inst_ceil: s_score += 7;  reasons.append(f"Inst. {inst_own*100:.0f}%")
-        elif inst_own < 0.60:     s_score += 2;  reasons.append(f"Inst. {inst_own*100:.0f}%")
+        elif inst_own < 0.60:      s_score += 2;  reasons.append(f"Inst. {inst_own*100:.0f}%")
         mkt_cap = info.get("marketCap", 0) or 0
         if mkt_min < mkt_cap < mkt_max: s_score += 6; reasons.append(f"Cap ${mkt_cap/1e6:.0f}M")
 
@@ -1818,8 +1861,11 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         ma50_sm = hist["Close"].rolling(50).mean().iloc[-1] if len(hist) >= 50 else price_now_sm
         if float_shares > 0 and float_shares < 5_000_000:
             s_score += 3; reasons.append(f"Tight float {float_shares/1e6:.1f}M shares")
-        if short_pct > 0.20 and short_ratio > 3 and price_now_sm > ma50_sm:
-            s_score += 3; reasons.append(f"Squeeze setup ({short_pct*100:.0f}% short, {short_ratio:.1f}d cover)")
+        # High short squeeze potential — don't require price > 50MA (shorts often comfortable below it)
+        if short_pct > 0.25 and short_ratio > 5:
+            s_score += 4; reasons.append(f"High squeeze potential ({short_pct*100:.0f}% short, {short_ratio:.1f}d cover)")
+        elif short_pct > 0.15 and short_ratio > 3 and price_now_sm > ma50_sm:
+            s_score += 2; reasons.append(f"Squeeze setup ({short_pct*100:.0f}% short, {short_ratio:.1f}d cover)")
 
         s_score = min(s_score, weights["smart_money_max"])
         score += s_score
@@ -1861,7 +1907,7 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
             elif score_velocity >= 5:
                 p_score = min(_p_cap, p_score + 1)
                 reasons.append(f"↑ Rising score")
-        score += round(p_score)
+        score += int(p_score + 0.5)
 
         # 4.5. Catalyst Score (EDGAR cluster buys + 8-K + options flow) — capped by weights
         c_score, c_reasons = 0, []
@@ -1873,6 +1919,28 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
             reasons.extend(c_reasons)
         except Exception as _ce:
             logger.debug(f"{ticker}: catalyst score unavailable — {_ce}")
+
+        # 4.6. Runner Pattern Similarity — rewards stocks resembling historical 3-5x runners at T-30.
+        # Uses Mahalanobis distance to a curated set of pre-run profiles (ONDS, RKLB, ASTS, etc.).
+        r_score = 0
+        try:
+            from analysis.pattern_match import get_runner_similarity
+            _sim_max = float(weights.get("pattern_sim_max", 5))
+            _partial = {
+                "f_score": f_score, "v_score": v_score, "m_score": m_score,
+                "s_score": s_score, "p_score": p_score, "c_score": c_score,
+                "score": score, "float_shares": float_shares, "short_pct": short_pct,
+            }
+            runner_sim = get_runner_similarity(_partial)
+            if runner_sim >= 75:
+                r_score = int(_sim_max)
+                reasons.append(f"\U0001f3c6 Runner sim {runner_sim:.0f}% (near historical runners)")
+            elif runner_sim >= 60:
+                r_score = max(1, int(_sim_max * 0.6))
+                reasons.append(f"\U0001f3c6 Runner sim {runner_sim:.0f}%")
+            score += r_score
+        except Exception as _rse:
+            logger.debug(f"{ticker}: runner similarity unavailable — {_rse}")
 
         # Capture the pre-regime, pre-sentiment quality score. This is the true measure
         # of stock quality and is what we gate against — the regime multiplier and the
@@ -1891,7 +1959,7 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         # dampened in bear markets (when headline noise is high) and amplified in bull.
         # Capped at ± weights["sentiment_cap"] so a single headline can't dominate.
         sentiment_delta = 0
-        if score >= 60 and config.GROQ_API_KEY:
+        if quality_score >= 45 and config.GROQ_API_KEY:
             sentiment = get_sentiment_score(ticker, config.GROQ_API_KEY)
             if sentiment != 0:
                 _scaled = sentiment * _regime_mult
@@ -1940,6 +2008,7 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
             "s_score":             s_score,
             "p_score":             p_score,
             "c_score":             c_score,
+            "r_score":             r_score,
             "tier":                "\U0001f7e2 HIGH CONVICTION" if score >= 80 else "\U0001f7e1 WATCHLIST",
             "reasons":             reasons,
             "price":               round(hist["Close"].iloc[-1], 2) if not hist.empty else 0,

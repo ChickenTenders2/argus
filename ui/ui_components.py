@@ -83,6 +83,7 @@ def render_score_waterfall(pick: dict) -> None:
     s = int(pick.get("s_score", 0) or 0)
     p = int(pick.get("p_score", 0) or 0)
     c = int(pick.get("c_score", 0) or 0)
+    r = int(pick.get("r_score", 0) or 0)
     raw_pre = int(pick.get("raw_score_pre_regime", 0) or pick.get("raw_score", 0) or 0)
     final   = int(pick.get("score", 0) or 0)
 
@@ -101,10 +102,11 @@ def render_score_waterfall(pick: dict) -> None:
 
     components = [
         ("Fundamentals", f, 18, "#26d97f"),
-        ("Valuation",    v, 6,  "#00d4ff"),
-        ("Momentum",     m, 34, "#ffb547"),
+        ("Valuation",    v, 4,  "#00d4ff"),
+        ("Momentum",     m, 30, "#ffb547"),
         ("Smart Money",  s, 22, "#bf5af2"),
-        ("Catalyst",     c, 15, "#ff8c42"),
+        ("Catalyst",     c, 22, "#ff8c42"),
+        ("Runner Sim",   r, 5,  "#ff4d6d"),
         ("Persistence",  p, 5,  "#8ea0ba"),
     ]
 
