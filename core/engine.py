@@ -511,7 +511,17 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
         try:
             # Let yfinance elegantly handle internal threads safely per batch
             batch_hist = yf.download(batch, period="1mo", group_by="ticker", progress=False, threads=False)
-            
+
+            if batch_hist.empty:
+                # API returned no data (e.g. auth failure) — pass batch through unfiltered
+                # to avoid silently zeroing out picks due to a transient data outage
+                logger.warning(f"Prefilter batch returned empty (API down?), passing {len(batch)} tickers through")
+                valid_tickers.extend(batch)
+                if scan_limit and len(valid_tickers) >= scan_limit:
+                    return valid_tickers
+                continue
+
+            added_from_batch = 0
             for t in batch:
                 try:
                     # Parse depending on single vs multi-index return shapes from yfinance
@@ -521,8 +531,7 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
                         data = batch_hist[t]
                     else:
                         continue
-                    
-                    
+
                     if (
                         not data["Close"].dropna().empty
                         and data["Close"].iloc[-1] > config.PRICE_FLOOR
@@ -530,14 +539,24 @@ def _prefilter_tickers(tickers, config, scan_limit=None):
                         and data["Volume"].mean() > config.VOL_FLOOR
                     ):
                         valid_tickers.append(t)
+                        added_from_batch += 1
                         if scan_limit and len(valid_tickers) >= scan_limit:
                             return valid_tickers
                 except Exception as e:
                     logger.debug(f"Skipping {t} in prefilter: {e}")
                     continue
+
+            # If batch had data but no ticker passed, the data may be malformed — pass through
+            if added_from_batch == 0 and len(batch) > 0:
+                logger.warning(f"Prefilter: 0/{len(batch)} tickers passed from batch with non-empty data, passing through")
+                valid_tickers.extend(batch)
+                if scan_limit and len(valid_tickers) >= scan_limit:
+                    return valid_tickers
         except Exception as e:
             logger.warning(f"Batch fail during prefilter: {e}")
-            continue
+            valid_tickers.extend(batch)
+            if scan_limit and len(valid_tickers) >= scan_limit:
+                return valid_tickers
 
     return valid_tickers
 
