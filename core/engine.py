@@ -406,8 +406,7 @@ class Config:
     MKT_CAP_MIN: float = 50e6
     MKT_CAP_MAX: float = 10e9
 
-# Always ensure migration happens when engine starts (now safely below Config definition)
-migrate_csv_to_sqlite()
+# migrate_csv_to_sqlite() is called after all helper functions are defined (see below)
 
 def load_memory(filepath=None):
     try:
@@ -866,6 +865,10 @@ def _migrate_results_columns(conn, df):
                     logger.warning(f"Could not add column '{col}' to results table: {_ce}")
     except Exception as _me:
         logger.warning(f"_migrate_results_columns failed: {_me}")
+
+
+# Both migration helpers are now defined — safe to run startup migration
+migrate_csv_to_sqlite()
 
 
 def save_results(results, scan_date, scan_timestamp, run_type, latest_file, history_file, write_latest, feature_file=None):

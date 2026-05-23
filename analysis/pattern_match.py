@@ -66,27 +66,17 @@ _RUNNER_PROFILES = [
     },
 ]
 
-_FEATURE_KEYS = ["f_score", "v_score", "m_score", "s_score", "p_score", "c_score", "score", "float_m", "short_pct"]
+# Only use the 5 intrinsic score dimensions: p_score excluded (scan-history artifact
+# that new picks always lack) and float/short excluded (unreliable from yfinance).
+_FEATURE_KEYS = ["f_score", "v_score", "m_score", "s_score", "c_score"]
 
 def _pick_to_vector(pick: dict) -> np.ndarray:
-    float_m = (pick.get("float_shares", 0) or 0) / 1e6
-    short_pct = (pick.get("short_pct", 0) or 0) * 100
-    return np.array([
-        float(pick.get("f_score", 0) or 0),
-        float(pick.get("v_score", 0) or 0),
-        float(pick.get("m_score", 0) or 0),
-        float(pick.get("s_score", 0) or 0),
-        float(pick.get("p_score", 0) or 0),
-        float(pick.get("c_score", 0) or 0),
-        float(pick.get("score",   0) or 0),
-        float(float_m),
-        float(short_pct),
-    ], dtype=float)
+    return np.array([float(pick.get(k, 0) or 0) for k in _FEATURE_KEYS], dtype=float)
 
 
 def _runner_to_vector(runner: dict) -> np.ndarray:
     f = runner["features"]
-    return np.array([f.get(k, 0) for k in _FEATURE_KEYS], dtype=float)
+    return np.array([float(f.get(k, 0)) for k in _FEATURE_KEYS], dtype=float)
 
 
 def _compute_centroid() -> np.ndarray:
