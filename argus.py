@@ -120,8 +120,8 @@ def format_pick(pick, memory_df, ai_thesis=None):
         memory_note = f"\n⚡ _Previously flagged {times}x since {first} — signals strengthening_"
 
     reasons_str = " | ".join(pick["reasons"])
-    thesis_str = f"\n💡 *AI Note:* _{ai_thesis}_" if ai_thesis else ""
-    
+    thesis_str = f"\n{ai_thesis}" if ai_thesis else ""
+
     return (
         f"{pick['tier']}\n"
         f"*{ticker}* — Score: *{pick['score']}/100*{memory_note}\n"
@@ -328,10 +328,6 @@ def _run():
             ai_note = None
             if config.GROQ_API_KEY and generate_ai_thesis:
                 ai_note = generate_ai_thesis(p["ticker"], p["score"], p["reasons"], config.GROQ_API_KEY)
-
-                # Prevent markdown formatting issues in telegram if AI uses asterisks
-                if ai_note:
-                    ai_note = ai_note.replace('*', '').replace('_', '')
 
             formatted_highest.append(format_pick(p, memory_df, ai_note))
 
