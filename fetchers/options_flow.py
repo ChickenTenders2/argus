@@ -128,27 +128,70 @@ def _fetch_unusual_whales(ticker: str) -> dict:
         return {}
 
 
+def _fetch_yfinance_options(ticker: str) -> dict:
+    """Compute call bias and vol/OI ratio from yfinance options chain.
+    Works on Streamlit Cloud and GitHub Actions — no scraping, no geo-blocking.
+    Cannot produce a true IV rank (requires historical IV series) but call_bias
+    and vol_oi_ratio are sufficient for bullish flow detection (+2 pts)."""
+    try:
+        import yfinance as yf
+        from datetime import datetime
+        t = yf.Ticker(ticker)
+        exps = t.options
+        if not exps:
+            return {}
+        today = datetime.today().date()
+        target = [e for e in exps
+                  if 21 <= (datetime.strptime(e, "%Y-%m-%d").date() - today).days <= 60]
+        exp = target[0] if target else exps[0]
+        chain = t.option_chain(exp)
+        calls = chain.calls
+        puts  = chain.puts
+        call_vol = float(calls["volume"].fillna(0).sum())
+        put_vol  = float(puts["volume"].fillna(0).sum())
+        call_oi  = float(calls["openInterest"].fillna(0).sum())
+        put_oi   = float(puts["openInterest"].fillna(0).sum())
+        total_vol = call_vol + put_vol
+        total_oi  = call_oi + put_oi
+        call_bias = call_vol / total_vol if total_vol > 0 else 0.5
+        vol_oi    = total_vol / total_oi if total_oi > 0 else 0.0
+        bullish   = call_bias > 0.60 and vol_oi > 2.0
+        return {
+            "vol_oi_ratio": round(vol_oi, 2),
+            "call_bias":    round(call_bias, 3),
+            "iv_rank":      None,
+            "bullish":      bullish,
+            "source":       "yfinance",
+        }
+    except Exception as e:
+        logger.debug(f"yfinance options fetch failed for {ticker}: {e}")
+        return {}
+
+
 def get_options_flow(ticker: str) -> dict:
     """Fetch options flow using the configured provider. Returns {} on failure.
 
-    Defaults to skipping (returns {}) unless OPTIONS_FLOW_PROVIDER is explicitly
-    set to 'unusual_whales' or 'market_chameleon'. The barchart_free scraper
-    sleeps 1s per ticker and returns no actionable data — it must be opted-in.
+    Provider resolution order:
+      unusual_whales  — UW API (requires UW_API_KEY, most data-rich)
+      market_chameleon — scrape MC IV page (may be blocked on Streamlit Cloud)
+      barchart_free   — scrape Barchart (explicit opt-in only; slow, often blocked)
+      (default)       — yfinance options chain (works everywhere, no IV rank)
     """
     provider = os.environ.get("OPTIONS_FLOW_PROVIDER", "").lower().strip()
-    if not provider or provider == "barchart_free":
-        return {}
 
     def _fetch():
         if provider == "unusual_whales":
             return _fetch_unusual_whales(ticker)
         elif provider == "market_chameleon":
             return _fetch_market_chameleon(ticker)
+        elif provider == "barchart_free":
+            return _fetch_barchart_free(ticker)
         else:
-            return {}
+            return _fetch_yfinance_options(ticker)
 
     try:
-        return _cached(f"{provider}:{ticker}", _fetch)
+        key = provider if provider else "yfinance"
+        return _cached(f"{key}:{ticker}", _fetch)
     except Exception as e:
         logger.debug(f"get_options_flow({ticker}) failed: {e}")
         return {}
