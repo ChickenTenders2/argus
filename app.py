@@ -1557,6 +1557,16 @@ with st.sidebar:
         key="send_to_telegram_cb",
         on_change=update_telegram_pref
     )
+    _auto_refresh_on = st.checkbox(
+        "Auto-refresh (15 min)",
+        value=st.session_state.get("auto_refresh_enabled", False),
+        key="auto_refresh_cb",
+        help="Automatically reload the page every 15 minutes to show latest GitHub Actions scan results.",
+    )
+    st.session_state["auto_refresh_enabled"] = _auto_refresh_on
+    if st.button("🔄 Refresh now", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
     config = Config(
         MIN_SCORE=min_score,
@@ -1739,6 +1749,34 @@ if active_tab == "Overview":
         _briefing_alerts = monitor_portfolio()
     except Exception:
         _briefing_alerts = []
+
+    # ── GitHub Actions Latest Sync Strip ─────────────────────────────────────
+    _gh_batch = pd.DataFrame()
+    _gh_label = ""
+    if not history_df.empty and "scan_timestamp" in history_df.columns:
+        try:
+            _gh_scheduled = history_df[
+                history_df.get("run_type", pd.Series(dtype=str)).isin(["premarket", "full", "postclose"])
+            ] if "run_type" in history_df.columns else pd.DataFrame()
+            _source_df = _gh_scheduled if not _gh_scheduled.empty else history_df
+            _latest_ts = _source_df["scan_timestamp"].dropna().max()
+            if _latest_ts:
+                _gh_batch = _source_df[_source_df["scan_timestamp"] == _latest_ts].copy()
+                _ts_dt = pd.to_datetime(_latest_ts, errors="coerce")
+                if _ts_dt is not None and not pd.isnull(_ts_dt):
+                    _mins_ago = int((pd.Timestamp.now() - _ts_dt).total_seconds() / 60)
+                    _ago_str = f"{_mins_ago}m ago" if _mins_ago < 60 else f"{_mins_ago // 60}h ago"
+                else:
+                    _ago_str = "unknown"
+                _rt = _gh_batch["run_type"].iloc[0] if "run_type" in _gh_batch.columns and not _gh_batch.empty else "scan"
+                _is_gh = _rt in ("premarket", "full", "postclose")
+                _src_icon = "🤖 GitHub Actions" if _is_gh else "👤 Manual"
+                _n_picks = len(_gh_batch)
+                _gh_label = f"{_src_icon} · **{_rt}** scan · {_ago_str} · {_n_picks} picks"
+        except Exception:
+            pass
+    if _gh_label:
+        st.info(f"📡 Latest synced results — {_gh_label}", icon=None)
 
     _bc1, _bc2, _bc3 = st.columns(3)
 
@@ -2029,6 +2067,16 @@ if active_tab == "Overview":
                 st.caption("No alerts logged yet.")
         except FileNotFoundError:
             st.caption("No alerts logged yet.")
+
+    # ── Auto-refresh (fires after all Overview content renders) ───────────────
+    if st.session_state.get("auto_refresh_enabled"):
+        import time as _time
+        _last_refresh = st.session_state.get("_last_auto_refresh_ts", 0)
+        _now_ts = _time.time()
+        if _now_ts - _last_refresh >= 900:  # 15 minutes
+            st.session_state["_last_auto_refresh_ts"] = _now_ts
+            st.cache_data.clear()
+            st.rerun()
 
 if active_tab == "Scans":
     st.subheader("⚙️ Manual Scan")

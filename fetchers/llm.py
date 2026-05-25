@@ -102,35 +102,69 @@ def get_sentiment_score(ticker, groq_api_key):
     result = get_llm_catalyst_analysis(ticker, groq_api_key)
     return result["sentiment"]
 def generate_ai_thesis(ticker, score, reasons, groq_api_key):
-    """Call Groq to generate a 3-bullet thesis."""
+    """Call Groq for structured catalyst analysis.
+
+    Returns a 3-line formatted string:
+      💡 Theme: <sector/theme driving the stock>
+      🚀 Catalyst: <specific forward-looking reason to run>
+      ⚠️ Risk: <key bear case> <strength emoji>
+
+    Returns None on failure so callers can skip display cleanly.
+    """
     if not groq_api_key:
-        return "GROQ API Key missing. Skipping AI analysis."
-    
+        return None
+
     try:
+        import json as _json
         news_summary = get_recent_news_summary(ticker)
         client = Groq(api_key=groq_api_key)
-        
-        prompt = f"""
-        You are an expert quantitative hedge fund analyst. Argus screener just flagged {ticker} with a high score of {score}/100.
-        The technical and fundamental reasons for this score are: {', '.join(reasons)}.
-        
-        Here are the most recent news headlines for {ticker}:
-        {news_summary}
-        
-        Provide a concise, 3-sentence summary of why this stock is a good buy. 
-        Focus on integrating the technical score, fundamental momentum, and the current news sentiment.
-        Keep it professional, brief, and highly insightful. Start directly with the thesis, no pleasantries.
-        """
-        
+
+        reasons_str = ", ".join(reasons[:10]) if reasons else "no specific signals"
+
+        prompt = (
+            f"You are a stock analyst. Analyze {ticker} which scored {score}/100 on a quant screener.\n"
+            f"Screener signals: {reasons_str}\n"
+            f"Recent news: {news_summary}\n\n"
+            f"Return ONLY valid JSON (no markdown, no explanation):\n"
+            f'{{\"sector_thesis\": \"<5-8 word phrase naming the theme driving this stock>\", '
+            f'\"top_catalyst\": \"<one forward-looking reason this could run — cite specific evidence>\", '
+            f'\"risk_flag\": \"<one key bear case specific to this stock>\", '
+            f'\"signal_strength\": \"<strong|moderate|weak>\"}}\n\n'
+            f"Rules:\n"
+            f"- sector_thesis: e.g. 'Government AI contract pipeline', 'Railroad automation mandate'\n"
+            f"- top_catalyst: must be specific, not generic — cite news headline or screener signal\n"
+            f"- risk_flag: must be specific to this stock, not boilerplate\n"
+            f"- signal_strength: strong if 3+ signals align, moderate if 2, weak if 1"
+        )
+
         response = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama-3.1-8b-instant",
-            temperature=0.3,
-            max_tokens=250,
+            temperature=0.2,
+            max_tokens=150,
         )
-        
-        thesis = response.choices[0].message.content.strip()
-        return thesis
+
+        raw = response.choices[0].message.content.strip()
+        data = _json.loads(raw)
+
+        theme    = (data.get("sector_thesis") or "").strip()
+        catalyst = (data.get("top_catalyst") or "").strip()
+        risk     = (data.get("risk_flag") or "").strip()
+        strength = (data.get("signal_strength") or "moderate").strip().lower()
+
+        if not theme and not catalyst:
+            return None
+
+        strength_emoji = {"strong": "🟢", "moderate": "🟡", "weak": "🔴"}.get(strength, "🟡")
+        lines = []
+        if theme:
+            lines.append(f"💡 Theme: {theme}")
+        if catalyst:
+            lines.append(f"🚀 Catalyst: {catalyst}")
+        if risk:
+            lines.append(f"⚠️ Risk: {risk} {strength_emoji}")
+        return "\n".join(lines)
+
     except Exception as e:
         logger.error(f"Groq AI analysis failed for {ticker}: {e}")
-        return "AI analysis failed due to an API error."
+        return None

@@ -2002,12 +2002,18 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         # the Ticker Detail tab.
         _in_universe = True
         _filter_reason = ""
-        _gate_threshold = float(config.MIN_SCORE)
+        _mkt_cap_m = (info.get("marketCap") or 0) / 1e6
+        if 0 < _mkt_cap_m < 200:
+            _gate_threshold = 30.0
+        elif 0 < _mkt_cap_m < 500:
+            _gate_threshold = 38.0
+        else:
+            _gate_threshold = float(config.MIN_SCORE)
         if quality_score < _gate_threshold:
             if not display_only:
                 return None
             _in_universe = False
-            _filter_reason = f"Quality score {quality_score:.0f} < MIN_SCORE {config.MIN_SCORE}"
+            _filter_reason = f"Quality score {quality_score:.0f} < gate {_gate_threshold:.0f} (cap ${_mkt_cap_m:.0f}M)"
         if red_flags and _in_universe:
             # Red flags were not hard-rejected above (display_only path), mark out-of-universe
             _in_universe = False
