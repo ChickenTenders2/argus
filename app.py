@@ -34,22 +34,10 @@ except ImportError:
     HAS_AGGRID = False
 
 try:
-    from annotated_text import annotated_text
-    HAS_ANNOTATED = True
-except ImportError:
-    HAS_ANNOTATED = False
-
-try:
     from streamlit_lottie import st_lottie
     HAS_LOTTIE = True
 except ImportError:
     HAS_LOTTIE = False
-
-try:
-    from streamlit_extras.metric_cards import style_metric_cards
-    HAS_EXTRAS = True
-except ImportError:
-    HAS_EXTRAS = False
 
 PREFS_FILE = "argus_prefs.json"
 
@@ -412,7 +400,7 @@ def _save_daily_cap_pref():
     st.session_state.prefs["daily_unit_cap"] = st.session_state.daily_unit_cap_input
     save_prefs(st.session_state.prefs)
 
-from ui.theme import ENHANCED_CSS, REGIME_COLORS as _THEME_REGIME_COLORS
+from ui.theme import ENHANCED_CSS
 from ui.ui_components import (
     render_sparkline, render_catalyst_pills, render_velocity_badge,
     render_rr_chip, render_score_waterfall, render_hero_card,
@@ -1356,11 +1344,6 @@ def display_cards(df, show_copy_button=True, cols_per_row=3, compact=False):
             st.code(_ticker_str, language=None)
 
 
-if "min_score" not in st.session_state or st.session_state.get("_score_version") != 2:
-    st.session_state.min_score = 50
-    st.session_state["_score_version"] = 2
-if "price_ceiling" not in st.session_state:
-    st.session_state.price_ceiling = 0.0
 if "horizon_days" not in st.session_state:
     st.session_state.horizon_days = 63
 if "target_return" not in st.session_state:
@@ -1501,7 +1484,7 @@ with st.sidebar:
     inst_own_ceiling  = st.session_state.get("inst_own_ceiling", 40) / 100
 
     st.markdown('<p style="font-size:0.82rem;font-weight:700;margin:8px 0 2px;color:#aaa;text-transform:uppercase;letter-spacing:0.05em">💷 Capital & Sizing</p>', unsafe_allow_html=True)
-    unit_value_sidebar = st.number_input(
+    st.number_input(
         "Unit Value (£)",
         min_value=50, max_value=5000, step=50,
         value=st.session_state.prefs.get("unit_value", 250),
@@ -1509,7 +1492,7 @@ with st.sidebar:
         on_change=update_unit_value_pref,
         help="1 unit = this £ amount. Argus allocates 1–5 units per HC pick.",
     )
-    portfolio_size = st.number_input(
+    st.number_input(
         "Total Portfolio Size (£)",
         min_value=0, max_value=10_000_000, step=500,
         value=st.session_state.prefs.get("portfolio_size", 10000),
@@ -1517,7 +1500,7 @@ with st.sidebar:
         on_change=_save_portfolio_size_pref,
         help="Used to calculate position size % from unit allocations.",
     )
-    daily_unit_cap = st.slider(
+    st.slider(
         "Daily Unit Cap",
         min_value=3, max_value=30, step=1,
         value=st.session_state.prefs.get("daily_unit_cap", 12),
@@ -1538,14 +1521,13 @@ with st.sidebar:
         st.session_state.prefs["auto_refresh"] = st.session_state.auto_refresh_cb
         save_prefs(st.session_state.prefs)
 
-    _auto_refresh_on = st.checkbox(
+    st.checkbox(
         "Auto-refresh (15 min)",
         value=st.session_state.get("auto_refresh_enabled", False),
         key="auto_refresh_cb",
         on_change=_save_auto_refresh_pref,
         help="Automatically reload the page every 15 minutes to show latest GitHub Actions scan results.",
     )
-    st.session_state["auto_refresh_enabled"] = _auto_refresh_on
     if st.button("🔄 Refresh now", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
@@ -1877,7 +1859,7 @@ if active_tab == "Alerts":
                 display_cards(_top_picks.iloc[5:].copy(), cols_per_row=3, compact=True)
 
 
-    # ── Auto-refresh (fires after all Overview content renders) ───────────────
+    # ── Auto-refresh (fires after all Alerts content renders) ────────────────
     if st.session_state.get("auto_refresh_enabled"):
         import time as _time
         _last_refresh = st.session_state.get("_last_auto_refresh_ts", 0)
@@ -2004,7 +1986,7 @@ if active_tab == "History":
                 )
 
 if active_tab == "Deep Dive":
-    st.subheader("🔎 Ticker Deep Dive")
+    st.subheader("🔎 Deep Dive")
 
     with st.container(border=True):
         st.markdown("**🔍 Search Any Ticker — Manual Lookup**")
@@ -2977,7 +2959,7 @@ if active_tab == "Tools" and _tools_subtab == "📈 ML Model":
             target_return = st.slider("Target return (%)", 1, 100, key="target_return",
                 help="Min % gain to count as a 'hit'. Higher = harder to hit, filters stronger momentum.") / 100.0
 
-    with st.expander("📖 How to activate the Prediction Model", expanded=not model.get("ready", False)):
+    with st.expander("📖 How to activate the ML Model", expanded=not model.get("ready", False)):
         st.markdown("""
 **The prediction model is an XGBoost classifier** that learns which stocks went on to gain ≥10% within 63 days of being flagged by Argus.
 
@@ -3248,12 +3230,11 @@ competitors. Is [TICKER] gaining or losing ground?""", language="text")
     
     ---
     ### Pages Overview
-    * **Overview:** Snapshot of the latest scan results with interactive visual metric cards. View the current macro Market Regime, FRED macro signals (yield curve, CPI, Fed Funds), last scan date, VIX level, and SPY vs 200-day MA proximity. Bear transition warnings appear automatically when conditions deteriorate. Alerts Log is accessible via expander at the bottom.
-    * **Ticker Detail:** Deep dive into specific tickers. Evaluate a two-panel Plotly chart (price on top, Argus score with colour bands on bottom — 🟢 ≥75, 🟡 50–75, 🔴 <50), quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq).
-    * **Scans:** Run an on-demand Manual Scan at the top (with optional Telegram delivery), then browse historical database scans with interactive sortable tables and score trend charts below.
+    * **Alerts:** Snapshot of the latest scan results. View the current Market Regime, top picks from the most recent scan, and portfolio alerts. Click "Deep Dive" on any pick to analyse it in detail.
+    * **Deep Dive:** Analyse specific tickers. Evaluate a two-panel Plotly chart (price on top, Argus score with colour bands on bottom — 🟢 ≥75, 🟡 50–75, 🔴 <50), quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq). Search any ticker for a live on-demand rescore.
+    * **History:** Browse historical database scans with interactive sortable tables and score trend charts. Filter by date, profile, and tier.
     * **Journal:** Personal logbook featuring a **Live Portfolio Analytics Dashboard**. Track Total Invested, Current Value, Net Return %, and visualize Sector Diversification via interactive pie charts. Benchmarks portfolio performance against the S&P 500 (SPY). Portfolio Optimizer accessible via expander at the bottom.
-    * **Prediction Model:** ML diagnostics. Review XGBoost hit rates, Brier scores, confusion matrix, feature importance, and calibration accuracy across different market conditions.
-    * **Help:** Full documentation, sidebar settings reference, and curated LLM research prompts for AI-assisted stock analysis.
+    * **Tools:** Three sub-pages — **Manual Scan** (run an on-demand scan with configurable settings and optional Telegram delivery), **ML Model** (XGBoost diagnostics: hit rates, Brier scores, confusion matrix, feature importance), **Docs** (this reference guide and curated LLM research prompts).
 
     ---
     ### 🤖 ML Prediction Model — When Does It Activate?
@@ -3285,7 +3266,7 @@ competitors. Is [TICKER] gaining or losing ground?""", language="text")
     The **Alerts Log** tab reads from `argus_alerts_log.txt`, which is updated in two ways:
 
     1. **GitHub Actions daily scan:** `argus.py` writes the full message to `argus_alerts_log.txt` and then commits it back to the repository. When you pull the latest code, the log file is updated with every automated run.
-    2. **Local manual runs:** Running the scan via the Scans tab also appends to the same file on your local machine.
+    2. **Local manual runs:** Running the scan via **Tools → Manual Scan** also appends to the same file on your local machine.
 
     > **Note:** The Alerts Log shows what was *sent* to Telegram. If a run failed to deliver to Telegram (bad token, rate limit, etc.), the log entry is still written so you can diagnose the issue.
 
@@ -3311,7 +3292,7 @@ competitors. Is [TICKER] gaining or losing ground?""", language="text")
     | ≥ 55 | ⚪ Hold / Watch | Borderline — wait for a catalyst |
     | < 55 | 🔴 Avoid for Now | Poor fundamentals or adverse momentum |
 
-    > The same scoring function is used everywhere — scan cards, Ticker Detail, and manual lookups — so the signal will always match as long as the same market regime is active.
+    > The same scoring function is used everywhere — scan cards, Deep Dive, and manual lookups — so the signal will always match as long as the same market regime is active.
 
     ---
     ### 🎛 Global Presets — Quick Reference
@@ -3349,31 +3330,35 @@ competitors. Is [TICKER] gaining or losing ground?""", language="text")
     > Applying any preset resets all thresholds to these safe defaults automatically.
 
     ---
-    ### ⚡ Auto-Scan Behaviour
+    ### ⚡ Scan Sources
 
-    On app startup, Argus checks whether a scan has already run today (by looking at both the latest CSV and the full results history). If a scan exists for today it skips the auto-scan entirely. This prevents redundant scans after a code push or Streamlit reboot on the same day.
+    Argus has two scan sources:
+    1. **GitHub Actions (automated):** Runs at 07:00, 10:00, and 17:30 ET on weekdays. Results are committed to the repo and synced to Supabase — they appear automatically in the Alerts and History tabs.
+    2. **Manual Scan (Tools → Manual Scan):** On-demand, using your current settings. Results are written to the same history store and optionally sent to Telegram.
 
-    The check uses **two sources** in order:
-    1. `argus_results.csv` — the last committed latest-results file (written by GitHub Actions)
-    2. `argus_results_history.csv` — the full history CSV (now also written by every manual/auto scan)
+    The Alerts tab always shows the most recent scan regardless of source.
 
     ---
-    ### Sidebar Settings Explained
+    ### Settings Reference
 
-    **Quick Scan Settings**
-    * **Minimum Score:** The minimum Argus score required to appear in results (Default: 60).
-    * **Universe Mode:** Controls which slice of the Russell 2000 is scanned. **Fixed Top** always scans the largest-weighted names (fast, consistent). **Random** picks a different subset each run (broader coverage over time). **Full Universe** scans all ~2000 R2000 tickers (~5–10 min).
+    **Sidebar (always visible)**
+    * **UI Mode:** Beginner / Standard / Power — controls which settings are exposed.
+    * **Global Preset:** One-click configuration for common strategies (Default, High Conviction, etc.).
+    * **Unit Value (£):** How much capital 1 unit represents. Argus allocates 1–5 units per HC pick.
+    * **Total Portfolio Size (£):** Used to calculate position % from unit allocations.
+    * **Daily Unit Cap:** Maximum total units deployable in a single scan.
+    * **Send manual run to Telegram:** Whether manual scans post to your Telegram channel.
+    * **Auto-refresh (15 min):** Reloads the page every 15 minutes to show latest GitHub Actions results.
+
+    **Tools → Manual Scan**
+    * **Minimum Score:** The minimum Argus score required to appear in results (Default: 50).
+    * **Universe Mode:** Controls which slice of the Russell 2000 is scanned. **Fixed Top** scans the largest-weighted names (fast, consistent). **Random** picks a different subset each run. **Full Universe** scans all ~2000 R2000 tickers (~5–10 min).
     * **Universe Size:** Number of tickers to scan in Fixed/Random modes (Default: 400).
+    * **Advanced Filters (Standard/Power):** Price Floor, Price Ceiling, Volume Floor.
+    * **Advanced Risk Rules (Power):** Risk per trade %, Max position size %.
+    * **Scoring Thresholds (Power):** Revenue growth bars, ROCE threshold, Gross margin bars, Inst. ownership ceiling.
 
-    **Advanced Filters & Constraints**
-    * **Price Floor ($):** Lowest acceptable stock price, filtering out highly volatile penny stocks.
-    * **Volume Floor:** Minimum average daily trading volume to ensure liquidity (Default: 500,000).
-
-    **ML Prediction Horizons**
+    **Tools → ML Model**
     * **Horizon Days:** The timeframe over which the ML model predicts price movement (Default: 63 days, ~1 quarter).
-    * **Target Return (%):** The target profit percentage the ML model evaluates the stock against (Default: 10%).
-
-    **Advanced Risk Rules**
-    * **Risk per Trade:** The % of your total portfolio you're willing to lose if stopped out (Default: 0.75%).
-    * **Max Position Size:** Maximum portfolio allocation allowed in a single stock, forcing diversification (Default: 8.0%).
+    * **Target Return (%):** The minimum % gain the ML model considers a 'hit' (Default: 10%).
     ''')
