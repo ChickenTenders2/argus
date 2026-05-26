@@ -1750,45 +1750,47 @@ if active_tab == "Alerts":
     if _gh_label:
         st.info(f"📡 Latest synced results — {_gh_label}", icon=None)
 
+    st.markdown(
+        "<style>.argus-brief-card{min-height:110px}</style>",
+        unsafe_allow_html=True,
+    )
     _bc1, _bc2, _bc3 = st.columns(3)
 
     with _bc1:
         with st.container(border=True):
+            st.markdown('<div class="argus-brief-card">', unsafe_allow_html=True)
             st.markdown("**📡 Market Regime**")
-            st.markdown(f":{r_color}[**{regime['regime']}**] · *{regime['reason']}* · Mult **{regime['multiplier']}x**")
-            st.caption(
-                f"VIX: :{vix_color}[**{vix_str}**] · SPY vs 200MA: :{gap_color}[**{gap_label}**]"
-            )
-            st.caption(f"Last scan: **{scan_date_display}** · Refreshes every hour")
+            st.markdown(f":{r_color}[**{regime['regime']}**] · ×{regime['multiplier']}")
+            st.caption(f"VIX: :{vix_color}[**{vix_str}**] · SPY vs 200MA: :{gap_color}[**{gap_label}**]")
+            st.caption(f"*{regime['reason']}*")
+            st.markdown('</div>', unsafe_allow_html=True)
 
     with _bc2:
         with st.container(border=True):
+            st.markdown('<div class="argus-brief-card">', unsafe_allow_html=True)
             st.markdown("**🏆 Top 3 Today**")
             if not latest_df.empty:
                 _top3 = latest_df.sort_values("score", ascending=False).head(3)
+                _top3_lines = ""
                 for _ri, (_, _tr) in enumerate(_top3.iterrows(), 1):
                     _sig_lbl, _sig_col = get_signal_label(_tr.get("score", 0))
-                    _vel = _tr.get("score_velocity", 0) or 0
-                    _vel_html = render_velocity_badge(_vel)
-                    _cat_html = render_catalyst_pills(
-                        json.loads(_tr["reasons"]) if isinstance(_tr.get("reasons"), str) and _tr["reasons"].startswith("[") else (_tr.get("reasons") or [])
+                    _tier_dot = "🟢" if "HIGH" in str(_tr.get("tier", "")) else "🟡"
+                    _top3_lines += (
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                        f'padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)">'
+                        f'<span style="font-weight:700;color:#e8eef7">{_tier_dot} #{_ri} {_tr["ticker"]}</span>'
+                        f'<span style="font-weight:700;color:#00d4ff;font-size:0.9rem">{int(_tr["score"])}</span>'
+                        f'</div>'
                     )
-                    st.markdown(
-                        f'<div style="margin-bottom:6px;padding:6px 8px;background:#111e35;border-radius:6px;border:1px solid rgba(0,212,255,0.12)">'
-                        f'<span style="font-weight:700;color:#e8eef7">#{_ri} {_tr["ticker"]}</span>'
-                        f'<span style="float:right;font-weight:700;color:#00d4ff">{int(_tr["score"])}</span>'
-                        f'<br><span style="font-size:0.72rem;color:#8ea0ba">{_tr.get("sector","")}</span>'
-                        f'{" " + _vel_html if _vel_html else ""}'
-                        f'{("<br>" + _cat_html) if _cat_html else ""}'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
+                st.markdown(_top3_lines, unsafe_allow_html=True)
                 st.caption(f"Scan: **{scan_date_display}**")
             else:
                 st.caption("No scan data yet — run a scan to see picks.")
+            st.markdown('</div>', unsafe_allow_html=True)
 
     with _bc3:
         with st.container(border=True):
+            st.markdown('<div class="argus-brief-card">', unsafe_allow_html=True)
             st.markdown("**⚠️ Portfolio Alerts**")
             if _briefing_alerts:
                 for _a in _briefing_alerts[:3]:
@@ -1798,6 +1800,7 @@ if active_tab == "Alerts":
             else:
                 st.success("All positions within bounds ✅", icon="✅")
             st.caption("Auto-monitored vs. open journal positions.")
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # ── FRED Macro Signal Cards ───────────────────────────────────────────────
     _macro_from_regime = bool(regime.get("macro"))
