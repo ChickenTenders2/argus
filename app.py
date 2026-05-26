@@ -1066,7 +1066,7 @@ if "min_score" not in st.session_state or st.session_state.get("_score_version")
     st.session_state["_score_version"] = 2
 def nav_to_ticker(t):
     st.session_state["selected_ticker"] = t
-    st.session_state["main_tabs"] = "Ticker Detail"
+    st.session_state["main_tabs"] = "Deep Dive"
 
 
 @st.dialog("⚡ Quick Log Trade")
@@ -1420,7 +1420,7 @@ with st.sidebar:
     st.markdown('<p style="font-size:0.9rem;font-weight:700;margin:0 0 4px">👁 Navigate</p>', unsafe_allow_html=True)
     active_tab = st.radio(
         "Navigate",
-        ["Overview", "Scans", "Ticker Detail", "Journal", "Prediction Model", "Docs"],
+        ["Alerts", "Deep Dive", "History", "Journal", "Tools"],
         key="main_tabs",
         label_visibility="collapsed",
     )
@@ -1600,69 +1600,6 @@ if os.path.exists(config.RESULTS_FILE):
 else:
     latest_df = pd.DataFrame()
 
-# ── Auto-scan on load: fire only if no scan has run today (any source) ──
-_today_str = datetime.now().strftime("%Y-%m-%d")
-_latest_scan_date = (
-    str(latest_df["scan_date"].iloc[0])[:10]
-    if not latest_df.empty and "scan_date" in latest_df.columns
-    else ""
-)
-# Also check full history DB/CSV — more comprehensive than just the latest-results file.
-# This ensures a scan committed via GH Actions or run earlier in the session is detected.
-_history_has_today = (
-    not history_df.empty
-    and "scan_date" in history_df.columns
-    and history_df["scan_date"].astype(str).str[:10].eq(_today_str).any()
-)
-_prefs_scan_date = st.session_state.prefs.get("last_auto_scan_date", "")
-_has_scan_today = (_latest_scan_date == _today_str) or _history_has_today or (_prefs_scan_date == _today_str)
-
-_auto_scan_ran = False
-if not _has_scan_today and not st.session_state.get("_auto_scan_done_today", False):
-    with st.status("🔄 Running today's auto-scan…", expanded=True) as _auto_st:
-        st.write(f"No scan found for today ({_today_str}). Starting automated scan…")
-        try:
-            _prog_bar = st.progress(0, text="Initialising scan…")
-            _prog_text = st.empty()
-
-            def _auto_progress(current, total, ticker):
-                pct = int(current / total * 100) if total else 0
-                _prog_bar.progress(pct / 100, text=f"Scanning {current}/{total} — {ticker}")
-                _prog_text.caption(f"⏳ {total - current} tickers remaining")
-
-            _auto_payload = run_scan(
-                config=config,
-                scan_limit=scan_limit,
-                shuffle=_scan_shuffle,
-                update_memory=True,
-                run_type="auto",
-                progress_fn=_auto_progress,
-            )
-            _prog_bar.progress(1.0, text="✅ Scan complete")
-            _prog_text.empty()
-            save_results(
-                results=_auto_payload["results"],
-                scan_date=_auto_payload["scan_date"],
-                scan_timestamp=_auto_payload["scan_timestamp"],
-                run_type="auto",
-                latest_file=config.RESULTS_FILE,
-                history_file=config.RESULTS_HISTORY_FILE,
-                write_latest=True,
-                feature_file=config.FEATURES_FILE,
-            )
-            st.session_state["_auto_scan_done_today"] = True
-            st.session_state.prefs["last_auto_scan_date"] = _today_str
-            save_prefs(st.session_state.prefs)
-            _n_auto = len(_auto_payload["results"])
-            _auto_st.update(label=f"✅ Auto-scan complete — {_n_auto} picks found.", state="complete")
-            _auto_scan_ran = True
-        except Exception as _ae:
-            # Do NOT mark done-today on failure — allow the next page load to retry
-            _auto_st.update(label=f"⚠️ Auto-scan failed: {_ae}", state="error")
-
-if _auto_scan_ran:
-    st.rerun()
-
 # ── Persistent regime strip (shown on all tabs) ───────────────────────────
 _strip_regime = cached_market_regime()
 _strip_color_map = {
@@ -1728,8 +1665,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if active_tab == "Overview":
-    st.subheader("📡 Latest Scheduled Scan")
+if active_tab == "Alerts":
+    st.subheader("📡 Alerts — Latest Picks")
 
     # ── Today's Briefing — 3-column card ─────────────────────────────────────
     regime = cached_market_regime()
@@ -1899,174 +1836,48 @@ if active_tab == "Overview":
             st.info(f"📊 **Caution zone:** SPY {gap:.1f}% above 200MA with VIX at {_vix_num:.1f}. Not yet bearish, but elevated volatility warrants attention.")
     st.markdown("---")
 
-    if latest_df.empty:
-        st.info("No latest scheduled results yet.")
+    # ── Top picks from latest scan ────────────────────────────────────────────
+    _picks_src = _gh_batch if not _gh_batch.empty else (latest_df if not latest_df.empty else pd.DataFrame())
+    if _picks_src.empty:
+        st.info("No scan results yet. GitHub Actions populates this automatically (Mon–Fri at 07:00, 10:00, 17:30 ET).")
     else:
-        latest_view = latest_df.copy()
-        latest_view = add_predictions(latest_view, model)
-        latest_view = add_risk_guidance(
-            latest_view,
-            model,
-            risk_per_trade_pct=risk_per_trade_pct,
-            max_position_pct=max_position_pct,
-        )
-        scan_date = latest_view["scan_date"].iloc[0] if "scan_date" in latest_view.columns else "Unknown"
-        st.caption(f"Scan date: {scan_date} · {len(latest_view)} picks")
-
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            with st.container(border=True):
-                st.metric("Picks", str(len(latest_view)), help="Total Passed")
-        with c2:
-            with st.container(border=True):
-                st.metric("High Conviction", str(int((latest_view["tier"] == "🟢 HIGH CONVICTION").sum())), help="Score >= 80")
-        with c3:
-            with st.container(border=True):
-                st.metric("Avg Score", f"{latest_view['score'].mean():.1f}", help="Argus Rating")
-        with c4:
-            with st.container(border=True):
-                if "prob_upside" in latest_view.columns and latest_view["prob_upside"].notna().any():
-                    st.metric("Avg Upside Prob", f"{latest_view['prob_upside'].mean() * 100:.1f}%", help="ML Projected")
-                else:
-                    st.metric("Avg Upside Prob", "N/A", help="ML Projected")
-
-        if HAS_EXTRAS:
-            try:
-                style_metric_cards(border_left_color="#00b4d8", border_color="#262730", background_color="#0e1117")
-            except Exception:
-                pass
-
-        display_cols = [
-            "ticker", "sector", "score", "tier", "reasons", "price", "mkt_cap",
-            "prob_upside", "scenario_bear", "scenario_base", "scenario_bull",
-            "confidence", "suggested_position_pct", "stop_loss_pct", "take_profit_pct", "entry_style",
-            "p_score",
-        ]
-        latest_view = format_pct_columns(
-            latest_view,
-            ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"],
-        )
-        
-        subset_view = latest_view[[c for c in display_cols if c in latest_view.columns]].copy()
-
-        # ── Unit Sizing ────────────────────────────────────────────────────────
-        _uv    = st.session_state.prefs.get("unit_value", 250)
-        _udcap = st.session_state.prefs.get("daily_unit_cap", 12)
-        with st.spinner("Computing unit allocations…"):
-            subset_view = compute_unit_sizing(subset_view, unit_value=_uv, daily_cap=_udcap)
-
-        _total_units = int(subset_view["units_final"].sum()) if "units_final" in subset_view.columns else 0
-        _total_capital = _total_units * _uv
-        _cap_pct = f"{(_total_capital / (_udcap * _uv)) * 100:.0f}%" if _udcap * _uv > 0 else "0%"
-        with st.container(border=True):
-            _su1, _su2, _su3 = st.columns(3)
-            _su1.metric(
-                "📦 Scan Total Units",
-                f"{_total_units} / {_udcap}",
-                help=f"Total units allocated across all HIGH CONVICTION picks. Daily hard cap is {_udcap} units.",
+        _top_picks = _picks_src.sort_values("score", ascending=False).copy()
+        _show5 = _top_picks.head(5)
+        st.markdown("### 🎯 Latest Picks")
+        for _pi, (_, _pr) in enumerate(_show5.iterrows(), 1):
+            _vel2 = _pr.get("score_velocity", 0) or 0
+            _vel_html2 = render_velocity_badge(_vel2)
+            _reasons2 = (
+                json.loads(_pr["reasons"])
+                if isinstance(_pr.get("reasons"), str) and _pr["reasons"].startswith("[")
+                else (_pr.get("reasons") or [])
             )
-            _su2.metric(
-                "💷 Capital to Deploy",
-                f"£{_total_capital:,}",
-                help=f"Total capital = total units × £{_uv} per unit.",
-            )
-            _su3.metric(
-                "📊 Cap Usage",
-                _cap_pct,
-                help=f"How much of the £{_udcap * _uv:,} daily hard cap is being used.",
-            )
-
-        # ── Sector conviction heatmap ─────────────────────────────────────────
-        with st.expander("🗺️ Sector Conviction Heatmap", expanded=False):
-            render_sector_heatmap(subset_view)
-
-        # ── Catalyst calendar (earnings this week for HC picks) ───────────────
-        _hc_picks = subset_view[subset_view.get("tier", "").str.contains("HIGH CONVICTION", na=False)] if "tier" in subset_view.columns else pd.DataFrame()
-        if not _hc_picks.empty:
-            with st.expander("📅 Earnings Calendar (HC Picks)", expanded=False):
-                render_catalyst_calendar(_hc_picks)
-
-        # Display the visual card grid instead of a flat table
-        display_cards(subset_view, cols_per_row=5, compact=True)
-
-        with st.expander("Show Raw Data Table"):
-            _export_view = subset_view.copy()
-            if "reasons" in _export_view.columns:
-                _export_view["reasons"] = _export_view["reasons"].apply(format_reasons)
-            if "units_modifiers" in _export_view.columns:
-                _export_view["units_modifiers"] = _export_view["units_modifiers"].apply(
-                    lambda x: " · ".join(x) if isinstance(x, list) else str(x)
+            _cat_html2 = render_catalyst_pills(_reasons2)
+            _pc1, _pc2 = st.columns([6, 1])
+            with _pc1:
+                st.markdown(
+                    f'<div style="padding:8px 12px;background:#111e35;border-radius:8px;border:1px solid rgba(0,212,255,0.15);margin-bottom:6px">'
+                    f'<span style="font-weight:700;font-size:1rem;color:#e8eef7">#{_pi} {_pr["ticker"]}</span>'
+                    f'<span style="float:right;font-weight:700;color:#00d4ff">{int(_pr.get("score", 0))}/100</span>'
+                    f'<br><span style="font-size:0.76rem;color:#8ea0ba">{_pr.get("sector", "")}</span>'
+                    f'{"&nbsp;" + _vel_html2 if _vel_html2 else ""}'
+                    f'{("<br>" + _cat_html2) if _cat_html2 else ""}'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
-            
-            st.dataframe(
-                _export_view, 
-                use_container_width=True,
-                column_config={
-                    "score": st.column_config.ProgressColumn(
-                        "Score",
-                        help="Argus Score Rating",
-                        format="%d",
-                        min_value=0,
-                        max_value=100,
-                    ),
-                    "prob_upside": st.column_config.ProgressColumn(
-                        "Upside Prob (%)",
-                        help="ML Upside Probability",
-                        format="%.1f%%",
-                        min_value=0,
-                        max_value=100,
-                    ),
-                    "reasons": st.column_config.TextColumn(
-                        "Metrics & Reasons",
-                        help="Fundamental and Technical Drivers",
-                        width="large"
-                    )
-                }
-            )
-            _csv_export = _export_view.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇️ Download Results CSV (with unit sizing)",
-                data=_csv_export,
-                file_name=f"argus_results_{scan_date}.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-
-        st.markdown("### 🔍 Stock Deep Dive")
-        c1, c2 = st.columns([1, 10])
-        with c1:
-            diveticker = st.selectbox("Select Ticker", subset_view["ticker"].tolist(), key="deep_dive_selectbox", label_visibility="collapsed")
-        with c2:
-            st.button(
-                "Analyze", 
-                key="btn_deep_dive_analyze",
-                on_click=nav_to_ticker,
-                args=(st.session_state.get("deep_dive_selectbox", ""),)
-            )
-
-    st.markdown("---")
-    with st.expander("🔔 Alerts Log — Telegram Notification History"):
-        st.caption("Historical record of all push notifications sent by Argus.")
-        try:
-            with open("argus_alerts_log.txt", "r", encoding="utf-8") as _alf:
-                _logs = _alf.read()
-            if _logs.strip():
-                _entries = re.findall(
-                    r'--- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ---\n(.*?)(?=--- \d{4}-\d{2}-\d{2}|\Z)',
-                    _logs, re.DOTALL
+            with _pc2:
+                st.button(
+                    "🔍 Deep Dive",
+                    key=f"dd_btn_{_pr['ticker']}_{_pi}",
+                    on_click=nav_to_ticker,
+                    args=(_pr["ticker"],),
+                    use_container_width=True,
                 )
-                if _entries:
-                    for _ds, _msg in reversed(_entries[:20]):
-                        _msg = _msg.strip()
-                        if _msg:
-                            st.markdown(f"**{_ds}**")
-                            st.info(_msg)
-                else:
-                    st.caption("No alerts logged yet.")
-            else:
-                st.caption("No alerts logged yet.")
-        except FileNotFoundError:
-            st.caption("No alerts logged yet.")
+
+        if len(_top_picks) > 5:
+            with st.expander(f"Show {len(_top_picks) - 5} more picks"):
+                display_cards(_top_picks.iloc[5:].copy(), cols_per_row=3, compact=True)
+
 
     # ── Auto-refresh (fires after all Overview content renders) ───────────────
     if st.session_state.get("auto_refresh_enabled"):
@@ -2078,146 +1889,7 @@ if active_tab == "Overview":
             st.cache_data.clear()
             st.rerun()
 
-if active_tab == "Scans":
-    st.subheader("⚙️ Manual Scan")
-    st.caption("Use this for weekend/on-demand runs. Results are written to history + feature store.")
-    if st.button("🚀 Run Global Scan", key="btn_run_scan"):
-        st.info(f"Scan executing using preset: **{st.session_state.preset_selector}**")
-        _lottie_ph = st.empty()
-        if HAS_LOTTIE:
-            _anim = _load_lottie("https://assets5.lottiefiles.com/packages/lf20_qp1q7mct.json")
-            if _anim:
-                with _lottie_ph:
-                    st_lottie(_anim, height=130, key="scan_lottie", speed=1, loop=True)
-
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        def scan_progress_cb(ticker, idx, total):
-            progress = (idx + 1) / total
-            progress_bar.progress(progress)
-            status_text.text(f"Scanning {ticker}... ({idx + 1}/{total})")
-
-        with st.spinner("Scanning tickers..."):
-            payload = run_scan(config=config, scan_limit=scan_limit, shuffle=_scan_shuffle, update_memory=True, progress_callback=scan_progress_cb, run_type="manual")
-            status_text.text("Scan complete!")
-            results = payload["results"]
-            scan_date = payload["scan_date"]
-            scan_timestamp = payload["scan_timestamp"]
-            scanned_count = payload["scanned_count"]
-            filtered_count = payload.get("filtered_count", 0)
-
-            save_results(
-                results=results,
-                scan_date=scan_date,
-                scan_timestamp=scan_timestamp,
-                run_type="manual",
-                latest_file=config.RESULTS_FILE,
-                history_file=config.RESULTS_HISTORY_FILE,
-                write_latest=True,
-                feature_file=config.FEATURES_FILE,
-            )
-
-        _lottie_ph.empty()
-        _h1, _h2, _h3 = st.columns(3)
-        _h1.metric("Scanned", scanned_count)
-        _h2.metric("Picked", len(results))
-        _h3.metric("Filtered / Skipped", filtered_count)
-        if results:
-            regime = cached_market_regime()
-            st.success(f"{len(results)} picks met requirements in {regime['regime']} regime.")
-            df_res = pd.DataFrame(results).sort_values("score", ascending=False)
-            df_res = add_predictions(df_res, model)
-            df_res = add_risk_guidance(df_res, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
-            if "suggested_position_pct" in df_res.columns:
-                _total_alloc = df_res["suggested_position_pct"].sum()
-                if _total_alloc > 100:
-                    st.warning(
-                        f"⚠️ **Over-allocation:** Suggested position sizes sum to **{_total_alloc:.1f}%** "
-                        f"across {len(df_res)} picks — exceeds 100% of portfolio. "
-                        f"Review allocations before deploying capital."
-                    )
-            df_res = format_pct_columns(df_res, ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"])
-            _uv_scan = st.session_state.prefs.get("unit_value", 250)
-            with st.spinner("Computing unit allocations…"):
-                df_res = compute_unit_sizing(df_res, unit_value=_uv_scan, daily_cap=st.session_state.prefs.get('daily_unit_cap', 12))
-            _scan_total_units = int(df_res["units_final"].sum()) if "units_final" in df_res.columns else 0
-            _scan_total_capital = _scan_total_units * _uv_scan
-            with st.container(border=True):
-                _ms1, _ms2, _ms3 = st.columns(3)
-                _ms1.metric("📦 Total Units", f"{_scan_total_units} / {st.session_state.prefs.get('daily_unit_cap', 12)}")
-                _ms2.metric("💷 Capital to Deploy", f"£{_scan_total_capital:,}")
-                _ms3.metric("1 Unit =", f"£{_uv_scan:,}")
-            display_cards(df_res)
-            with st.expander("Show Raw Discovery Table"):
-                _df_res_export = df_res.copy()
-                if "reasons" in _df_res_export.columns:
-                    _df_res_export["reasons"] = _df_res_export["reasons"].apply(format_reasons)
-                if "units_modifiers" in _df_res_export.columns:
-                    _df_res_export["units_modifiers"] = _df_res_export["units_modifiers"].apply(
-                        lambda x: " · ".join(x) if isinstance(x, list) else str(x)
-                    )
-                st.dataframe(_df_res_export, use_container_width=True)
-                _scan_csv = _df_res_export.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "⬇️ Download Scan CSV (with unit sizing)",
-                    data=_scan_csv,
-                    file_name=f"argus_manual_scan_{scan_date}.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
-            st.subheader("High Conviction Charts (Score >= 80)")
-            high_conviction = df_res[df_res["tier"] == "🟢 HIGH CONVICTION"]
-            if not high_conviction.empty:
-                cols = st.columns(3)
-                for idx, row in high_conviction.reset_index(drop=True).iterrows():
-                    with cols[idx % 3]:
-                        st.write(f"**{row['ticker']}** - Score: {row['score']}")
-                        hist = fetch_ticker_history(row["ticker"], period="6mo")
-                        if not hist.empty:
-                            safe_line_chart(hist["Close"], y_label="close")
-                        else:
-                            st.write("No history available")
-            else:
-                st.info("No high conviction picks found in this run.")
-        else:
-            st.warning("No tickers met the current criteria.")
-            with st.expander("🔍 Diagnostic — Why no results?"):
-                st.write("**Active thresholds most likely to restrict results:**")
-                st.write(f"- Min Score: **{min_score}** (lower = more picks)")
-                st.write(f"- Rev Growth (full pts): **≥{st.session_state.get('rev_growth_high', 30)}%** · (partial): **≥{st.session_state.get('rev_growth_low', 20)}%**")
-                st.write(f"- Inst. Ownership Ceiling: **<{st.session_state.get('inst_own_ceiling', 40)}%** (too low = very few qualify)")
-                st.write(f"- Vol Floor: **{int(vol_floor):,}** · Price Floor: **${price_floor:.2f}**")
-                st.caption("💡 Switch to the **Default** preset in the sidebar to reset all thresholds, then re-run.")
-
-        if send_to_telegram:
-            alerts = monitor_portfolio()
-            message = generate_telegram_message(
-                results,
-                scanned_count,
-                title="Argus Manual Scan",
-                date_str=datetime.now().strftime('%d %b %Y %H:%M'),
-                alerts=alerts
-            )
-            if results and "units_final" in df_res.columns:
-                _tg_unit_parts = [
-                    f"{r['ticker']}={int(r['units_final'])}u (£{int(r['units_final']) * _uv_scan:,})"
-                    for _, r in df_res[df_res["units_final"] > 0].iterrows()
-                ]
-                if _tg_unit_parts:
-                    message += (
-                        f"\n{'─'*30}\n"
-                        f"💷 *Unit Sizing* (1u = £{_uv_scan:,})\n"
-                        + "\n".join(_tg_unit_parts)
-                        + f"\n_Total: {_scan_total_units}u / £{_scan_total_capital:,}_"
-                    )
-            delivered = send_telegram_message(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID, message)
-            if delivered:
-                st.success("Manual run sent to Telegram.")
-            else:
-                st.error("Could not send to Telegram. Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.")
-
-    st.divider()
+if active_tab == "History":
     st.subheader("🗂 Scan History")
     if history_df.empty:
         st.info("No history file yet.")
@@ -2333,8 +2005,8 @@ if active_tab == "Scans":
                     use_container_width=True,
                 )
 
-if active_tab == "Ticker Detail":
-    st.subheader("🔎 Ticker Detail")
+if active_tab == "Deep Dive":
+    st.subheader("🔎 Ticker Deep Dive")
 
     with st.container(border=True):
         st.markdown("**🔍 Search Any Ticker — Manual Lookup**")
@@ -3089,7 +2761,145 @@ if active_tab == "Journal":
                         _wd2["Weight"] = _wd2["Weight"].apply(lambda x: f"{x*100:.1f}%")
                         st.dataframe(_wd2, use_container_width=True)
 
-if active_tab == "Prediction Model":
+_tools_subtab = ""
+if active_tab == "Tools":
+    _tools_subtab = st.radio(
+        "tools_nav",
+        ["🔍 Manual Scan", "📈 ML Model", "📚 Docs"],
+        horizontal=True,
+        key="tools_nav",
+        label_visibility="collapsed",
+    )
+    st.divider()
+
+if active_tab == "Tools" and _tools_subtab == "🔍 Manual Scan":
+    st.caption("On-demand scan. Results are written to history + feature store.")
+    if st.button("🚀 Run Global Scan", key="btn_run_scan"):
+        st.info(f"Scan executing using preset: **{st.session_state.preset_selector}**")
+        _lottie_ph_t = st.empty()
+        if HAS_LOTTIE:
+            _anim_t = _load_lottie("https://assets5.lottiefiles.com/packages/lf20_qp1q7mct.json")
+            if _anim_t:
+                with _lottie_ph_t:
+                    st_lottie(_anim_t, height=130, key="scan_lottie_tools", speed=1, loop=True)
+
+        _prog_t = st.progress(0)
+        _status_t = st.empty()
+
+        def scan_progress_cb(ticker, idx, total):
+            _prog_t.progress((idx + 1) / total)
+            _status_t.text(f"Scanning {ticker}... ({idx + 1}/{total})")
+
+        with st.spinner("Scanning tickers..."):
+            _payload_t = run_scan(
+                config=config, scan_limit=scan_limit, shuffle=_scan_shuffle,
+                update_memory=True, progress_callback=scan_progress_cb, run_type="manual",
+            )
+            _status_t.text("Scan complete!")
+            results = _payload_t["results"]
+            scan_date = _payload_t["scan_date"]
+            scan_timestamp = _payload_t["scan_timestamp"]
+            scanned_count = _payload_t["scanned_count"]
+            filtered_count = _payload_t.get("filtered_count", 0)
+            save_results(
+                results=results,
+                scan_date=scan_date,
+                scan_timestamp=scan_timestamp,
+                run_type="manual",
+                latest_file=config.RESULTS_FILE,
+                history_file=config.RESULTS_HISTORY_FILE,
+                write_latest=True,
+                feature_file=config.FEATURES_FILE,
+            )
+
+        _lottie_ph_t.empty()
+        _h1, _h2, _h3 = st.columns(3)
+        _h1.metric("Scanned", scanned_count)
+        _h2.metric("Picked", len(results))
+        _h3.metric("Filtered / Skipped", filtered_count)
+        if results:
+            _reg_t = cached_market_regime()
+            st.success(f"{len(results)} picks met requirements in {_reg_t['regime']} regime.")
+            df_res = pd.DataFrame(results).sort_values("score", ascending=False)
+            df_res = add_predictions(df_res, model)
+            df_res = add_risk_guidance(df_res, model, risk_per_trade_pct=risk_per_trade_pct, max_position_pct=max_position_pct)
+            if "suggested_position_pct" in df_res.columns:
+                _total_alloc_t = df_res["suggested_position_pct"].sum()
+                if _total_alloc_t > 100:
+                    st.warning(f"⚠️ **Over-allocation:** {_total_alloc_t:.1f}% across {len(df_res)} picks — exceeds 100% of portfolio.")
+            df_res = format_pct_columns(df_res, ["prob_upside", "scenario_bear", "scenario_base", "scenario_bull"])
+            _uv_scan = st.session_state.prefs.get("unit_value", 250)
+            with st.spinner("Computing unit allocations…"):
+                df_res = compute_unit_sizing(df_res, unit_value=_uv_scan, daily_cap=st.session_state.prefs.get("daily_unit_cap", 12))
+            _scan_total_units = int(df_res["units_final"].sum()) if "units_final" in df_res.columns else 0
+            _scan_total_capital = _scan_total_units * _uv_scan
+            with st.container(border=True):
+                _ms1, _ms2, _ms3 = st.columns(3)
+                _ms1.metric("📦 Total Units", f"{_scan_total_units} / {st.session_state.prefs.get('daily_unit_cap', 12)}")
+                _ms2.metric("💷 Capital to Deploy", f"£{_scan_total_capital:,}")
+                _ms3.metric("1 Unit =", f"£{_uv_scan:,}")
+            display_cards(df_res)
+            with st.expander("Show Raw Discovery Table"):
+                _df_res_export = df_res.copy()
+                if "reasons" in _df_res_export.columns:
+                    _df_res_export["reasons"] = _df_res_export["reasons"].apply(format_reasons)
+                if "units_modifiers" in _df_res_export.columns:
+                    _df_res_export["units_modifiers"] = _df_res_export["units_modifiers"].apply(
+                        lambda x: " · ".join(x) if isinstance(x, list) else str(x)
+                    )
+                st.dataframe(_df_res_export, use_container_width=True)
+                st.download_button(
+                    "⬇️ Download Scan CSV",
+                    data=_df_res_export.to_csv(index=False).encode("utf-8"),
+                    file_name=f"argus_manual_scan_{scan_date}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            st.subheader("High Conviction Charts (Score ≥ 80)")
+            _hc_t = df_res[df_res["tier"] == "🟢 HIGH CONVICTION"]
+            if not _hc_t.empty:
+                _hc_cols = st.columns(3)
+                for _hci, _hcrow in _hc_t.reset_index(drop=True).iterrows():
+                    with _hc_cols[_hci % 3]:
+                        st.write(f"**{_hcrow['ticker']}** — Score: {_hcrow['score']}")
+                        _hch = fetch_ticker_history(_hcrow["ticker"], period="6mo")
+                        if not _hch.empty:
+                            safe_line_chart(_hch["Close"], y_label="close")
+                        else:
+                            st.write("No history available")
+            else:
+                st.info("No high conviction picks found in this run.")
+        else:
+            st.warning("No tickers met the current criteria.")
+            with st.expander("🔍 Diagnostic — Why no results?"):
+                st.write(f"- Min Score: **{min_score}** · Rev Growth ≥**{st.session_state.get('rev_growth_high', 30)}%** · Vol Floor: **{int(vol_floor):,}**")
+                st.caption("Switch to the **Default** preset in the sidebar to reset all thresholds, then re-run.")
+
+        if send_to_telegram and results:
+            _alerts_t = monitor_portfolio()
+            _msg_t = generate_telegram_message(
+                results, scanned_count,
+                title="Argus Manual Scan",
+                date_str=datetime.now().strftime("%d %b %Y %H:%M"),
+                alerts=_alerts_t,
+            )
+            if "units_final" in df_res.columns:
+                _tg_parts = [
+                    f"{r['ticker']}={int(r['units_final'])}u (£{int(r['units_final']) * _uv_scan:,})"
+                    for _, r in df_res[df_res["units_final"] > 0].iterrows()
+                ]
+                if _tg_parts:
+                    _msg_t += (
+                        f"\n{'─'*30}\n💷 *Unit Sizing* (1u = £{_uv_scan:,})\n"
+                        + "\n".join(_tg_parts)
+                        + f"\n_Total: {_scan_total_units}u / £{_scan_total_capital:,}_"
+                    )
+            if send_telegram_message(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID, _msg_t):
+                st.success("Manual run sent to Telegram.")
+            else:
+                st.error("Could not send to Telegram. Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.")
+
+if active_tab == "Tools" and _tools_subtab == "📈 ML Model":
     st.subheader("📈 ML Prediction Model Quality")
 
     with st.expander("📖 How to activate the Prediction Model", expanded=not model.get("ready", False)):
@@ -3235,7 +3045,7 @@ It uses these features per stock: overall score, sub-scores (Fundamentals, Momen
         st.markdown("**Calibration table**")
         st.dataframe(calibration, use_container_width=True)
 
-if active_tab == "Docs":
+if active_tab == "Tools" and _tools_subtab == "📚 Docs":
     st.title("📚 Docs & Reference")
 
     # ── Quick-access: Copy Tickers ────────────────────────────────────────
