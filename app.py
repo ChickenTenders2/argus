@@ -1481,24 +1481,11 @@ with st.sidebar:
         help="Beginner: quick scan only  ·  Standard: + advanced filters & ML  ·  Power: full control",
     )
 
-    st.markdown('<p style="font-size:0.82rem;font-weight:700;margin:8px 0 2px;color:#aaa;text-transform:uppercase;letter-spacing:0.05em">Quick Scan</p>', unsafe_allow_html=True)
-    min_score = st.slider("Minimum Score", 50, 95, key="min_score")
-    universe_mode = st.radio(
-        "Universe Mode",
-        ["🔒 Fixed Top", "🎲 Random", "🌐 Full Universe"],
-        key="universe_mode",
-        help="Fixed Top: always scans the largest-weighted R2000 stocks (consistent, fast). Random: different subset each run (broader coverage). Full Universe: all ~2000 R2000 tickers (most thorough, ~5–10 min).",
-    )
-    if universe_mode == "🌐 Full Universe":
-        scan_limit = None
-        _scan_shuffle = True
-        st.caption("⏱ ~5–10 min · scanning all ~2000 Russell 2000 tickers")
-    else:
-        scan_limit = st.slider("Universe size", 50, 800, 400, step=50,
-            help="Number of tickers to scan. ~200 ≈ 1 min · ~400 ≈ 2 min · ~800 ≈ 4 min.")
-        _scan_shuffle = (universe_mode == "🎲 Random")
-
-    # Defaults so Beginner mode doesn't NameError — widgets override when visible
+    # Scan settings live in Tools → Manual Scan; just read defaults from session_state here
+    min_score        = st.session_state.get("min_score", 50)
+    universe_mode    = st.session_state.get("universe_mode", "🌐 Full Universe")
+    scan_limit       = None if universe_mode == "🌐 Full Universe" else st.session_state.get("_scan_limit", 400)
+    _scan_shuffle    = universe_mode in ("🎲 Random", "🌐 Full Universe")
     price_floor      = st.session_state.get("price_floor", 2.00)
     price_ceiling    = st.session_state.get("price_ceiling", 0.0)
     vol_floor        = st.session_state.get("vol_floor", 500000)
@@ -1512,46 +1499,6 @@ with st.sidebar:
     gross_margin_high = st.session_state.get("gross_margin_high", 60) / 100
     gross_margin_low  = st.session_state.get("gross_margin_low", 40) / 100
     inst_own_ceiling  = st.session_state.get("inst_own_ceiling", 40) / 100
-
-    if st.session_state.get("ui_mode", "Standard") in ("Standard", "Power"):
-     with st.expander("Advanced Filters & Constraints"):
-        price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor",
-            help="Minimum stock price to include. Filters out very cheap penny stocks that may have high volatility or low quality. Default: $2.00.")
-        price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling",
-            help="Maximum stock price to include. Set to 0 to disable. Useful for budget-constrained strategies (e.g. Penny Stock High Risk preset sets this to $10).")
-        vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor",
-            help="Minimum average daily trading volume. Higher values ensure you can enter/exit positions without slippage. Default: 500,000 shares/day.")
-
-    if st.session_state.get("ui_mode", "Standard") in ("Standard", "Power"):
-     with st.expander("ML Prediction Horizons"):
-        horizon_days = st.selectbox("Horizon days", [21, 42, 63, 84, 126], key="horizon_days",
-            help="The future time window (in trading days) the ML model uses to assess whether a stock hit the target return. 63 days ≈ 1 quarter. Longer horizons capture slower trends; shorter ones target quick breakouts.")
-        target_return = st.slider("Target return (%)", 1, 100, key="target_return",
-            help="The minimum % gain the ML model considers a 'hit'. A stock is labeled a success if it returns ≥ this value within the Horizon Days. Higher targets are harder to hit but filter for stronger momentum.") / 100.0
-
-    if st.session_state.get("ui_mode", "Standard") == "Power":
-     with st.expander("Advanced Risk Rules"):
-        risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct",
-            help="The maximum % of your total portfolio you are willing to lose if a position hits its stop-loss. Argus uses this to compute the suggested position size. Lower = more conservative. Default: 0.75%.")
-        max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
-            help="Hard cap on how large any single position can be as a % of your total portfolio. Prevents over-concentration even when the risk formula suggests a larger size. Default: 8.0%.")
-
-
-    if st.session_state.get("ui_mode", "Standard") == "Power":
-     with st.expander("Scoring Thresholds"):
-        st.caption("Tune the quality bars used in the scoring algorithm.")
-        rev_growth_high = st.slider("Rev Growth (full pts, %)", 10, 50, key="rev_growth_high",
-            help="Revenue growth ≥ this → 20 pts. Default: 30%.") / 100
-        rev_growth_low = st.slider("Rev Growth (partial pts, %)", 5, 40, key="rev_growth_low",
-            help="Revenue growth ≥ this → 12 pts. Default: 20%.") / 100
-        roce_threshold = st.slider("ROCE threshold (%)", 5, 40, key="roce_threshold",
-            help="Return on Capital Employed ≥ this → 7 pts. Default: 20%.") / 100
-        gross_margin_high = st.slider("Gross Margin (full pts, %)", 30, 85, key="gross_margin_high",
-            help="Gross margin > this → 5 pts. Default: 60%.") / 100
-        gross_margin_low = st.slider("Gross Margin (partial pts, %)", 15, 60, key="gross_margin_low",
-            help="Gross margin > this → 3 pts. Default: 40%.") / 100
-        inst_own_ceiling = st.slider("Inst. Ownership ceiling (%)", 20, 80, key="inst_own_ceiling",
-            help="Institutional ownership < this → 13 pts (undiscovered signal). Default: 40%.") / 100
 
     st.markdown('<p style="font-size:0.82rem;font-weight:700;margin:8px 0 2px;color:#aaa;text-transform:uppercase;letter-spacing:0.05em">💷 Capital & Sizing</p>', unsafe_allow_html=True)
     unit_value_sidebar = st.number_input(
@@ -2825,6 +2772,73 @@ if active_tab == "Tools":
 
 if active_tab == "Tools" and _tools_subtab == "🔍 Manual Scan":
     st.caption("On-demand scan. Results are written to history + feature store.")
+
+    # ── Scan settings (moved from sidebar) ──────────────────────────────────
+    _sc1, _sc2 = st.columns([1, 1])
+    with _sc1:
+        min_score = st.slider("Minimum Score", 50, 95, key="min_score")
+    with _sc2:
+        universe_mode = st.radio(
+            "Universe",
+            ["🔒 Fixed Top", "🎲 Random", "🌐 Full Universe"],
+            key="universe_mode",
+            horizontal=True,
+            help="Fixed Top: largest R2000 stocks (fast). Random: broader coverage. Full Universe: all ~2000 tickers (~5–10 min).",
+        )
+    if universe_mode == "🌐 Full Universe":
+        scan_limit = None
+        _scan_shuffle = True
+        st.caption("⏱ ~5–10 min · scanning all ~2000 Russell 2000 tickers")
+    else:
+        scan_limit = st.slider("Universe size", 50, 800, st.session_state.get("_scan_limit", 400), step=50,
+            help="Number of tickers to scan. ~200 ≈ 1 min · ~400 ≈ 2 min · ~800 ≈ 4 min.")
+        st.session_state["_scan_limit"] = scan_limit
+        _scan_shuffle = (universe_mode == "🎲 Random")
+
+    _ui = st.session_state.get("ui_mode", "Standard")
+    if _ui in ("Standard", "Power"):
+        with st.expander("Advanced Filters"):
+            _af1, _af2, _af3 = st.columns(3)
+            with _af1:
+                price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor",
+                    help="Minimum stock price. Default: $2.00.")
+            with _af2:
+                price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling",
+                    help="Maximum stock price. 0 = disabled.")
+            with _af3:
+                vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor",
+                    help="Min average daily volume. Default: 500,000.")
+
+    if _ui == "Power":
+        with st.expander("Advanced Risk Rules"):
+            _rr1, _rr2 = st.columns(2)
+            with _rr1:
+                risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct",
+                    help="Max % of portfolio to risk per position. Default: 0.75%.")
+            with _rr2:
+                max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
+                    help="Hard cap on single position size. Default: 8.0%.")
+
+        with st.expander("Scoring Thresholds"):
+            st.caption("Tune the quality bars used in the scoring algorithm.")
+            _st1, _st2, _st3 = st.columns(3)
+            with _st1:
+                rev_growth_high = st.slider("Rev Growth (full pts, %)", 10, 50, key="rev_growth_high",
+                    help="Revenue growth ≥ this → 20 pts. Default: 30%.") / 100
+                rev_growth_low = st.slider("Rev Growth (partial pts, %)", 5, 40, key="rev_growth_low",
+                    help="Revenue growth ≥ this → 12 pts. Default: 20%.") / 100
+            with _st2:
+                roce_threshold = st.slider("ROCE threshold (%)", 5, 40, key="roce_threshold",
+                    help="Return on Capital Employed ≥ this → 7 pts. Default: 20%.") / 100
+                gross_margin_high = st.slider("Gross Margin (full pts, %)", 30, 85, key="gross_margin_high",
+                    help="Gross margin > this → 5 pts. Default: 60%.") / 100
+            with _st3:
+                gross_margin_low = st.slider("Gross Margin (partial pts, %)", 15, 60, key="gross_margin_low",
+                    help="Gross margin > this → 3 pts. Default: 40%.") / 100
+                inst_own_ceiling = st.slider("Inst. Ownership ceiling (%)", 20, 80, key="inst_own_ceiling",
+                    help="Institutional ownership < this → 13 pts (undiscovered signal). Default: 40%.") / 100
+
+    st.divider()
     if st.button("🚀 Run Global Scan", key="btn_run_scan"):
         st.info(f"Scan executing using preset: **{st.session_state.preset_selector}**")
         _lottie_ph_t = st.empty()
@@ -2952,6 +2966,16 @@ if active_tab == "Tools" and _tools_subtab == "🔍 Manual Scan":
 
 if active_tab == "Tools" and _tools_subtab == "📈 ML Model":
     st.subheader("📈 ML Prediction Model Quality")
+
+    # ── ML horizon settings (moved from sidebar) ─────────────────────────────
+    with st.expander("⚙️ Model Settings"):
+        _mh1, _mh2 = st.columns(2)
+        with _mh1:
+            horizon_days = st.selectbox("Horizon days", [21, 42, 63, 84, 126], key="horizon_days",
+                help="Future time window (trading days) for forward-return label. 63 days ≈ 1 quarter.")
+        with _mh2:
+            target_return = st.slider("Target return (%)", 1, 100, key="target_return",
+                help="Min % gain to count as a 'hit'. Higher = harder to hit, filters stronger momentum.") / 100.0
 
     with st.expander("📖 How to activate the Prediction Model", expanded=not model.get("ready", False)):
         st.markdown("""
