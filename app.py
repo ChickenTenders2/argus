@@ -1856,7 +1856,35 @@ if active_tab == "Alerts":
             if st.button(_btn_lbl, key="btn_show_more_alerts", use_container_width=True):
                 st.session_state["_alerts_show_all"] = not _show_all
             if st.session_state.get("_alerts_show_all", False):
-                display_cards(_top_picks.iloc[5:].copy(), cols_per_row=3, compact=True)
+                for _pi2, (_, _pr2) in enumerate(_top_picks.iloc[5:].iterrows(), 6):
+                    _vel2x = _pr2.get("score_velocity", 0) or 0
+                    _vel_html2x = render_velocity_badge(_vel2x)
+                    _reasons2x = (
+                        json.loads(_pr2["reasons"])
+                        if isinstance(_pr2.get("reasons"), str) and _pr2["reasons"].startswith("[")
+                        else (_pr2.get("reasons") or [])
+                    )
+                    _cat_html2x = render_catalyst_pills(_reasons2x)
+                    _px1, _px2 = st.columns([6, 1])
+                    with _px1:
+                        st.markdown(
+                            f'<div style="padding:8px 12px;background:#111e35;border-radius:8px;border:1px solid rgba(0,212,255,0.15);margin-bottom:6px">'
+                            f'<span style="font-weight:700;font-size:1rem;color:#e8eef7">#{_pi2} {_pr2["ticker"]}</span>'
+                            f'<span style="float:right;font-weight:700;color:#00d4ff">{int(_pr2.get("score", 0))}/100</span>'
+                            f'<br><span style="font-size:0.76rem;color:#8ea0ba">{_pr2.get("sector", "")}</span>'
+                            f'{"&nbsp;" + _vel_html2x if _vel_html2x else ""}'
+                            f'{("<br>" + _cat_html2x) if _cat_html2x else ""}'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with _px2:
+                        st.button(
+                            "🔍 Deep Dive",
+                            key=f"dd_btn_{_pr2['ticker']}_{_pi2}",
+                            on_click=nav_to_ticker,
+                            args=(_pr2["ticker"],),
+                            use_container_width=True,
+                        )
 
 
     # ── Auto-refresh (fires after all Alerts content renders) ────────────────
