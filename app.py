@@ -1064,8 +1064,6 @@ if "preset_selector" not in st.session_state:
 if "auto_refresh_enabled" not in st.session_state:
     st.session_state["auto_refresh_enabled"] = st.session_state.prefs.get("auto_refresh", False)
 
-if "ui_mode" not in st.session_state:
-    st.session_state["ui_mode"] = st.session_state.prefs.get("ui_mode", "Standard")
 
 if "price_ceiling" not in st.session_state:
     st.session_state.price_ceiling = 0.0
@@ -1447,21 +1445,6 @@ with st.sidebar:
     st.markdown(
         f"<div style='background:#2b2b2b;border-left:3px solid #888;border-radius:4px;padding:10px 14px;font-size:0.82rem;color:#ccc;margin-bottom:6px;'>{st.session_state.preset_desc}</div>",
         unsafe_allow_html=True,
-    )
-
-    def _save_ui_mode_pref():
-        st.session_state.prefs["ui_mode"] = st.session_state.ui_mode
-        save_prefs(st.session_state.prefs)
-
-    _ui_mode = st.selectbox(
-        "Interface Mode",
-        ["Beginner", "Standard", "Power"],
-        index=["Beginner", "Standard", "Power"].index(
-            st.session_state.get("ui_mode", "Standard")
-        ),
-        key="ui_mode",
-        on_change=_save_ui_mode_pref,
-        help="Beginner: quick scan only  ·  Standard: + advanced filters & ML  ·  Power: full control",
     )
 
     # Scan settings live in Tools → Manual Scan; just read defaults from session_state here
@@ -2805,48 +2788,45 @@ if active_tab == "Tools" and _tools_subtab == "🔍 Manual Scan":
         st.session_state["_scan_limit"] = scan_limit
         _scan_shuffle = (universe_mode == "🎲 Random")
 
-    _ui = st.session_state.get("ui_mode", "Standard")
-    if _ui in ("Standard", "Power"):
-        with st.expander("Advanced Filters"):
-            _af1, _af2, _af3 = st.columns(3)
-            with _af1:
-                price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor",
-                    help="Minimum stock price. Default: $2.00.")
-            with _af2:
-                price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling",
-                    help="Maximum stock price. 0 = disabled.")
-            with _af3:
-                vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor",
-                    help="Min average daily volume. Default: 500,000.")
+    with st.expander("Advanced Filters"):
+        _af1, _af2, _af3 = st.columns(3)
+        with _af1:
+            price_floor = st.number_input("Price Floor ($)", min_value=0.0, max_value=100.0, key="price_floor",
+                help="Minimum stock price. Default: $2.00.")
+        with _af2:
+            price_ceiling = st.number_input("Price Ceiling ($) [0 = No Limit]", min_value=0.0, max_value=1000.0, key="price_ceiling",
+                help="Maximum stock price. 0 = disabled.")
+        with _af3:
+            vol_floor = st.number_input("Volume Floor (avg daily)", step=100_000, min_value=0, key="vol_floor",
+                help="Min average daily volume. Default: 500,000.")
 
-    if _ui == "Power":
-        with st.expander("Advanced Risk Rules"):
-            _rr1, _rr2 = st.columns(2)
-            with _rr1:
-                risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct",
-                    help="Max % of portfolio to risk per position. Default: 0.75%.")
-            with _rr2:
-                max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
-                    help="Hard cap on single position size. Default: 8.0%.")
+    with st.expander("Advanced Risk Rules"):
+        _rr1, _rr2 = st.columns(2)
+        with _rr1:
+            risk_per_trade_pct = st.slider("Risk per trade (% of portfolio)", 0.10, 5.00, step=0.05, key="risk_per_trade_pct",
+                help="Max % of portfolio to risk per position. Default: 0.75%.")
+        with _rr2:
+            max_position_pct = st.slider("Max position size (%)", 1.0, 30.0, step=0.5, key="max_position_pct",
+                help="Hard cap on single position size. Default: 8.0%.")
 
-        with st.expander("Scoring Thresholds"):
-            st.caption("Tune the quality bars used in the scoring algorithm.")
-            _st1, _st2, _st3 = st.columns(3)
-            with _st1:
-                rev_growth_high = st.slider("Rev Growth (full pts, %)", 10, 50, key="rev_growth_high",
-                    help="Revenue growth ≥ this → 20 pts. Default: 30%.") / 100
-                rev_growth_low = st.slider("Rev Growth (partial pts, %)", 5, 40, key="rev_growth_low",
-                    help="Revenue growth ≥ this → 12 pts. Default: 20%.") / 100
-            with _st2:
-                roce_threshold = st.slider("ROCE threshold (%)", 5, 40, key="roce_threshold",
-                    help="Return on Capital Employed ≥ this → 7 pts. Default: 20%.") / 100
-                gross_margin_high = st.slider("Gross Margin (full pts, %)", 30, 85, key="gross_margin_high",
-                    help="Gross margin > this → 5 pts. Default: 60%.") / 100
-            with _st3:
-                gross_margin_low = st.slider("Gross Margin (partial pts, %)", 15, 60, key="gross_margin_low",
-                    help="Gross margin > this → 3 pts. Default: 40%.") / 100
-                inst_own_ceiling = st.slider("Inst. Ownership ceiling (%)", 20, 80, key="inst_own_ceiling",
-                    help="Institutional ownership < this → 13 pts (undiscovered signal). Default: 40%.") / 100
+    with st.expander("Scoring Thresholds"):
+        st.caption("Tune the quality bars used in the scoring algorithm.")
+        _st1, _st2, _st3 = st.columns(3)
+        with _st1:
+            rev_growth_high = st.slider("Rev Growth (full pts, %)", 10, 50, key="rev_growth_high",
+                help="Revenue growth ≥ this → 20 pts. Default: 30%.") / 100
+            rev_growth_low = st.slider("Rev Growth (partial pts, %)", 5, 40, key="rev_growth_low",
+                help="Revenue growth ≥ this → 12 pts. Default: 20%.") / 100
+        with _st2:
+            roce_threshold = st.slider("ROCE threshold (%)", 5, 40, key="roce_threshold",
+                help="Return on Capital Employed ≥ this → 7 pts. Default: 20%.") / 100
+            gross_margin_high = st.slider("Gross Margin (full pts, %)", 30, 85, key="gross_margin_high",
+                help="Gross margin > this → 5 pts. Default: 60%.") / 100
+        with _st3:
+            gross_margin_low = st.slider("Gross Margin (partial pts, %)", 15, 60, key="gross_margin_low",
+                help="Gross margin > this → 3 pts. Default: 40%.") / 100
+            inst_own_ceiling = st.slider("Inst. Ownership ceiling (%)", 20, 80, key="inst_own_ceiling",
+                help="Institutional ownership < this → 13 pts (undiscovered signal). Default: 40%.") / 100
 
     st.divider()
     if st.button("🚀 Run Global Scan", key="btn_run_scan"):
@@ -3370,7 +3350,6 @@ competitors. Is [TICKER] gaining or losing ground?""", language="text")
     ### Settings Reference
 
     **Sidebar (always visible)**
-    * **UI Mode:** Beginner / Standard / Power — controls which settings are exposed.
     * **Global Preset:** One-click configuration for common strategies (Default, High Conviction, etc.).
     * **Unit Value (£):** How much capital 1 unit represents. Argus allocates 1–5 units per HC pick.
     * **Total Portfolio Size (£):** Used to calculate position % from unit allocations.
@@ -3382,9 +3361,9 @@ competitors. Is [TICKER] gaining or losing ground?""", language="text")
     * **Minimum Score:** The minimum Argus score required to appear in results (Default: 50).
     * **Universe Mode:** Controls which slice of the Russell 2000 is scanned. **Fixed Top** scans the largest-weighted names (fast, consistent). **Random** picks a different subset each run. **Full Universe** scans all ~2000 R2000 tickers (~5–10 min).
     * **Universe Size:** Number of tickers to scan in Fixed/Random modes (Default: 400).
-    * **Advanced Filters (Standard/Power):** Price Floor, Price Ceiling, Volume Floor.
-    * **Advanced Risk Rules (Power):** Risk per trade %, Max position size %.
-    * **Scoring Thresholds (Power):** Revenue growth bars, ROCE threshold, Gross margin bars, Inst. ownership ceiling.
+    * **Advanced Filters:** Price Floor, Price Ceiling, Volume Floor.
+    * **Advanced Risk Rules:** Risk per trade %, Max position size %.
+    * **Scoring Thresholds:** Revenue growth bars, ROCE threshold, Gross margin bars, Inst. ownership ceiling.
 
     **Tools → ML Model**
     * **Horizon Days:** The timeframe over which the ML model predicts price movement (Default: 63 days, ~1 quarter).
