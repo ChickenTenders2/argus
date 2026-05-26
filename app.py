@@ -376,9 +376,18 @@ def load_prefs():
             prefs["portfolio_size"] = 10000
         if "daily_unit_cap" not in prefs:
             prefs["daily_unit_cap"] = 12
+        if "preset" not in prefs:
+            prefs["preset"] = "Default"
+        if "auto_refresh" not in prefs:
+            prefs["auto_refresh"] = False
+        if "ui_mode" not in prefs:
+            prefs["ui_mode"] = "Standard"
         return prefs
     except:
-        return {"send_to_telegram": False, "unit_value": 250, "portfolio_size": 10000, "daily_unit_cap": 12}
+        return {
+            "send_to_telegram": False, "unit_value": 250, "portfolio_size": 10000,
+            "daily_unit_cap": 12, "preset": "Default", "auto_refresh": False, "ui_mode": "Standard",
+        }
 
 def save_prefs(prefs):
     with open(PREFS_FILE, "w") as f:
@@ -943,6 +952,8 @@ def send_telegram_message(token, chat_id, message):
 
 def apply_preset():
     preset = st.session_state.preset_selector
+    st.session_state.prefs["preset"] = preset
+    save_prefs(st.session_state.prefs)
     st.session_state.price_ceiling = 0.0
     # Defensive reset: restore all scoring thresholds to safe defaults so stale
     # or incorrectly-set values never silently suppress scan results.
@@ -1054,6 +1065,19 @@ def apply_preset():
         st.session_state.vol_floor = 500000
         st.session_state.price_floor = 2.0
         st.session_state.price_ceiling = 0.0
+
+# ── Restore sticky UI state from prefs on fresh page load ────────────────────
+# Only runs once per session (session_state is empty on fresh load).
+if "preset_selector" not in st.session_state:
+    _saved_preset = st.session_state.prefs.get("preset", "Default")
+    st.session_state["preset_selector"] = _saved_preset
+    apply_preset()  # restores min_score, horizons, risk params from the saved preset
+
+if "auto_refresh_enabled" not in st.session_state:
+    st.session_state["auto_refresh_enabled"] = st.session_state.prefs.get("auto_refresh", False)
+
+if "ui_mode" not in st.session_state:
+    st.session_state["ui_mode"] = st.session_state.prefs.get("ui_mode", "Standard")
 
 if "price_ceiling" not in st.session_state:
     st.session_state.price_ceiling = 0.0
@@ -1442,6 +1466,10 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    def _save_ui_mode_pref():
+        st.session_state.prefs["ui_mode"] = st.session_state.ui_mode
+        save_prefs(st.session_state.prefs)
+
     _ui_mode = st.selectbox(
         "Interface Mode",
         ["Beginner", "Standard", "Power"],
@@ -1449,6 +1477,7 @@ with st.sidebar:
             st.session_state.get("ui_mode", "Standard")
         ),
         key="ui_mode",
+        on_change=_save_ui_mode_pref,
         help="Beginner: quick scan only  ·  Standard: + advanced filters & ML  ·  Power: full control",
     )
 
@@ -1557,10 +1586,16 @@ with st.sidebar:
         key="send_to_telegram_cb",
         on_change=update_telegram_pref
     )
+    def _save_auto_refresh_pref():
+        st.session_state["auto_refresh_enabled"] = st.session_state.auto_refresh_cb
+        st.session_state.prefs["auto_refresh"] = st.session_state.auto_refresh_cb
+        save_prefs(st.session_state.prefs)
+
     _auto_refresh_on = st.checkbox(
         "Auto-refresh (15 min)",
         value=st.session_state.get("auto_refresh_enabled", False),
         key="auto_refresh_cb",
+        on_change=_save_auto_refresh_pref,
         help="Automatically reload the page every 15 minutes to show latest GitHub Actions scan results.",
     )
     st.session_state["auto_refresh_enabled"] = _auto_refresh_on
