@@ -1750,57 +1750,66 @@ if active_tab == "Alerts":
     if _gh_label:
         st.info(f"📡 Latest synced results — {_gh_label}", icon=None)
 
-    st.markdown(
-        "<style>.argus-brief-card{min-height:110px}</style>",
-        unsafe_allow_html=True,
-    )
-    _bc1, _bc2, _bc3 = st.columns(3)
+    # Build Top 3 HTML rows
+    if not latest_df.empty:
+        _top3 = latest_df.sort_values("score", ascending=False).head(3)
+        _top3_html = "".join(
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.07)">'
+            f'<span style="font-weight:700;color:#e8eef7">{"🟢" if "HIGH" in str(_tr.get("tier","")) else "🟡"}'
+            f' #{_ri} {_tr["ticker"]}</span>'
+            f'<span style="font-weight:700;color:#00d4ff">{int(_tr["score"])}</span></div>'
+            for _ri, (_, _tr) in enumerate(_top3.iterrows(), 1)
+        )
+        _top3_html += f'<p style="font-size:0.72rem;color:#555;margin:6px 0 0">Scan: {scan_date_display}</p>'
+    else:
+        _top3_html = '<p style="color:#666;font-size:0.82rem;margin:0">No scan data yet.</p>'
 
-    with _bc1:
-        with st.container(border=True):
-            st.markdown('<div class="argus-brief-card">', unsafe_allow_html=True)
-            st.markdown("**📡 Market Regime**")
-            st.markdown(f":{r_color}[**{regime['regime']}**] · ×{regime['multiplier']}")
-            st.caption(f"VIX: :{vix_color}[**{vix_str}**] · SPY vs 200MA: :{gap_color}[**{gap_label}**]")
-            st.caption(f"*{regime['reason']}*")
-            st.markdown('</div>', unsafe_allow_html=True)
+    # Build Portfolio Alerts HTML
+    if _briefing_alerts:
+        _pal_html = "".join(
+            f'<div style="background:rgba(220,80,60,0.15);border-radius:4px;padding:4px 8px;'
+            f'margin-bottom:4px;font-size:0.8rem;color:#ffb3b3">🚨 {str(_a)}</div>'
+            for _a in _briefing_alerts[:3]
+        )
+        if len(_briefing_alerts) > 3:
+            _pal_html += f'<p style="font-size:0.72rem;color:#666;margin:3px 0 0">+{len(_briefing_alerts)-3} more — check Journal.</p>'
+    else:
+        _pal_html = '<div style="background:rgba(46,139,87,0.15);border-radius:4px;padding:6px 8px;font-size:0.82rem;color:#6fcf97">✅ All positions within bounds</div>'
+    _pal_html += '<p style="font-size:0.72rem;color:#555;margin:6px 0 0">Auto-monitored vs. open positions.</p>'
 
-    with _bc2:
-        with st.container(border=True):
-            st.markdown('<div class="argus-brief-card">', unsafe_allow_html=True)
-            st.markdown("**🏆 Top 3 Today**")
-            if not latest_df.empty:
-                _top3 = latest_df.sort_values("score", ascending=False).head(3)
-                _top3_lines = ""
-                for _ri, (_, _tr) in enumerate(_top3.iterrows(), 1):
-                    _sig_lbl, _sig_col = get_signal_label(_tr.get("score", 0))
-                    _tier_dot = "🟢" if "HIGH" in str(_tr.get("tier", "")) else "🟡"
-                    _top3_lines += (
-                        f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                        f'padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)">'
-                        f'<span style="font-weight:700;color:#e8eef7">{_tier_dot} #{_ri} {_tr["ticker"]}</span>'
-                        f'<span style="font-weight:700;color:#00d4ff;font-size:0.9rem">{int(_tr["score"])}</span>'
-                        f'</div>'
-                    )
-                st.markdown(_top3_lines, unsafe_allow_html=True)
-                st.caption(f"Scan: **{scan_date_display}**")
-            else:
-                st.caption("No scan data yet — run a scan to see picks.")
-            st.markdown('</div>', unsafe_allow_html=True)
+    # Hex colours for regime / VIX / gap
+    _r_hex  = {"Bull":"#2E8B57","Neutral":"#4169E1","Bear":"#FF8C00","Extreme Fear":"#DC143C","Stagflation":"#8B008B"}.get(regime["regime"],"#aaa")
+    _vix_hex = "#DC143C" if vix_val and vix_val > 25 else ("#FF8C00" if vix_val and vix_val > 18 else "#2E8B57")
+    _gap_hex = "#2E8B57" if gap and gap > 3 else ("#FF8C00" if gap and gap > 0 else "#DC143C")
 
-    with _bc3:
-        with st.container(border=True):
-            st.markdown('<div class="argus-brief-card">', unsafe_allow_html=True)
-            st.markdown("**⚠️ Portfolio Alerts**")
-            if _briefing_alerts:
-                for _a in _briefing_alerts[:3]:
-                    st.warning(_a, icon="🚨")
-                if len(_briefing_alerts) > 3:
-                    st.caption(f"…and {len(_briefing_alerts) - 3} more. Check Journal tab.")
-            else:
-                st.success("All positions within bounds ✅", icon="✅")
-            st.caption("Auto-monitored vs. open journal positions.")
-            st.markdown('</div>', unsafe_allow_html=True)
+    _card_style = "background:#0f1b2d;border:1px solid rgba(255,255,255,0.11);border-radius:8px;padding:14px 16px;flex:1"
+    _hdr_style  = "font-weight:700;margin:0 0 10px;color:#e8eef7;font-size:0.92rem"
+
+    st.markdown(f"""
+<div style="display:flex;gap:12px;margin:8px 0 16px;align-items:stretch">
+  <div style="{_card_style}">
+    <p style="{_hdr_style}">📡 Market Regime</p>
+    <p style="margin:0 0 5px">
+      <span style="color:{_r_hex};font-weight:700;font-size:1.05rem">{regime["regime"]}</span>
+      <span style="color:#8ea0ba;font-size:0.82rem"> &nbsp;×{regime["multiplier"]}</span>
+    </p>
+    <p style="font-size:0.78rem;color:#8ea0ba;margin:0 0 4px">
+      VIX&nbsp;<span style="color:{_vix_hex};font-weight:600">{vix_str}</span>
+      &nbsp;·&nbsp;SPY vs 200MA&nbsp;<span style="color:{_gap_hex};font-weight:600">{gap_label}</span>
+    </p>
+    <p style="font-size:0.74rem;color:#6b7f99;margin:0;font-style:italic">{regime["reason"]}</p>
+  </div>
+  <div style="{_card_style}">
+    <p style="{_hdr_style}">🏆 Top 3 Today</p>
+    {_top3_html}
+  </div>
+  <div style="{_card_style}">
+    <p style="{_hdr_style}">⚠️ Portfolio Alerts</p>
+    {_pal_html}
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
     # ── FRED Macro Signal Cards ───────────────────────────────────────────────
     _macro_from_regime = bool(regime.get("macro"))
