@@ -1910,7 +1910,11 @@ if active_tab == "Alerts":
                 )
 
         if len(_top_picks) > 5:
-            with st.expander(f"Show {len(_top_picks) - 5} more picks"):
+            _show_all = st.session_state.get("_alerts_show_all", False)
+            _btn_lbl = f"▲ Hide extra picks" if _show_all else f"▼ Show {len(_top_picks) - 5} more picks"
+            if st.button(_btn_lbl, key="btn_show_more_alerts", use_container_width=True):
+                st.session_state["_alerts_show_all"] = not _show_all
+            if st.session_state.get("_alerts_show_all", False):
                 display_cards(_top_picks.iloc[5:].copy(), cols_per_row=3, compact=True)
 
 
