@@ -444,68 +444,61 @@ def fetch_ticker_history(ticker, period="1y"):
     except Exception:
         return pd.DataFrame()
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=3600)
 def fetch_financial_snapshot(ticker):
-    """Fetch key financial metrics — yfinance first, FMP fallback."""
+    """Fetch key financial metrics. Uses fast_info + info (yfinance), then FMP if key present."""
     snap = {}
+
+    # Layer 1: fast_info — reliable on Streamlit Cloud, covers market/price data
     try:
-        info = yf.Ticker(ticker).info
-        if info and (info.get("regularMarketPrice") or info.get("marketCap")):
-            snap = {
-                "P/E Ratio": round(info["trailingPE"], 2) if info.get("trailingPE") else "N/A",
-                "P/S Ratio": round(info["priceToSalesTrailing12Months"], 2) if info.get("priceToSalesTrailing12Months") else "N/A",
-                "Market Cap": f"${info['marketCap'] / 1e6:,.0f}M" if info.get("marketCap") else "N/A",
-                "52-Wk High": f"${info['fiftyTwoWeekHigh']:.2f}" if info.get("fiftyTwoWeekHigh") else "N/A",
-                "52-Wk Low": f"${info['fiftyTwoWeekLow']:.2f}" if info.get("fiftyTwoWeekLow") else "N/A",
-                "Rev Growth": f"{info['revenueGrowth']*100:+.1f}%" if info.get("revenueGrowth") else "N/A",
-                "Gross Margin": f"{info['grossMargins']*100:.1f}%" if info.get("grossMargins") else "N/A",
-                "Short Float %": f"{info['shortPercentOfFloat']*100:.1f}%" if info.get("shortPercentOfFloat") else "N/A",
-                "Div Yield": f"{info['dividendYield']*100:.2f}%" if info.get("dividendYield") else "N/A",
-            }
+        fi = yf.Ticker(ticker).fast_info
+        snap["Market Cap"]  = f"${fi.market_cap / 1e6:,.0f}M" if getattr(fi, "market_cap", None) else "N/A"
+        snap["52-Wk High"]  = f"${fi.year_high:.2f}"          if getattr(fi, "year_high", None) else "N/A"
+        snap["52-Wk Low"]   = f"${fi.year_low:.2f}"           if getattr(fi, "year_low", None) else "N/A"
+        snap["Price"]       = f"${fi.last_price:.2f}"          if getattr(fi, "last_price", None) else "N/A"
     except Exception:
         pass
 
-    # FMP fallback if yfinance returned nothing useful
-    if not snap or all(v == "N/A" for v in snap.values()):
+    # Layer 2: full info — slower, may fail on Cloud; fills in ratios & margins
+    try:
+        info = yf.Ticker(ticker).info or {}
+        def _fmt(key, fmt):
+            v = info.get(key)
+            return fmt(v) if v is not None else "N/A"
+        snap.setdefault("P/E Ratio",    _fmt("trailingPE",                    lambda v: round(v, 2)))
+        snap.setdefault("P/S Ratio",    _fmt("priceToSalesTrailing12Months",   lambda v: round(v, 2)))
+        snap.setdefault("Market Cap",   _fmt("marketCap",                      lambda v: f"${v/1e6:,.0f}M"))
+        snap.setdefault("52-Wk High",   _fmt("fiftyTwoWeekHigh",               lambda v: f"${v:.2f}"))
+        snap.setdefault("52-Wk Low",    _fmt("fiftyTwoWeekLow",                lambda v: f"${v:.2f}"))
+        snap["Rev Growth"]   = _fmt("revenueGrowth",        lambda v: f"{v*100:+.1f}%")
+        snap["Gross Margin"] = _fmt("grossMargins",         lambda v: f"{v*100:.1f}%")
+        snap["Short Float %"]= _fmt("shortPercentOfFloat",  lambda v: f"{v*100:.1f}%")
+        snap["Div Yield"]    = _fmt("dividendYield",        lambda v: f"{v*100:.2f}%")
+    except Exception:
+        pass
+
+    # Layer 3: FMP — only if key is present and layers above are still mostly empty
+    _useful = [v for v in snap.values() if v and v != "N/A"]
+    if len(_useful) < 3:
         try:
-            import os, requests
+            import requests as _req
             _fmp_key = os.environ.get("FMP_API_KEY", "")
             if _fmp_key:
                 _base = "https://financialmodelingprep.com/api"
-                _profile = requests.get(
-                    f"{_base}/v3/profile/{ticker}?apikey={_fmp_key}", timeout=6
-                ).json()
-                _km = requests.get(
-                    f"{_base}/v3/key-metrics-ttm/{ticker}?apikey={_fmp_key}", timeout=6
-                ).json()
-                _inc = requests.get(
-                    f"{_base}/v3/income-statement/{ticker}?limit=2&apikey={_fmp_key}", timeout=6
-                ).json()
-                p = (_profile or [{}])[0]
-                k = (_km or [{}])[0]
-                inc = _inc or []
-                rev_growth = "N/A"
-                gross_margin = "N/A"
-                if len(inc) >= 2:
-                    r0 = inc[0].get("revenue", 0) or 0
-                    r1 = inc[1].get("revenue", 1) or 1
-                    rev_growth = f"{(r0 - r1) / abs(r1) * 100:+.1f}%"
-                    gm = inc[0].get("grossProfitRatio")
-                    if gm:
-                        gross_margin = f"{gm * 100:.1f}%"
-                snap = {
-                    "P/E Ratio": round(k["peRatioTTM"], 2) if k.get("peRatioTTM") else "N/A",
-                    "P/S Ratio": round(k["priceToSalesRatioTTM"], 2) if k.get("priceToSalesRatioTTM") else "N/A",
-                    "Market Cap": f"${p.get('mktCap', 0) / 1e6:,.0f}M" if p.get("mktCap") else "N/A",
-                    "52-Wk High": f"${p['range'].split('-')[1].strip()}" if p.get("range") and "-" in p.get("range","") else "N/A",
-                    "52-Wk Low": f"${p['range'].split('-')[0].strip()}" if p.get("range") and "-" in p.get("range","") else "N/A",
-                    "Rev Growth": rev_growth,
-                    "Gross Margin": gross_margin,
-                    "Short Float %": "N/A",
-                    "Div Yield": f"{p['lastDiv']:.2f}%" if p.get("lastDiv") else "N/A",
-                }
+                _p  = (_req.get(f"{_base}/v3/profile/{ticker}?apikey={_fmp_key}",          timeout=6).json() or [{}])[0]
+                _k  = (_req.get(f"{_base}/v3/key-metrics-ttm/{ticker}?apikey={_fmp_key}",   timeout=6).json() or [{}])[0]
+                _ic = (_req.get(f"{_base}/v3/income-statement/{ticker}?limit=2&apikey={_fmp_key}", timeout=6).json() or [])
+                snap.setdefault("Market Cap",  f"${_p['mktCap']/1e6:,.0f}M" if _p.get("mktCap") else "N/A")
+                snap.setdefault("P/E Ratio",   round(_k["peRatioTTM"], 2)   if _k.get("peRatioTTM") else "N/A")
+                snap.setdefault("P/S Ratio",   round(_k["priceToSalesRatioTTM"], 2) if _k.get("priceToSalesRatioTTM") else "N/A")
+                if len(_ic) >= 2:
+                    r0, r1 = _ic[0].get("revenue", 0) or 0, _ic[1].get("revenue", 1) or 1
+                    snap.setdefault("Rev Growth",   f"{(r0-r1)/abs(r1)*100:+.1f}%")
+                    gm = _ic[0].get("grossProfitRatio")
+                    snap.setdefault("Gross Margin", f"{gm*100:.1f}%" if gm else "N/A")
         except Exception:
             pass
+
     return snap
 
 @st.cache_data(ttl=300)
