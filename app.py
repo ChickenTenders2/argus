@@ -446,18 +446,67 @@ def fetch_ticker_history(ticker, period="1y"):
 
 @st.cache_data(ttl=86400)
 def fetch_financial_snapshot(ticker):
-    """Fetch key financial metrics."""
+    """Fetch key financial metrics — yfinance first, FMP fallback."""
+    snap = {}
     try:
         info = yf.Ticker(ticker).info
-        return {
-            "P/E Ratio": info.get("trailingPE", "N/A"),
-            "Market Cap": f"${info.get('marketCap', 0):,}" if info.get("marketCap") else "N/A",
-            "52-Wk High": f"${info.get('fiftyTwoWeekHigh', 0):.2f}" if info.get("fiftyTwoWeekHigh") else "N/A",
-            "52-Wk Low": f"${info.get('fiftyTwoWeekLow', 0):.2f}" if info.get("fiftyTwoWeekLow") else "N/A",
-            "Div Yield": f"{(info.get('dividendYield', 0) * 100):.2f}%" if info.get("dividendYield") else "N/A"
-        }
+        if info and info.get("regularMarketPrice") or info.get("marketCap"):
+            snap = {
+                "P/E Ratio": round(info["trailingPE"], 2) if info.get("trailingPE") else "N/A",
+                "P/S Ratio": round(info["priceToSalesTrailing12Months"], 2) if info.get("priceToSalesTrailing12Months") else "N/A",
+                "Market Cap": f"${info['marketCap'] / 1e6:,.0f}M" if info.get("marketCap") else "N/A",
+                "52-Wk High": f"${info['fiftyTwoWeekHigh']:.2f}" if info.get("fiftyTwoWeekHigh") else "N/A",
+                "52-Wk Low": f"${info['fiftyTwoWeekLow']:.2f}" if info.get("fiftyTwoWeekLow") else "N/A",
+                "Rev Growth": f"{info['revenueGrowth']*100:+.1f}%" if info.get("revenueGrowth") else "N/A",
+                "Gross Margin": f"{info['grossMargins']*100:.1f}%" if info.get("grossMargins") else "N/A",
+                "Short Float %": f"{info['shortPercentOfFloat']*100:.1f}%" if info.get("shortPercentOfFloat") else "N/A",
+                "Div Yield": f"{info['dividendYield']*100:.2f}%" if info.get("dividendYield") else "N/A",
+            }
     except Exception:
-        return {}
+        pass
+
+    # FMP fallback if yfinance returned nothing useful
+    if not snap or all(v == "N/A" for v in snap.values()):
+        try:
+            import os, requests
+            _fmp_key = os.environ.get("FMP_API_KEY", "")
+            if _fmp_key:
+                _base = "https://financialmodelingprep.com/api"
+                _profile = requests.get(
+                    f"{_base}/v3/profile/{ticker}?apikey={_fmp_key}", timeout=6
+                ).json()
+                _km = requests.get(
+                    f"{_base}/v3/key-metrics-ttm/{ticker}?apikey={_fmp_key}", timeout=6
+                ).json()
+                _inc = requests.get(
+                    f"{_base}/v3/income-statement/{ticker}?limit=2&apikey={_fmp_key}", timeout=6
+                ).json()
+                p = (_profile or [{}])[0]
+                k = (_km or [{}])[0]
+                inc = _inc or []
+                rev_growth = "N/A"
+                gross_margin = "N/A"
+                if len(inc) >= 2:
+                    r0 = inc[0].get("revenue", 0) or 0
+                    r1 = inc[1].get("revenue", 1) or 1
+                    rev_growth = f"{(r0 - r1) / abs(r1) * 100:+.1f}%"
+                    gm = inc[0].get("grossProfitRatio")
+                    if gm:
+                        gross_margin = f"{gm * 100:.1f}%"
+                snap = {
+                    "P/E Ratio": round(k["peRatioTTM"], 2) if k.get("peRatioTTM") else "N/A",
+                    "P/S Ratio": round(k["priceToSalesRatioTTM"], 2) if k.get("priceToSalesRatioTTM") else "N/A",
+                    "Market Cap": f"${p.get('mktCap', 0) / 1e6:,.0f}M" if p.get("mktCap") else "N/A",
+                    "52-Wk High": f"${p['range'].split('-')[1].strip()}" if p.get("range") and "-" in p.get("range","") else "N/A",
+                    "52-Wk Low": f"${p['range'].split('-')[0].strip()}" if p.get("range") and "-" in p.get("range","") else "N/A",
+                    "Rev Growth": rev_growth,
+                    "Gross Margin": gross_margin,
+                    "Short Float %": "N/A",
+                    "Div Yield": f"{p['lastDiv']:.2f}%" if p.get("lastDiv") else "N/A",
+                }
+        except Exception:
+            pass
+    return snap
 
 @st.cache_data(ttl=300)
 def _fetch_gbpusd():
@@ -2119,6 +2168,32 @@ if active_tab == "Deep Dive":
                 with st.container(border=True):
                     st.markdown(f"**About {ticker}:** {_desc}")
 
+            # ── Pre-compute guidance values (single source for both panels) ─────
+            _dd_score_val = int(latest_ticker_row["score"].iloc[0])
+            _dd_prob_raw  = latest_ticker_row["prob_upside"].iloc[0] if "prob_upside" in latest_ticker_row.columns else None
+            _dd_prob_str  = f"{_dd_prob_raw*100:.1f}%" if (_dd_prob_raw is not None and not pd.isna(_dd_prob_raw)) else "N/A"
+            _dd_pos_pct   = float(latest_ticker_row.get("suggested_position_pct", pd.Series([0])).iloc[0] or 0)
+            _dd_conf      = str(latest_ticker_row.get("confidence", pd.Series(["—"])).iloc[0] or "—")
+            _dd_entry     = str(latest_ticker_row.get("entry_style", pd.Series([""])).iloc[0] or "")
+            # ATR-based stop/target (same calc as Buy & Sell strategy section)
+            try:
+                _dd_hist_atr = fetch_ticker_history(ticker, period="1y")
+                _dd_price    = float(_dd_hist_atr["Close"].iloc[-1])
+                _hl  = _dd_hist_atr["High"] - _dd_hist_atr["Low"]
+                _hpc = (_dd_hist_atr["High"] - _dd_hist_atr["Close"].shift()).abs()
+                _lpc = (_dd_hist_atr["Low"]  - _dd_hist_atr["Close"].shift()).abs()
+                _atr14 = pd.concat([_hl, _hpc, _lpc], axis=1).max(axis=1).rolling(14).mean().iloc[-1]
+                _sl_mult = 1.5 if _dd_score_val >= 80 else 2.0
+                _tp_mult = 3.0 if _dd_score_val >= 80 else 2.5
+                _dd_sl_price = round(_dd_price - _sl_mult * _atr14, 2)
+                _dd_tp_price = round(_dd_price + _tp_mult * _atr14, 2)
+                _dd_sl_pct   = round((_dd_price - _dd_sl_price) / _dd_price * 100, 1)
+                _dd_tp_pct   = round((_dd_tp_price - _dd_price) / _dd_price * 100, 1)
+            except Exception:
+                _dd_price = None
+                _dd_sl_pct, _dd_tp_pct = 8.0, 20.0
+                _dd_sl_price, _dd_tp_price = None, None
+
             # ── Price History & Execution Guidance ────────────────────────────
             colC, colD = st.columns([2, 1])
             with colC:
@@ -2184,19 +2259,25 @@ if active_tab == "Deep Dive":
 
             with colD:
                 st.markdown("#### Execution Guidance")
-                st.dataframe(
-                    latest_ticker_row[
-                        [
-                            "ticker",
-                            "score",
-                            "prob_upside",
-                            "suggested_position_pct",
-                            "stop_loss_pct",
-                            "take_profit_pct",
-                        ]
-                    ].T,
-                    use_container_width=True,
-                )
+                _eg_c1, _eg_c2 = st.columns(2)
+                _eg_c1.metric("Score", f"{_dd_score_val}/100")
+                _eg_c2.metric("ML Upside Prob", _dd_prob_str,
+                              help="XGBoost probability of ≥10% gain within the horizon. 'N/A' until ~30 matured scan samples accumulate.")
+                _eg_c3, _eg_c4 = st.columns(2)
+                _eg_c3.metric("Stop Loss", f"−{_dd_sl_pct:.1f}%",
+                              delta=f"${_dd_sl_price}" if _dd_sl_price else None,
+                              delta_color="off",
+                              help="ATR-based hard stop (1.5×ATR for HC, 2×ATR for Watchlist).")
+                _eg_c4.metric("Take Profit", f"+{_dd_tp_pct:.1f}%",
+                              delta=f"${_dd_tp_price}" if _dd_tp_price else None,
+                              delta_color="off",
+                              help="ATR-based primary target (2.5–3×ATR).")
+                _eg_c5, _eg_c6 = st.columns(2)
+                _eg_c5.metric("Position Size", f"{_dd_pos_pct:.1f}%",
+                              help="Suggested % of portfolio. Risk-based sizing using ATR stop.")
+                _eg_c6.metric("Conviction", _dd_conf)
+                if _dd_entry:
+                    st.caption(f"Entry: {_dd_entry}")
 
                 st.markdown("#### Financial Snapshot")
                 snap = fetch_financial_snapshot(ticker)
@@ -2232,12 +2313,10 @@ if active_tab == "Deep Dive":
                 safe_line_chart(tdf.set_index("scan_date")["score"], y_label="score")
 
             # ── Buy & Sell Strategy + Groq Investment Thesis (bottom) ─────────
-            score_val = latest_ticker_row["score"].iloc[0]
-            upside_prob = latest_ticker_row.get("prob_upside", pd.Series([0])).iloc[0]
-            entry = latest_ticker_row.get("entry_style", pd.Series([""])).iloc[0]
-            sl_pct = latest_ticker_row.get("stop_loss_pct", pd.Series([0])).iloc[0]
-            tp_pct = latest_ticker_row.get("take_profit_pct", pd.Series([0])).iloc[0]
-            prob_str = f"{upside_prob*100:.1f}%" if upside_prob is not None else "N/A"
+            # Reuse the pre-computed variables from the guidance section above
+            score_val  = _dd_score_val
+            prob_str   = _dd_prob_str
+            entry      = _dd_entry
 
             _bs_col, _gt_col = st.columns([1, 1])
             with _bs_col:
@@ -2247,7 +2326,7 @@ if active_tab == "Deep Dive":
                 st.markdown(f"**Signal: :{_td_sig_col}[{_td_sig_lbl}]**")
                 _buy_txt, _sell_txt = _generate_buy_sell_text(
                     ticker, score_val, prob_str, entry,
-                    float(sl_pct or 8.0), float(tp_pct or 20.0)
+                    _dd_sl_pct, _dd_tp_pct,
                 )
                 st.markdown(f"**🟢 Buy:** {_buy_txt}")
                 st.markdown(f"**🔴 Sell:** {_sell_txt}")
