@@ -450,7 +450,7 @@ def fetch_financial_snapshot(ticker):
     snap = {}
     try:
         info = yf.Ticker(ticker).info
-        if info and info.get("regularMarketPrice") or info.get("marketCap"):
+        if info and (info.get("regularMarketPrice") or info.get("marketCap")):
             snap = {
                 "P/E Ratio": round(info["trailingPE"], 2) if info.get("trailingPE") else "N/A",
                 "P/S Ratio": round(info["priceToSalesTrailing12Months"], 2) if info.get("priceToSalesTrailing12Months") else "N/A",
@@ -2194,140 +2194,128 @@ if active_tab == "Deep Dive":
                 _dd_sl_pct, _dd_tp_pct = 8.0, 20.0
                 _dd_sl_price, _dd_tp_price = None, None
 
-            # ── Price History & Execution Guidance ────────────────────────────
-            colC, colD = st.columns([2, 1])
-            with colC:
-                st.markdown("#### Price & Score History (1 Year)")
-                st.caption("Top: 1-year price. Bottom: Argus score over each scan — 🟢 ≥75 strong, 🟡 50–75 watch, 🔴 <50 weak.")
-                hist = fetch_ticker_history(ticker, period="1y")
+            # ── Price & Score History (full width) ───────────────────────────
+            st.markdown("#### 📈 Price & Score History (1 Year)")
+            st.caption("Price (top) and Argus score at each scan (bottom) — 🟢 ≥75, 🟡 50–75, 🔴 <50.")
+            hist = fetch_ticker_history(ticker, period="1y")
+            try:
+                import plotly.graph_objects as go
+                from plotly.subplots import make_subplots
+                tdf_scores = tdf.dropna(subset=["scan_date", "score"]).sort_values("scan_date")
+                fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
+                                    subplot_titles=("Price ($)", "Argus Score (0–100)"),
+                                    row_heights=[0.62, 0.38])
+                if not hist.empty:
+                    fig.add_trace(go.Scatter(x=hist.index, y=hist["Close"], name="Price",
+                                             line=dict(color="#2196F3", width=1.5), fill="tozeroy",
+                                             fillcolor="rgba(33,150,243,0.07)"), row=1, col=1)
+                if not tdf_scores.empty:
+                    fig.add_hrect(y0=75, y1=100, fillcolor="rgba(76,175,80,0.12)", line_width=0, row=2, col=1)
+                    fig.add_hrect(y0=50, y1=75,  fillcolor="rgba(255,193,7,0.10)",  line_width=0, row=2, col=1)
+                    fig.add_hrect(y0=0,  y1=50,  fillcolor="rgba(244,67,54,0.08)",  line_width=0, row=2, col=1)
+                    fig.add_hline(y=75, line_dash="dot", line_color="rgba(76,175,80,0.5)",  row=2, col=1)
+                    fig.add_hline(y=50, line_dash="dot", line_color="rgba(255,193,7,0.5)",  row=2, col=1)
+                    fig.add_trace(go.Scatter(x=tdf_scores["scan_date"], y=tdf_scores["score"],
+                                             name="Argus Score", mode="lines+markers",
+                                             line=dict(color="orange", width=2),
+                                             marker=dict(size=7, color=tdf_scores["score"],
+                                                         colorscale=[[0,"#f44336"],[0.5,"#ffc107"],[1,"#4caf50"]],
+                                                         cmin=0, cmax=100, showscale=False),
+                                             text=[f"Score: {s:.0f}" for s in tdf_scores["score"]],
+                                             hovertemplate="%{text}<extra></extra>"), row=2, col=1)
+                fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+                fig.update_yaxes(title_text="Score", range=[0, 100], row=2, col=1)
+                fig.update_layout(height=420, margin=dict(l=0, r=0, t=30, b=0),
+                                  hovermode="x unified", showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception:
+                if not hist.empty:
+                    safe_line_chart(hist["Close"], y_label="close price")
+                else:
+                    st.info("No price data available for chart.")
 
-                try:
-                    import plotly.graph_objects as go
-                    from plotly.subplots import make_subplots
+            st.markdown("---")
 
-                    tdf_scores = tdf.dropna(subset=["scan_date", "score"]).sort_values("scan_date")
+            # ── Scan Findings | Financial Snapshot ───────────────────────────
+            _sf_col, _fs_col = st.columns([1, 1])
 
-                    fig = make_subplots(
-                        rows=2, cols=1,
-                        shared_xaxes=True,
-                        vertical_spacing=0.10,
-                        subplot_titles=("Price ($)", "Argus Score (0–100)"),
-                        row_heights=[0.62, 0.38],
-                    )
+            with _sf_col:
+                st.markdown("#### 📋 Last Scan Findings")
+                _ltr = latest_ticker_row.iloc[0].to_dict()
+                render_score_waterfall(_ltr)
+                _reasons_sf = _ltr.get("reasons", [])
+                if isinstance(_reasons_sf, str):
+                    try:
+                        _reasons_sf = json.loads(_reasons_sf)
+                    except Exception:
+                        _reasons_sf = [_reasons_sf] if _reasons_sf else []
+                _cat_html_sf = render_catalyst_pills(_reasons_sf)
+                if _cat_html_sf:
+                    st.markdown(_cat_html_sf, unsafe_allow_html=True)
+                if _reasons_sf:
+                    with st.expander("All scan reasons", expanded=False):
+                        for _r in _reasons_sf:
+                            st.markdown(f"- {_r}")
+                _ts_sf = latest_ticker_row["scan_timestamp"].iloc[0] if "scan_timestamp" in latest_ticker_row.columns else None
+                _rt_sf = latest_ticker_row["run_type"].iloc[0] if "run_type" in latest_ticker_row.columns else ""
+                if _ts_sf:
+                    try:
+                        _ts_sf_dt = pd.to_datetime(_ts_sf)
+                        st.caption(f"Scanned: {_ts_sf_dt.strftime('%-d %b %Y, %-I:%M %p')} · {_rt_sf}")
+                    except Exception:
+                        st.caption(f"Scanned: {_ts_sf}")
 
-                    if not hist.empty:
-                        fig.add_trace(
-                            go.Scatter(x=hist.index, y=hist["Close"], name="Price",
-                                       line=dict(color="#2196F3", width=1.5), fill="tozeroy",
-                                       fillcolor="rgba(33,150,243,0.07)"),
-                            row=1, col=1,
-                        )
-
-                    if not tdf_scores.empty:
-                        fig.add_hrect(y0=75, y1=100, fillcolor="rgba(76,175,80,0.12)", line_width=0, row=2, col=1)
-                        fig.add_hrect(y0=50, y1=75,  fillcolor="rgba(255,193,7,0.10)",  line_width=0, row=2, col=1)
-                        fig.add_hrect(y0=0,  y1=50,  fillcolor="rgba(244,67,54,0.08)",  line_width=0, row=2, col=1)
-                        fig.add_hline(y=75, line_dash="dot", line_color="rgba(76,175,80,0.5)",  row=2, col=1)
-                        fig.add_hline(y=50, line_dash="dot", line_color="rgba(255,193,7,0.5)",  row=2, col=1)
-                        fig.add_trace(
-                            go.Scatter(
-                                x=tdf_scores["scan_date"], y=tdf_scores["score"],
-                                name="Argus Score", mode="lines+markers",
-                                line=dict(color="orange", width=2),
-                                marker=dict(size=7, color=tdf_scores["score"],
-                                            colorscale=[[0,"#f44336"],[0.5,"#ffc107"],[1,"#4caf50"]],
-                                            cmin=0, cmax=100, showscale=False),
-                                text=[f"Score: {s:.0f}" for s in tdf_scores["score"]],
-                                hovertemplate="%{text}<extra></extra>",
-                            ),
-                            row=2, col=1,
-                        )
-
-                    fig.update_yaxes(title_text="Price ($)", row=1, col=1)
-                    fig.update_yaxes(title_text="Score", range=[0, 100], row=2, col=1)
-                    fig.update_layout(
-                        height=420, margin=dict(l=0, r=0, t=30, b=0),
-                        hovermode="x unified", showlegend=False,
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.warning("Could not render chart.")
-                    if not hist.empty:
-                        safe_line_chart(hist["Close"], y_label="close price")
-                    else:
-                        st.info("No market price data available for chart.")
-
-            with colD:
-                st.markdown("#### Execution Guidance")
-                _eg_c1, _eg_c2 = st.columns(2)
-                _eg_c1.metric("Score", f"{_dd_score_val}/100")
-                _eg_c2.metric("ML Upside Prob", _dd_prob_str,
-                              help="XGBoost probability of ≥10% gain within the horizon. 'N/A' until ~30 matured scan samples accumulate.")
-                _eg_c3, _eg_c4 = st.columns(2)
-                _eg_c3.metric("Stop Loss", f"−{_dd_sl_pct:.1f}%",
-                              delta=f"${_dd_sl_price}" if _dd_sl_price else None,
-                              delta_color="off",
-                              help="ATR-based hard stop (1.5×ATR for HC, 2×ATR for Watchlist).")
-                _eg_c4.metric("Take Profit", f"+{_dd_tp_pct:.1f}%",
-                              delta=f"${_dd_tp_price}" if _dd_tp_price else None,
-                              delta_color="off",
-                              help="ATR-based primary target (2.5–3×ATR).")
-                _eg_c5, _eg_c6 = st.columns(2)
-                _eg_c5.metric("Position Size", f"{_dd_pos_pct:.1f}%",
-                              help="Suggested % of portfolio. Risk-based sizing using ATR stop.")
-                _eg_c6.metric("Conviction", _dd_conf)
-                if _dd_entry:
-                    st.caption(f"Entry: {_dd_entry}")
-
-                st.markdown("#### Financial Snapshot")
+            with _fs_col:
+                st.markdown("#### 💰 Financial Snapshot")
                 snap = fetch_financial_snapshot(ticker)
                 if snap:
-                    snap_df = pd.DataFrame(list(snap.items()), columns=["Metric", "Value"]).set_index("Metric")
-                    st.dataframe(snap_df, use_container_width=True)
+                    _snap_items = [(k, v) for k, v in snap.items() if v and v != "N/A"]
+                    _snap_na    = [(k, v) for k, v in snap.items() if not v or v == "N/A"]
+                    if _snap_items:
+                        snap_df = pd.DataFrame(_snap_items, columns=["Metric", "Value"]).set_index("Metric")
+                        st.dataframe(snap_df, use_container_width=True)
+                    if _snap_na:
+                        st.caption("Not available: " + ", ".join(k for k, _ in _snap_na))
                 else:
-                    st.info("Snapshot data unavailable.")
+                    st.info("Financial data unavailable — check FMP_API_KEY secret.")
 
-                # ── Enrichment: earnings date, analyst target, insider ──
+                # Enrichment: earnings date, analyst target, insider
                 try:
                     _td_enr = fetch_enrichment(ticker)
-                    _enr_lines = []
                     if _td_enr.get("earnings_date"):
-                        _enr_lines.append(f"📅 **Next Earnings:** {_td_enr['earnings_date']}")
+                        st.markdown(f"📅 **Next Earnings:** {_td_enr['earnings_date']}")
                     if _td_enr.get("analyst_target") and _td_enr.get("analyst_upside") is not None:
                         _u_icon = "🟢" if _td_enr["analyst_upside"] > 0 else "🔴"
-                        _enr_lines.append(
-                            f"{_u_icon} **Analyst Target:** ${_td_enr['analyst_target']} "
-                            f"({_td_enr['analyst_upside']:+.1f}% upside)"
-                        )
+                        st.markdown(f"{_u_icon} **Analyst Target:** ${_td_enr['analyst_target']} "
+                                    f"({_td_enr['analyst_upside']:+.1f}% upside)")
                     if _td_enr.get("insider_net"):
-                        _enr_lines.append(f"👤 **Insider Activity:** {_td_enr['insider_net']}")
-                    for _el in _enr_lines:
-                        st.markdown(_el)
+                        st.markdown(f"👤 **Insider Activity:** {_td_enr['insider_net']}")
                 except Exception:
                     pass
 
             st.markdown("---")
 
-            # ── Argus Score History (collapsed by default) ────────────────────
+            # ── Argus Score History (collapsed) ───────────────────────────────
             with st.expander("📊 Argus Score History", expanded=False):
                 safe_line_chart(tdf.set_index("scan_date")["score"], y_label="score")
 
-            # ── Buy & Sell Strategy + Groq Investment Thesis (bottom) ─────────
-            # Reuse the pre-computed variables from the guidance section above
-            score_val  = _dd_score_val
-            prob_str   = _dd_prob_str
-            entry      = _dd_entry
+            # ── Buy & Sell Strategy + Groq Investment Thesis ──────────────────
+            score_val = _dd_score_val
+            prob_str  = _dd_prob_str
+            entry     = _dd_entry
 
             _bs_col, _gt_col = st.columns([1, 1])
             with _bs_col:
                 st.markdown("#### Buy & Sell Strategy")
-                st.info("Actionable execution plan based on the latest signal.")
                 _td_sig_lbl, _td_sig_col = get_signal_label(score_val)
-                st.markdown(f"**Signal: :{_td_sig_col}[{_td_sig_lbl}]**")
+                _sig_line = f"**Signal: :{_td_sig_col}[{_td_sig_lbl}]** · Score {score_val}/100"
+                if _dd_pos_pct:
+                    _sig_line += f" · Position {_dd_pos_pct:.1f}%"
+                st.markdown(_sig_line)
+                if model.get("ready") and _dd_prob_raw is not None and not pd.isna(_dd_prob_raw):
+                    st.caption(f"ML Upside Probability: {prob_str}")
                 _buy_txt, _sell_txt = _generate_buy_sell_text(
-                    ticker, score_val, prob_str, entry,
-                    _dd_sl_pct, _dd_tp_pct,
-                )
+                    ticker, score_val, prob_str, entry, _dd_sl_pct, _dd_tp_pct)
                 st.markdown(f"**🟢 Buy:** {_buy_txt}")
                 st.markdown(f"**🔴 Sell:** {_sell_txt}")
 
