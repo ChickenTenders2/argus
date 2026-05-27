@@ -159,8 +159,8 @@ def get_fred_macro():
             "signal": "🔴 Hot" if annualised > 3.5 else ("🟡 Elevated" if annualised > 2.5 else "✅ Contained"),
         }
 
-    # ── Fed Funds Rate (FEDFUNDS) ─────────────────────────
-    fedfunds = _fetch_fred_series("FEDFUNDS", limit=4)
+    # ── Fed Funds Rate (DFF = daily, falls back to monthly FEDFUNDS) ─────────
+    fedfunds = _fetch_fred_series("DFF", limit=10) or _fetch_fred_series("FEDFUNDS", limit=4)
     if fedfunds:
         val = fedfunds[0]
         prev = fedfunds[1] if len(fedfunds) >= 2 else val
