@@ -97,9 +97,14 @@ def _get_fear_greed_vix_fallback():
 
 def get_fear_greed():
     """
-    Fetch Fear & Greed Index. Tries alternative.me first; falls back to VIX proxy.
+    Equity-market Fear & Greed proxy derived from VIX (primary).
+    alternative.me is crypto-specific and not suitable for equity regime decisions.
     Returns dict with value (0=Extreme Fear, 100=Extreme Greed), label, week trend.
     """
+    result = _get_fear_greed_vix_fallback()
+    if result:
+        return result
+    # Last-resort: crypto F&G from alternative.me (labelled clearly)
     try:
         r = requests.get("https://api.alternative.me/fng/?limit=7", timeout=8)
         if r.status_code == 200:
@@ -114,12 +119,11 @@ def get_fear_greed():
                     "label": latest["value_classification"],
                     "week_ago": val_prev,
                     "trend": "rising" if val > val_prev + 5 else ("falling" if val < val_prev - 5 else "stable"),
+                    "source": "alternative.me (crypto — fallback only)",
                 }
     except Exception as e:
-        logger.debug(f"Fear & Greed primary fetch failed: {e}")
-
-    logger.info("Fear & Greed: falling back to VIX-derived proxy")
-    return _get_fear_greed_vix_fallback()
+        logger.debug(f"Fear & Greed alternative.me fetch failed: {e}")
+    return None
 
 
 def get_fred_macro():

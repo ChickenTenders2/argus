@@ -1814,13 +1814,13 @@ if active_tab == "Alerts":
                 _fg_val = _fg.get("value")
                 _fg_label = _fg.get("label", "N/A")
                 _fg_trend = _fg.get("trend", "stable")
-                _fg_src = _fg.get("source", "alternative.me")
+                _fg_src = _fg.get("source", "VIX-derived")
                 st.metric(
-                    "😱 Fear & Greed",
+                    "😱 Fear & Greed (Equity)",
                     f"{_fg_val}/100" if _fg_val is not None else "N/A",
                     delta=f"{_fg_label} · {_fg_trend}",
                     delta_color="off",
-                    help=f"Fear & Greed Index. <25 = Extreme Fear (contrarian buy zone). Source: {_fg_src}.",
+                    help=f"Equity-market sentiment derived from VIX level. <25 = Extreme Fear, >75 = Greed. Source: {_fg_src}.",
                 )
 
     _macro_src_note = "from regime fetch" if _macro_from_regime else "standalone FRED fetch (regime VIX/SPY unavailable)"
