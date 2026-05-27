@@ -27,9 +27,6 @@ data/argus.db-journal
 # Local database — never overwrite with GitHub Action copy
 data/argus.db
 
-# Journal CSV is a local sync artifact — source of truth is Supabase/SQLite
-data/argus_journal.csv
-
 # Logs
 argus_alerts_log.txt
 

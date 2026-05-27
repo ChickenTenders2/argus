@@ -938,12 +938,24 @@ def save_results(results, scan_date, scan_timestamp, run_type, latest_file, hist
 
 
 def sync_journal_to_csv(journal_file):
-    """Write the full journal DB table back to the CSV so git tracks latest state."""
+    """Write the full journal DB table back to the CSV so git tracks latest state.
+    Never overwrites an existing non-empty CSV with empty data — protects against
+    a fresh DB connection (e.g. Supabase reset) wiping the backup."""
     try:
         df = load_journal()
         df = df[df["ticker"] != "_INIT_"]
         if "journal_name" not in df.columns:
             df["journal_name"] = "Default"
+        # Guard: don't overwrite a populated CSV with an empty result
+        if df.empty and os.path.exists(journal_file):
+            try:
+                existing = pd.read_csv(journal_file)
+                existing = existing[existing["ticker"] != "_INIT_"] if "ticker" in existing.columns else existing
+                if not existing.empty:
+                    logger.warning("sync_journal_to_csv: DB returned 0 rows but CSV has data — skipping overwrite")
+                    return
+            except Exception:
+                pass
         df.to_csv(journal_file, index=False)
     except Exception as e:
         logger.warning(f"sync_journal_to_csv failed: {e}")
