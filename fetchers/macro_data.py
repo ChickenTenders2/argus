@@ -58,72 +58,92 @@ def _get_yield_curve_yfinance():
         return None
 
 
-def _get_fear_greed_vix_fallback():
+def _compute_equity_fear_greed(hy_spread_val=None):
     """
-    Fallback: derive a Fear & Greed proxy from the current VIX level via yfinance.
-    Used when alternative.me is unavailable.
+    Multi-factor equity Fear & Greed index using publicly available data.
+    Modelled on CNN F&G — four components, each scored 0-100, equally weighted.
+
+    Components:
+      1. VIX level          — market volatility (fear = high VIX)
+      2. SPY momentum       — SPY vs its 125-day MA (greed = above MA)
+      3. Safe-haven demand  — SPY 20-day return vs TLT (greed = stocks outperform bonds)
+      4. HY spread          — junk-bond spread (greed = tight spreads, risk-on)
     """
     try:
         import yfinance as yf
-        vix_hist = yf.Ticker("^VIX").history(period="5d")["Close"].dropna()
-        if vix_hist.empty:
+        data = yf.download(["SPY", "^VIX", "TLT"], period="9mo", progress=False, auto_adjust=True)["Close"]
+        if data.empty or len(data) < 130:
             return None
-        vix = float(vix_hist.iloc[-1])
-        vix_prev = float(vix_hist.iloc[-2]) if len(vix_hist) >= 2 else vix
-        if vix >= 40:
-            val, label = 5, "Extreme Fear"
-        elif vix >= 30:
-            val, label = 20, "Fear"
-        elif vix >= 22:
-            val, label = 35, "Fear"
-        elif vix >= 18:
-            val, label = 50, "Neutral"
-        elif vix >= 14:
-            val, label = 65, "Greed"
+
+        spy = data["SPY"].dropna()
+        vix = data["^VIX"].dropna()
+        tlt = data["TLT"].dropna()
+
+        scores = {}
+
+        # 1. VIX: linear scale 10→100 (Extreme Greed) … 40→0 (Extreme Fear)
+        vix_now = float(vix.iloc[-1])
+        vix_prev_week = float(vix.iloc[-6]) if len(vix) >= 6 else vix_now
+        scores["vix"] = max(0, min(100, (40 - vix_now) / 30 * 100))
+
+        # 2. SPY momentum: % distance from 125-day MA, scaled ±10% → 0-100
+        ma125 = float(spy.rolling(125).mean().iloc[-1])
+        pct_from_ma = (float(spy.iloc[-1]) - ma125) / ma125 * 100
+        scores["momentum"] = max(0, min(100, 50 + pct_from_ma * 5))
+
+        # 3. Safe-haven demand: SPY 20d return minus TLT 20d return, scaled ±5% → 0-100
+        if len(spy) >= 21 and len(tlt) >= 21:
+            spy_20d = (float(spy.iloc[-1]) / float(spy.iloc[-21]) - 1) * 100
+            tlt_20d = (float(tlt.iloc[-1]) / float(tlt.iloc[-21]) - 1) * 100
+            rel = spy_20d - tlt_20d
+            scores["safe_haven"] = max(0, min(100, 50 + rel * 10))
+
+        # 4. HY spread: tight = greed (score 100 at ≤3%), wide = fear (score 0 at ≥7%)
+        if hy_spread_val is not None:
+            scores["hy_spread"] = max(0, min(100, (7 - hy_spread_val) / 4 * 100))
+
+        if not scores:
+            return None
+
+        composite = round(sum(scores.values()) / len(scores))
+        week_ago_vix = float(vix.iloc[-6]) if len(vix) >= 6 else vix_now
+        week_ago_score = max(0, min(100, (40 - week_ago_vix) / 30 * 100))
+
+        if composite >= 75:
+            label = "Extreme Greed"
+        elif composite >= 55:
+            label = "Greed"
+        elif composite >= 45:
+            label = "Neutral"
+        elif composite >= 25:
+            label = "Fear"
         else:
-            val, label = 82, "Extreme Greed"
-        trend = "rising" if vix > vix_prev * 1.05 else ("falling" if vix < vix_prev * 0.95 else "stable")
+            label = "Extreme Fear"
+
+        trend = ("rising" if composite > week_ago_score + 5
+                 else "falling" if composite < week_ago_score - 5
+                 else "stable")
+
         return {
-            "value": val,
+            "value": composite,
             "label": label,
-            "week_ago": val,
+            "week_ago": int(week_ago_score),
             "trend": trend,
-            "source": f"VIX-derived ({vix:.1f})",
+            "source": f"Equity composite (VIX·Momentum·SafeHaven·HY)",
+            "_components": scores,
         }
     except Exception as e:
-        logger.debug(f"VIX fear/greed fallback failed: {e}")
+        logger.debug(f"Equity F&G computation failed: {e}")
         return None
 
 
-def get_fear_greed():
+def get_fear_greed(hy_spread_val=None):
     """
-    Equity-market Fear & Greed proxy derived from VIX (primary).
-    alternative.me is crypto-specific and not suitable for equity regime decisions.
+    Multi-factor equity Fear & Greed index (VIX, SPY momentum, safe-haven, HY spread).
+    Entirely stock-market based — no crypto data used.
     Returns dict with value (0=Extreme Fear, 100=Extreme Greed), label, week trend.
     """
-    result = _get_fear_greed_vix_fallback()
-    if result:
-        return result
-    # Last-resort: crypto F&G from alternative.me (labelled clearly)
-    try:
-        r = requests.get("https://api.alternative.me/fng/?limit=7", timeout=8)
-        if r.status_code == 200:
-            data = r.json().get("data", [])
-            if data:
-                latest = data[0]
-                week_ago = data[-1] if len(data) >= 7 else data[0]
-                val = int(latest["value"])
-                val_prev = int(week_ago["value"])
-                return {
-                    "value": val,
-                    "label": latest["value_classification"],
-                    "week_ago": val_prev,
-                    "trend": "rising" if val > val_prev + 5 else ("falling" if val < val_prev - 5 else "stable"),
-                    "source": "alternative.me (crypto — fallback only)",
-                }
-    except Exception as e:
-        logger.debug(f"Fear & Greed alternative.me fetch failed: {e}")
-    return None
+    return _compute_equity_fear_greed(hy_spread_val=hy_spread_val)
 
 
 def get_fred_macro():
@@ -234,7 +254,8 @@ def build_macro_context():
     All fields are optional — callers must use .get() with defaults.
     """
     macro = get_fred_macro()
-    fg = get_fear_greed()
+    hy_val = macro.get("hy_spread", {}).get("value")
+    fg = get_fear_greed(hy_spread_val=hy_val)
     if fg:
         macro["fear_greed"] = fg
     breadth = get_small_cap_breadth()
