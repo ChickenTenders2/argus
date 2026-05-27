@@ -1899,6 +1899,7 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         p_score = 0
         prev = memory_df[memory_df["ticker"] == ticker]
         score_velocity = 0
+        last_score_mem = 0
         if not prev.empty:
             times_flagged = int(prev["times_flagged"].values[0])
             last_score_mem = float(prev["last_score"].values[0]) if "last_score" in prev.columns else 0
@@ -1993,6 +1994,11 @@ def score_stock(ticker, memory_df, config, regime_info=None, display_only=False)
         # final_unclamped — used as tiebreaker when multiple picks hit 100
         final_unclamped = score
         score = min(100, score)
+
+        # Override velocity with final-vs-final comparison so the badge reflects
+        # the true change in displayed score, not a partial intermediate value.
+        if last_score_mem:
+            score_velocity = score - last_score_mem
 
         # Gate on the pre-regime, pre-sentiment quality score.
         # The regime multiplier adjusts the *displayed* score for market context but
