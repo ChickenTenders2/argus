@@ -1466,31 +1466,31 @@ with st.sidebar:
     gross_margin_low  = st.session_state.get("gross_margin_low", 40) / 100
     inst_own_ceiling  = st.session_state.get("inst_own_ceiling", 40) / 100
 
-    st.markdown('<p style="font-size:0.82rem;font-weight:700;margin:8px 0 2px;color:#aaa;text-transform:uppercase;letter-spacing:0.05em">💷 Capital & Sizing</p>', unsafe_allow_html=True)
-    st.number_input(
-        "Unit Value (£)",
-        min_value=50, max_value=5000, step=50,
-        value=st.session_state.prefs.get("unit_value", 250),
-        key="unit_value_input",
-        on_change=update_unit_value_pref,
-        help="1 unit = this £ amount. Argus allocates 1–5 units per HC pick.",
-    )
-    st.number_input(
-        "Total Portfolio Size (£)",
-        min_value=0, max_value=10_000_000, step=500,
-        value=st.session_state.prefs.get("portfolio_size", 10000),
-        key="portfolio_size_input",
-        on_change=_save_portfolio_size_pref,
-        help="Used to calculate position size % from unit allocations.",
-    )
-    st.slider(
-        "Daily Unit Cap",
-        min_value=3, max_value=30, step=1,
-        value=st.session_state.prefs.get("daily_unit_cap", 12),
-        key="daily_unit_cap_input",
-        on_change=_save_daily_cap_pref,
-        help="Maximum total units that can be allocated in a single scan.",
-    )
+    with st.expander("💷 Capital & Sizing", expanded=False):
+        st.number_input(
+            "Unit Value (£)",
+            min_value=50, max_value=5000, step=50,
+            value=st.session_state.prefs.get("unit_value", 250),
+            key="unit_value_input",
+            on_change=update_unit_value_pref,
+            help="1 unit = this £ amount. Argus allocates 1–5 units per HC pick.",
+        )
+        st.number_input(
+            "Total Portfolio Size (£)",
+            min_value=0, max_value=10_000_000, step=500,
+            value=st.session_state.prefs.get("portfolio_size", 10000),
+            key="portfolio_size_input",
+            on_change=_save_portfolio_size_pref,
+            help="Used to calculate position size % from unit allocations.",
+        )
+        st.slider(
+            "Daily Unit Cap",
+            min_value=3, max_value=30, step=1,
+            value=st.session_state.prefs.get("daily_unit_cap", 12),
+            key="daily_unit_cap_input",
+            on_change=_save_daily_cap_pref,
+            help="Maximum total units that can be allocated in a single scan.",
+        )
 
     st.divider()
     send_to_telegram = st.checkbox(
