@@ -3316,144 +3316,127 @@ competitors. Is [TICKER] gaining or losing ground?""", language="text")
     # ── Documentation wall ────────────────────────────────────────────────
     with st.expander("📖 Full Documentation", expanded=False):
       st.markdown('''
-    ### Phase & Capabilities Overview
-    * **Phase 1: ML Prediction Model:** Uses XGBoost to evaluate hit probabilities based on the accumulation of historical features.
-    * **Phase 2: Live AI News Sentiment Scoring:** Connects to the Groq API (Llama 3.1) to dynamically read live news headlines and adjust the quantitative score (up to +/- 15 points) based on real-time sentiment.
-    * **Phase 3: Macro Market Regime Filter:** Dynamically adjusts stock scores based on SPY moving averages and the VIX (e.g., boosting scores in Bull markets, penalizing in Bear markets).
-    * **Phase 4: Portfolio Optimizer & Auto-Pilot Monitor:** 
-        * Uses 1-year historical correlations to compute optimal portfolio weightings.
-        * Features an **Active Portfolio Monitor** that tracks your logged `Journal` entries against live market prices, automatically triggering alerts when Stop-Loss (SL) or Take-Profit (TP) levels are breached.
-    
-    ---
     ### Pages Overview
-    * **Alerts:** Snapshot of the latest scan results. View the current Market Regime, top picks from the most recent scan, and portfolio alerts. Click "Deep Dive" on any pick to analyse it in detail.
-    * **Deep Dive:** Analyse specific tickers. Evaluate a two-panel Plotly chart (price on top, Argus score with colour bands on bottom — 🟢 ≥75, 🟡 50–75, 🔴 <50), quantitative execution guidance, and generate qualitative AI investment thesis reports (Groq). Search any ticker for a live on-demand rescore.
-    * **History:** Browse historical database scans with interactive sortable tables and score trend charts. Filter by date, profile, and tier.
-    * **Journal:** Personal logbook featuring a **Live Portfolio Analytics Dashboard**. Track Total Invested, Current Value, Net Return %, and visualize Sector Diversification via interactive pie charts. Benchmarks portfolio performance against the S&P 500 (SPY). Portfolio Optimizer accessible via expander at the bottom.
-    * **Tools:** Three sub-pages — **Manual Scan** (run an on-demand scan with configurable settings and optional Telegram delivery), **ML Model** (XGBoost diagnostics: hit rates, Brier scores, confusion matrix, feature importance), **Docs** (this reference guide and curated LLM research prompts).
+
+    * **Alerts:** Latest scan picks with the scan timestamp and run type shown above them so you always know how fresh the data is. Shows the market regime strip, four macro signal cards (yield curve, CPI, Fed Funds, Fear & Greed), hero Top 3 briefing panel, and full pick cards. Click **Deep Dive** on any pick to analyse it in detail.
+    * **Deep Dive:** Per-ticker analysis. Select from the dropdown (or click Deep Dive from Alerts — it navigates automatically). Shows a full-width price + Argus score chart, a **Last Scan Findings** panel with score waterfall breakdown and catalyst pill badges (the same data from the Telegram message), a **Financial Snapshot** (Market Cap, P/E, P/S, Rev Growth, Gross Margin, 52-week range), and a **Buy & Sell Strategy** section with ATR-based stop/target levels and an AI investment thesis (Groq). Also supports live on-demand rescore of any ticker via the search box at the top.
+    * **History:** Full scan history with run-type filter (premarket / full / postclose / manual), day picker, score trend chart, and unit-sizing table.
+    * **Journal:** Portfolio logbook — log BUY/SELL/SCALE_IN/TRIM trades, track open positions with live P&L, SPY benchmark comparison, sector pie chart, and Markowitz portfolio optimizer.
+    * **Tools:** Three sub-pages — **Manual Scan** (on-demand scan with configurable settings, optional Telegram delivery), **ML Model** (XGBoost diagnostics once model is ready), **Docs** (this page).
 
     ---
-    ### 🤖 ML Prediction Model — When Does It Activate?
+    ### 📡 Macro Signal Cards
 
-    The XGBoost model trains on rows in the `features` table where the **future return is already known** (i.e., the scan happened at least `Horizon Days` ago — default 63 days). Each scan of N tickers produces up to N feature rows. Once those rows mature past the horizon, they become labeled training samples.
+    Four equity-market indicators shown on the Alerts tab. All update daily.
 
-    **Practical timeline:**
-    * 1 scan of 400 tickers (default) = up to 400 samples (but only usable after 63 days)
-    * After ~1–2 months of daily GitHub Action scans (full ~2000-ticker universe each run), you will likely have 10,000+ labeled samples — well above the 30-sample minimum
-    * The model activates automatically as soon as 30+ matured samples exist; it improves steadily thereafter
+    | Card | Source | What it shows |
+    |---|---|---|
+    | **Yield Curve** | FRED T10Y2Y (daily) · yfinance ^TNX-^IRX fallback | 10Y-2Y spread. Negative = inverted (recession signal) |
+    | **CPI Trend** | FRED CPIAUCSL (monthly BLS release) | Annualised 3-month inflation change. >3.5% = accelerating |
+    | **Fed Funds Rate** | FRED DFF (daily effective rate) | Current rate. Reflects Fed decisions within 1 day |
+    | **Fear & Greed (Equity)** | VIX + SPY momentum + SPY vs TLT + HY spread | 0–100 stock-market sentiment composite. No crypto data |
 
-    The model is **100% free** — it uses `yfinance` price data (free) and trains locally with XGBoost. No paid data feed is required.
-
-    ---
-    ### 📊 Upside Prob (%), Scenario Bear / Base / Bull — How Are They Calculated?
-
-    All three are derived from the **local XGBoost model** and historical scan data — no paid API is needed:
-
-    * **Upside Prob (%):** The ML model's predicted probability that this ticker will hit the Target Return within the Horizon Days. Calibrated using historical hit rates across score buckets.
-    * **Scenario Bear:** The historical hit-rate for tickers in the same score bucket when market conditions were bearish (low-multiplier regimes).
-    * **Scenario Base:** The overall historical hit-rate for this score bucket across all regimes.
-    * **Scenario Bull:** The hit-rate observed in bullish regime periods (high-multiplier).
-
-    These figures populate automatically once the ML model is active. Until then, they display as N/A.
-
-    ---
-    ### 🔔 Alerts Log — How It Links to Telegram
-
-    The **Alerts Log** tab reads from `argus_alerts_log.txt`, which is updated in two ways:
-
-    1. **GitHub Actions daily scan:** `argus.py` writes the full message to `argus_alerts_log.txt` and then commits it back to the repository. When you pull the latest code, the log file is updated with every automated run.
-    2. **Local manual runs:** Running the scan via **Tools → Manual Scan** also appends to the same file on your local machine.
-
-    > **Note:** The Alerts Log shows what was *sent* to Telegram. If a run failed to deliver to Telegram (bad token, rate limit, etc.), the log entry is still written so you can diagnose the issue.
-
-    ---
-    ### 📒 Journal Persistence — Your Entries Are Safe
-
-    Journal entries are stored in `argus.db` (SQLite) **locally on your machine only**. The database is now excluded from Git tracking, so:
-
-    * GitHub Actions daily runs will **never overwrite** your local database
-    * Pulling new commits will **never wipe** your journal entries
-    * Scan history is preserved via the committed CSV files (`argus_results_history.csv`) and automatically re-imported into your local database if it is ever missing
+    > **Fear & Greed** is computed from four equally-weighted stock-market signals — not the crypto alternative.me index. It reads realistically (e.g. ~90/Extreme Greed when VIX is ~17 and SPY is above all moving averages).
 
     ---
     ### 🟢 Signal Label Reference
-
-    All signals are derived from the **post-regime-multiplier Argus score** (0–100):
 
     | Score | Signal | Meaning |
     |---|---|---|
     | ≥ 85 | 🟢 Strong Buy | Top-tier quality + momentum — highest confidence |
     | ≥ 75 | 🔵 Buy | High quality, suitable for entry |
-    | ≥ 65 | 🟡 Moderate Buy | Good setup but not exceptional — watchlist candidate |
-    | ≥ 55 | ⚪ Hold / Watch | Borderline — wait for a catalyst |
-    | < 55 | 🔴 Avoid for Now | Poor fundamentals or adverse momentum |
+    | ≥ 65 | 🟡 Moderate Buy | Good setup — watchlist candidate |
+    | ≥ 55 | ⚪ Hold / Watch | Borderline — wait for confirmation |
+    | < 55 | 🔴 Avoid | Poor fundamentals or adverse momentum |
 
-    > The same scoring function is used everywhere — scan cards, Deep Dive, and manual lookups — so the signal will always match as long as the same market regime is active.
+    ---
+    ### 📊 Score Velocity Badge
+
+    The ↑/↓ badge on each card shows how the score changed since the last time that ticker appeared in a scan. A stable stock with unchanged fundamentals shows ≈0. The badge compares final-vs-final scores (after regime multiplier), so it is not affected by intermediate calculation order.
+
+    ---
+    ### 🔔 8-K Catalyst Labels
+
+    8-K labels come from SEC EDGAR filings in the last 10 days:
+
+    | Label | SEC Item | Points |
+    |---|---|---|
+    | Material Agreement | 1.01 | +3 |
+    | Reg FD Disclosure | 7.01 | +3 |
+    | Other Events | 8.01 | +3 |
+    | Asset Acquisition | 2.01 | +2 |
+    | Earnings Results | 2.02 | +2 |
+    | Officer/Director Change | 5.02 | 0 |
+    | 8-K Event | *(unknown item code)* | 0 — filed an 8-K with an unrecognised item |
+
+    ---
+    ### 🤖 ML Prediction Model — When Does It Activate?
+
+    The XGBoost model trains on scan rows where the future return is already known (scan happened at least `Horizon Days` ago — default 63 days). It activates automatically once 30+ matured samples exist and improves steadily thereafter. Until then, ML Upside Prob shows N/A in Deep Dive.
+
+    **Practical timeline:** After ~1–2 months of daily GitHub Actions scans you will have thousands of labeled samples — well above the 30-sample minimum.
+
+    The model is **100% free** — yfinance price data + local XGBoost. No paid feed required.
+
+    ---
+    ### 💷 Capital & Sizing
+
+    Found in the sidebar under **💷 Capital & Sizing** (collapsible).
+
+    * **Unit Value (£):** How much capital 1 unit represents (default £250).
+    * **Total Portfolio Size (£):** Used to calculate position % per pick.
+    * **Daily Unit Cap:** Maximum total units deployable per scan (default 12).
+
+    Unit allocation for HC picks: Rank #1 → 4 units · #2–3 → 3 · #4–5 → 2 · #6+ → 1. Modified up for insider buying, down for overextended price.
 
     ---
     ### 🎛 Global Presets — Quick Reference
 
     | Preset | Min Score | Best for |
     |---|---|---|
-    | **Default** | 60 | Neutral market, unsure which preset — gives ~8–12 picks |
-    | **High Conviction** | 75 | Bull market, concentrate into 1–3 highest-quality picks |
-    | **Momentum Sprint** | 65 | Strong trend, catch short-term breakouts (~30% target, 21d) |
+    | **Default** | 60 | Neutral market, ~8–12 picks |
+    | **High Conviction** | 75 | Bull market, concentrate into 1–3 best picks |
+    | **Momentum Sprint** | 65 | Short-term breakouts (21d horizon, 30% target) |
     | **Earnings Season** | 65 | Jan / Apr / Jul / Oct earnings cycles |
-    | **Swing Recovery** | 65 | Market pulled back 10–20%, expect mean-reversion |
+    | **Swing Recovery** | 65 | Market pulled back 10–20%, mean-reversion |
     | **Aggressive Growth** | 65 | Confirmed bull run, higher risk tolerance |
     | **Liquidity Focus** | 65 | Large accounts needing fast entry/exit (vol ≥ 2M) |
-    | **Capital Preservation** | 72 | Bear or Extreme Fear regime active |
+    | **Capital Preservation** | 72 | Bear or Extreme Fear regime |
     | **Bear Market Defense** | 70 | SPY below 200-day MA |
-    | **Small Cap Hunter** | 62 | Bull market, high risk appetite (price floor $0.50) |
+    | **Small Cap Hunter** | 62 | Bull market, high risk appetite |
     | **Penny Stock High Risk** | 55 | Speculative allocation only |
 
-    > **For finding 10%+ movers:** Use **Momentum Sprint** (21-day horizon, 30% target). It balances strict-enough quality (≥65) with the short-term breakout signals most predictive of big moves.
-
-    > **High Conviction returns 2–3 picks** by design — it requires score ≥75 which only the top ~1% of the 400-stock scan universe achieves. If you need 8–12 picks, use **Default**.
-
-    ---
-    ### 🔧 Scoring Thresholds — What They Do
-
-    The **Scoring Thresholds** expander in the sidebar lets you tune how generously each fundamental metric awards points. Changing these does **not** block any stock outright — it only shifts how many points they earn. The **Minimum Score** slider is the actual pass/fail gate.
-
-    | Threshold | Default | Effect |
-    |---|---|---|
-    | Rev Growth (full pts) | 30% | ≥30% revenue growth → 20 pts; ≥20% → 12 pts |
-    | ROCE threshold | 20% | Return on Capital Employed ≥20% → 7 pts |
-    | Gross Margin (full pts) | 60% | Gross margin >60% → 5 pts; >40% → 3 pts |
-    | Inst. Ownership Ceiling | 70% | inst. ownership <70% → 13 pts (undiscovered signal) |
-
-    > Applying any preset resets all thresholds to these safe defaults automatically.
+    > **For finding 10%+ movers:** Use **Momentum Sprint** — balances quality (≥65) with short-term breakout signals.
+    > **High Conviction returns 2–3 picks** by design. For 8–12 picks use **Default**.
 
     ---
     ### ⚡ Scan Sources
 
-    Argus has two scan sources:
-    1. **GitHub Actions (automated):** Runs at 07:00, 10:00, and 17:30 ET on weekdays. Results are committed to the repo and synced to Supabase — they appear automatically in the Alerts and History tabs.
-    2. **Manual Scan (Tools → Manual Scan):** On-demand, using your current settings. Results are written to the same history store and optionally sent to Telegram.
-
-    The Alerts tab always shows the most recent scan regardless of source.
+    1. **GitHub Actions (automated):** Runs Mon–Fri at 07:00 ET (premarket), 10:00 ET (full), 17:30 ET (postclose). Results are committed to the repo and synced to Supabase. The Alerts tab shows the scan timestamp above the picks.
+    2. **Manual Scan (Tools → Manual Scan):** On-demand with your current settings. Results go to the same history store and optionally to Telegram.
 
     ---
-    ### Settings Reference
+    ### 🔧 Settings Reference
 
-    **Sidebar (always visible)**
-    * **Global Preset:** One-click configuration for common strategies (Default, High Conviction, etc.).
-    * **Unit Value (£):** How much capital 1 unit represents. Argus allocates 1–5 units per HC pick.
-    * **Total Portfolio Size (£):** Used to calculate position % from unit allocations.
-    * **Daily Unit Cap:** Maximum total units deployable in a single scan.
-    * **Send manual run to Telegram:** Whether manual scans post to your Telegram channel.
-    * **Auto-refresh (15 min):** Reloads the page every 15 minutes to show latest GitHub Actions results.
+    **Sidebar**
+    * **Global Preset:** One-click strategy configuration.
+    * **💷 Capital & Sizing** *(collapsible)*: Unit Value, Portfolio Size, Daily Unit Cap.
+    * **Send manual run to Telegram:** Posts manual scan results to your channel.
+    * **Auto-refresh (15 min):** Reloads the page to pick up latest GitHub Actions results.
 
     **Tools → Manual Scan**
-    * **Minimum Score:** The minimum Argus score required to appear in results (Default: 50).
-    * **Universe Mode:** Controls which slice of the Russell 2000 is scanned. **Fixed Top** scans the largest-weighted names (fast, consistent). **Random** picks a different subset each run. **Full Universe** scans all ~2000 R2000 tickers (~5–10 min).
-    * **Universe Size:** Number of tickers to scan in Fixed/Random modes (Default: 400).
-    * **Advanced Filters:** Price Floor, Price Ceiling, Volume Floor.
+    * **Minimum Score:** Pass/fail gate (default 50). Checked against pre-regime quality score.
+    * **Universe Mode:** Core (IWM ~2000), Rockets (Nasdaq sub-$1B + IPOs ~800–1200), Combined (~2500+).
+    * **Advanced Filters:** Price Floor/Ceiling, Volume Floor.
     * **Advanced Risk Rules:** Risk per trade %, Max position size %.
-    * **Scoring Thresholds:** Revenue growth bars, ROCE threshold, Gross margin bars, Inst. ownership ceiling.
+    * **Scoring Thresholds:** Revenue growth bars, ROCE, Gross margin, Inst. ownership ceiling.
 
     **Tools → ML Model**
-    * **Horizon Days:** The timeframe over which the ML model predicts price movement (Default: 63 days, ~1 quarter).
-    * **Target Return (%):** The minimum % gain the ML model considers a 'hit' (Default: 10%).
+    * **Horizon Days:** Prediction timeframe (default 63 days, ~1 quarter).
+    * **Target Return (%):** Minimum gain counted as a hit (default 10%).
+
+    ---
+    ### 📒 Journal Persistence
+
+    Journal entries live in `argus.db` (SQLite) on your local machine only — gitignored so GitHub Actions never overwrites them. Scan history is preserved in committed CSV files and re-imported into the local DB automatically if it is missing.
     ''')
