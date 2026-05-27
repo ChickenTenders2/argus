@@ -2057,15 +2057,23 @@ if active_tab == "Deep Dive":
                 st.error(f"Error analysing {_manual_ticker_input}: {_e}")
     st.divider()
 
-    if history_df.empty:
+    # Build ticker list from DB history + latest CSV so picks from the most
+    # recent Telegram scan appear even if they haven't hit the DB yet.
+    _dd_tickers: set = set()
+    if not history_df.empty and "ticker" in history_df.columns:
+        _dd_tickers |= set(history_df["ticker"].dropna().unique())
+    if not latest_df.empty and "ticker" in latest_df.columns:
+        _dd_tickers |= set(latest_df["ticker"].dropna().unique())
+
+    if not _dd_tickers:
         st.info("No history available yet.")
     else:
-        ticker_options = sorted(history_df["ticker"].dropna().unique().tolist())
+        ticker_options = sorted(_dd_tickers)
         # Try to use selected_ticker from session_state
         idx = 0
         if "selected_ticker" in st.session_state and st.session_state["selected_ticker"] in ticker_options:
             idx = ticker_options.index(st.session_state["selected_ticker"])
-            
+
         ticker = st.selectbox("Select ticker", ticker_options, index=idx)
         st.session_state["selected_ticker"] = ticker
         
