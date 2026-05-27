@@ -1802,6 +1802,26 @@ if active_tab == "Alerts":
     else:
         _top_picks = _picks_src.sort_values("score", ascending=False).copy()
         _show5 = _top_picks.head(5)
+
+        # ── Scan timestamp header ─────────────────────────────────────────────
+        _hdr_ts = _top_picks["scan_timestamp"].iloc[0] if "scan_timestamp" in _top_picks.columns else None
+        _hdr_rt = _top_picks["run_type"].iloc[0] if "run_type" in _top_picks.columns else ""
+        _hdr_rt_label = {"premarket": "Pre-market", "full": "Full", "postclose": "Post-close",
+                         "manual": "Manual", "scheduled": "Scheduled"}.get(str(_hdr_rt), str(_hdr_rt).capitalize())
+        if _hdr_ts:
+            try:
+                _hdr_dt = pd.to_datetime(_hdr_ts)
+                _hdr_time_str = _hdr_dt.strftime("%-I:%M %p")   # e.g. "10:13 AM"
+                _hdr_date_str = _hdr_dt.strftime("%-d %b %Y")   # e.g. "26 May 2026"
+                _hdr_mins_ago = int((pd.Timestamp.now() - _hdr_dt).total_seconds() / 60)
+                _hdr_ago = f"{_hdr_mins_ago}m ago" if _hdr_mins_ago < 60 else (
+                    f"{_hdr_mins_ago // 60}h {_hdr_mins_ago % 60}m ago" if _hdr_mins_ago < 1440 else _hdr_date_str)
+                _hdr_caption = (f"📡 **{_hdr_rt_label} scan** · {_hdr_time_str}, {_hdr_date_str} "
+                                f"<span style='color:#8ea0ba;font-size:0.8em'>({_hdr_ago})</span>")
+            except Exception:
+                _hdr_caption = f"📡 **{_hdr_rt_label} scan** · {_hdr_ts}"
+            st.markdown(_hdr_caption, unsafe_allow_html=True)
+
         st.markdown("### 🎯 Latest Picks")
         for _pi, (_, _pr) in enumerate(_show5.iterrows(), 1):
             _vel2 = _pr.get("score_velocity", 0) or 0
