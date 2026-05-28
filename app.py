@@ -444,58 +444,71 @@ def fetch_ticker_history(ticker, period="1y"):
     except Exception:
         return pd.DataFrame()
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=900)
 def fetch_financial_snapshot(ticker):
     """Fetch key financial metrics. Uses fast_info + info (yfinance), then FMP if key present.
-    Returns a dict with keys grouped into Growth / Structure / Risk / Valuation sections."""
+    Returns a dict with keys grouped into Growth / Structure / Risk / Valuation sections.
+    Each field is fetched independently so a single failure doesn't blank everything."""
     snap = {}
 
     # Layer 1: fast_info — reliable on Streamlit Cloud, covers market/price data
     try:
         fi = yf.Ticker(ticker).fast_info
-        snap["Market Cap"]  = f"${fi.market_cap / 1e6:,.0f}M" if getattr(fi, "market_cap", None) else "N/A"
-        snap["52-Wk High"]  = f"${fi.year_high:.2f}"          if getattr(fi, "year_high", None) else "N/A"
-        snap["52-Wk Low"]   = f"${fi.year_low:.2f}"           if getattr(fi, "year_low", None) else "N/A"
-        snap["Price"]       = f"${fi.last_price:.2f}"          if getattr(fi, "last_price", None) else "N/A"
+        if getattr(fi, "market_cap", None):
+            snap["Market Cap"] = f"${fi.market_cap / 1e6:,.0f}M"
+        if getattr(fi, "year_high", None):
+            snap["52-Wk High"] = f"${fi.year_high:.2f}"
+        if getattr(fi, "year_low", None):
+            snap["52-Wk Low"]  = f"${fi.year_low:.2f}"
+        if getattr(fi, "last_price", None):
+            snap["Price"]      = f"${fi.last_price:.2f}"
         if getattr(fi, "shares", None):
-            snap["Float"]   = f"{fi.shares / 1e6:.1f}M"
+            snap["Float"]      = f"{fi.shares / 1e6:.1f}M"
     except Exception:
         pass
 
-    # Layer 2: full info — slower, may fail on Cloud; fills in ratios & margins
+    # Layer 2: full .info — fetch once; each field is individually wrapped so a
+    # missing key or bad value never blocks the others.
     try:
         info = yf.Ticker(ticker).info or {}
-        def _fmt(key, fmt):
+    except Exception:
+        info = {}
+
+    def _fi(key, fmt):
+        try:
             v = info.get(key)
             return fmt(v) if v is not None else "N/A"
+        except Exception:
+            return "N/A"
 
-        # Valuation
-        snap.setdefault("P/E Ratio",    _fmt("trailingPE",                    lambda v: round(v, 2)))
-        snap.setdefault("P/S Ratio",    _fmt("priceToSalesTrailing12Months",   lambda v: round(v, 2)))
-        snap.setdefault("Market Cap",   _fmt("marketCap",                      lambda v: f"${v/1e6:,.0f}M"))
-        snap.setdefault("52-Wk High",   _fmt("fiftyTwoWeekHigh",               lambda v: f"${v:.2f}"))
-        snap.setdefault("52-Wk Low",    _fmt("fiftyTwoWeekLow",                lambda v: f"${v:.2f}"))
+    # Valuation
+    snap.setdefault("P/E Ratio",  _fi("trailingPE",                   lambda v: f"{v:.2f}"))
+    snap.setdefault("P/S Ratio",  _fi("priceToSalesTrailing12Months",  lambda v: f"{v:.2f}"))
+    snap.setdefault("Market Cap", _fi("marketCap",                     lambda v: f"${v/1e6:,.0f}M"))
+    snap.setdefault("52-Wk High", _fi("fiftyTwoWeekHigh",              lambda v: f"${v:.2f}"))
+    snap.setdefault("52-Wk Low",  _fi("fiftyTwoWeekLow",               lambda v: f"${v:.2f}"))
 
-        # Growth
-        snap["Rev Growth"]    = _fmt("revenueGrowth",   lambda v: f"{v*100:+.1f}%")
-        snap["EPS Growth"]    = _fmt("earningsGrowth",  lambda v: f"{v*100:+.1f}%")
-        snap["Gross Margin"]  = _fmt("grossMargins",    lambda v: f"{v*100:.1f}%")
+    # Growth
+    snap["Rev Growth"]   = _fi("revenueGrowth",  lambda v: f"{v*100:+.1f}%")
+    snap["EPS Growth"]   = _fi("earningsGrowth", lambda v: f"{v*100:+.1f}%")
+    snap["Gross Margin"] = _fi("grossMargins",   lambda v: f"{v*100:.1f}%")
+    try:
         fcf = info.get("freeCashflow")
         rev = info.get("totalRevenue")
-        if fcf is not None and rev and rev != 0:
-            snap["FCF Margin"] = f"{fcf/rev*100:.1f}%"
-        else:
-            snap["FCF Margin"] = "N/A"
+        snap["FCF Margin"] = f"{fcf/rev*100:.1f}%" if (fcf is not None and rev) else "N/A"
+    except Exception:
+        snap["FCF Margin"] = "N/A"
 
-        # Structure
-        snap["Short Float %"] = _fmt("shortPercentOfFloat",      lambda v: f"{v*100:.1f}%")
-        snap["Inst Own %"]    = _fmt("heldPercentInstitutions",   lambda v: f"{v*100:.1f}%")
-        snap["Insider Own %"] = _fmt("heldPercentInsiders",       lambda v: f"{v*100:.1f}%")
-        snap.setdefault("Float", _fmt("floatShares", lambda v: f"{v/1e6:.1f}M"))
+    # Structure
+    snap["Short Float %"] = _fi("shortPercentOfFloat",    lambda v: f"{v*100:.1f}%")
+    snap["Inst Own %"]    = _fi("heldPercentInstitutions", lambda v: f"{v*100:.1f}%")
+    snap["Insider Own %"] = _fi("heldPercentInsiders",     lambda v: f"{v*100:.1f}%")
+    snap.setdefault("Float", _fi("floatShares",            lambda v: f"{v/1e6:.1f}M"))
 
-        # Risk
-        snap["D/E Ratio"]       = _fmt("debtToEquity",  lambda v: round(v, 2))
-        snap["Current Ratio"]   = _fmt("currentRatio",  lambda v: round(v, 2))
+    # Risk
+    snap["D/E Ratio"]     = _fi("debtToEquity",  lambda v: f"{v:.2f}")
+    snap["Current Ratio"] = _fi("currentRatio",  lambda v: f"{v:.2f}")
+    try:
         cash = info.get("totalCash")
         ocf  = info.get("operatingCashflow")
         if cash is not None and ocf and ocf < 0:
@@ -504,10 +517,10 @@ def fetch_financial_snapshot(ticker):
             snap["Cash Runway"] = "Cash flow+"
         else:
             snap["Cash Runway"] = "N/A"
-
-        snap["Div Yield"] = _fmt("dividendYield", lambda v: f"{v*100:.2f}%")
     except Exception:
-        pass
+        snap["Cash Runway"] = "N/A"
+
+    snap["Div Yield"] = _fi("dividendYield", lambda v: f"{v*100:.2f}%")
 
     # Layer 3: FMP — only if key is present and layers above are still mostly empty
     _useful = [v for v in snap.values() if v and v != "N/A"]
@@ -521,8 +534,8 @@ def fetch_financial_snapshot(ticker):
                 _k  = (_req.get(f"{_base}/v3/key-metrics-ttm/{ticker}?apikey={_fmp_key}",   timeout=6).json() or [{}])[0]
                 _ic = (_req.get(f"{_base}/v3/income-statement/{ticker}?limit=2&apikey={_fmp_key}", timeout=6).json() or [])
                 snap.setdefault("Market Cap",  f"${_p['mktCap']/1e6:,.0f}M" if _p.get("mktCap") else "N/A")
-                snap.setdefault("P/E Ratio",   round(_k["peRatioTTM"], 2)   if _k.get("peRatioTTM") else "N/A")
-                snap.setdefault("P/S Ratio",   round(_k["priceToSalesRatioTTM"], 2) if _k.get("priceToSalesRatioTTM") else "N/A")
+                snap.setdefault("P/E Ratio",   f"{_k['peRatioTTM']:.2f}"   if _k.get("peRatioTTM") else "N/A")
+                snap.setdefault("P/S Ratio",   f"{_k['priceToSalesRatioTTM']:.2f}" if _k.get("priceToSalesRatioTTM") else "N/A")
                 if len(_ic) >= 2:
                     r0, r1 = _ic[0].get("revenue", 0) or 0, _ic[1].get("revenue", 1) or 1
                     snap.setdefault("Rev Growth",   f"{(r0-r1)/abs(r1)*100:+.1f}%")
@@ -2261,30 +2274,50 @@ if active_tab == "Deep Dive":
 
             st.markdown("---")
 
-            # ── Fetch financial snapshot once for use in both strip and grouped view ──
+            # ── Pull scan-CSV values first — these are always available ─────────
+            _ltr_row = latest_ticker_row.iloc[0]
+            _scan_float_m    = None
+            _scan_days_cover = None
+            _scan_short_pct  = None
+            _scan_mkt_cap    = None
+            try:
+                v = _ltr_row.get("float_shares")
+                if v is not None and not pd.isna(v) and float(v) > 0:
+                    _scan_float_m = float(v) / 1e6
+            except Exception:
+                pass
+            try:
+                v = _ltr_row.get("days_to_cover")
+                if v is not None and not pd.isna(v):
+                    _scan_days_cover = float(v)
+            except Exception:
+                pass
+            try:
+                v = _ltr_row.get("short_pct")
+                if v is not None and not pd.isna(v):
+                    _scan_short_pct = float(v)
+            except Exception:
+                pass
+            try:
+                v = _ltr_row.get("mkt_cap")
+                if v is not None and not pd.isna(v) and float(v) > 0:
+                    _scan_mkt_cap = float(v)
+            except Exception:
+                pass
+
+            # ── Fetch financial snapshot (yfinance + FMP) ─────────────────────
             snap = fetch_financial_snapshot(ticker)
 
-            # Pull scan-stored values (float, short, days_to_cover) to supplement yfinance
-            _ltr_row = latest_ticker_row.iloc[0]
-            _scan_float_m = None
-            _scan_days_cover = None
-            try:
-                _fs_raw = _ltr_row.get("float_shares")
-                if _fs_raw and not pd.isna(_fs_raw):
-                    _scan_float_m = float(_fs_raw) / 1e6
-            except Exception:
-                pass
-            try:
-                _dtc_raw = _ltr_row.get("days_to_cover")
-                if _dtc_raw and not pd.isna(_dtc_raw):
-                    _scan_days_cover = float(_dtc_raw)
-            except Exception:
-                pass
+            # Back-fill from scan CSV so strip always has data even if yfinance slow/missing
+            if _scan_float_m is not None:
+                snap.setdefault("Float", f"{_scan_float_m:.1f}M")
+            if _scan_short_pct is not None:
+                snap.setdefault("Short Float %", f"{_scan_short_pct*100:.1f}%")
+            if _scan_mkt_cap is not None:
+                snap.setdefault("Market Cap", f"${_scan_mkt_cap/1e6:,.0f}M")
 
             # Resolve display values for key metrics strip
             _km_float    = snap.get("Float", "N/A")
-            if _km_float == "N/A" and _scan_float_m is not None:
-                _km_float = f"{_scan_float_m:.1f}M"
             _km_dtc      = f"{_scan_days_cover:.1f}d" if _scan_days_cover is not None else "N/A"
             _km_runway   = snap.get("Cash Runway", "N/A")
             _km_insider  = snap.get("Insider Own %", "N/A")
@@ -2331,11 +2364,17 @@ if active_tab == "Deep Dive":
                         st.caption(f"Scanned: {_ts_sf}")
 
             with _fs_col:
-                st.markdown("#### 💰 Financial Snapshot")
+                _fs_header_col, _fs_refresh_col = st.columns([3, 1])
+                _fs_header_col.markdown("#### 💰 Financial Snapshot")
+                if _fs_refresh_col.button("↻ Refresh", key=f"btn_snap_refresh_{ticker}", use_container_width=True):
+                    fetch_financial_snapshot.clear()
+                    st.rerun()
+
                 if snap:
                     def _sv(k):
                         v = snap.get(k, "N/A")
-                        return v if v and v != "N/A" else "—"
+                        s = str(v) if v is not None else "N/A"
+                        return s if s not in ("N/A", "None", "") else "—"
 
                     st.markdown("**📈 Growth**")
                     _g1, _g2 = st.columns(2)
