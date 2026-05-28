@@ -1910,6 +1910,8 @@ if active_tab == "Alerts":
             st.markdown(_hdr_caption, unsafe_allow_html=True)
 
         st.markdown("### 🎯 Latest Picks")
+        _all_tickers_str = ", ".join(_top_picks["ticker"].tolist())
+        st.code(_all_tickers_str, language=None)
         for _pi, (_, _pr) in enumerate(_show5.iterrows(), 1):
             _vel2 = _pr.get("score_velocity", 0) or 0
             _vel_html2 = render_velocity_badge(_vel2)
