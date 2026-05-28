@@ -446,7 +446,8 @@ def fetch_ticker_history(ticker, period="1y"):
 
 @st.cache_data(ttl=3600)
 def fetch_financial_snapshot(ticker):
-    """Fetch key financial metrics. Uses fast_info + info (yfinance), then FMP if key present."""
+    """Fetch key financial metrics. Uses fast_info + info (yfinance), then FMP if key present.
+    Returns a dict with keys grouped into Growth / Structure / Risk / Valuation sections."""
     snap = {}
 
     # Layer 1: fast_info — reliable on Streamlit Cloud, covers market/price data
@@ -456,6 +457,8 @@ def fetch_financial_snapshot(ticker):
         snap["52-Wk High"]  = f"${fi.year_high:.2f}"          if getattr(fi, "year_high", None) else "N/A"
         snap["52-Wk Low"]   = f"${fi.year_low:.2f}"           if getattr(fi, "year_low", None) else "N/A"
         snap["Price"]       = f"${fi.last_price:.2f}"          if getattr(fi, "last_price", None) else "N/A"
+        if getattr(fi, "shares", None):
+            snap["Float"]   = f"{fi.shares / 1e6:.1f}M"
     except Exception:
         pass
 
@@ -465,15 +468,44 @@ def fetch_financial_snapshot(ticker):
         def _fmt(key, fmt):
             v = info.get(key)
             return fmt(v) if v is not None else "N/A"
+
+        # Valuation
         snap.setdefault("P/E Ratio",    _fmt("trailingPE",                    lambda v: round(v, 2)))
         snap.setdefault("P/S Ratio",    _fmt("priceToSalesTrailing12Months",   lambda v: round(v, 2)))
         snap.setdefault("Market Cap",   _fmt("marketCap",                      lambda v: f"${v/1e6:,.0f}M"))
         snap.setdefault("52-Wk High",   _fmt("fiftyTwoWeekHigh",               lambda v: f"${v:.2f}"))
         snap.setdefault("52-Wk Low",    _fmt("fiftyTwoWeekLow",                lambda v: f"${v:.2f}"))
-        snap["Rev Growth"]   = _fmt("revenueGrowth",        lambda v: f"{v*100:+.1f}%")
-        snap["Gross Margin"] = _fmt("grossMargins",         lambda v: f"{v*100:.1f}%")
-        snap["Short Float %"]= _fmt("shortPercentOfFloat",  lambda v: f"{v*100:.1f}%")
-        snap["Div Yield"]    = _fmt("dividendYield",        lambda v: f"{v*100:.2f}%")
+
+        # Growth
+        snap["Rev Growth"]    = _fmt("revenueGrowth",   lambda v: f"{v*100:+.1f}%")
+        snap["EPS Growth"]    = _fmt("earningsGrowth",  lambda v: f"{v*100:+.1f}%")
+        snap["Gross Margin"]  = _fmt("grossMargins",    lambda v: f"{v*100:.1f}%")
+        fcf = info.get("freeCashflow")
+        rev = info.get("totalRevenue")
+        if fcf is not None and rev and rev != 0:
+            snap["FCF Margin"] = f"{fcf/rev*100:.1f}%"
+        else:
+            snap["FCF Margin"] = "N/A"
+
+        # Structure
+        snap["Short Float %"] = _fmt("shortPercentOfFloat",      lambda v: f"{v*100:.1f}%")
+        snap["Inst Own %"]    = _fmt("heldPercentInstitutions",   lambda v: f"{v*100:.1f}%")
+        snap["Insider Own %"] = _fmt("heldPercentInsiders",       lambda v: f"{v*100:.1f}%")
+        snap.setdefault("Float", _fmt("floatShares", lambda v: f"{v/1e6:.1f}M"))
+
+        # Risk
+        snap["D/E Ratio"]       = _fmt("debtToEquity",  lambda v: round(v, 2))
+        snap["Current Ratio"]   = _fmt("currentRatio",  lambda v: round(v, 2))
+        cash = info.get("totalCash")
+        ocf  = info.get("operatingCashflow")
+        if cash is not None and ocf and ocf < 0:
+            snap["Cash Runway"] = f"{abs(cash / ocf * 12):.0f} mo"
+        elif cash is not None and ocf and ocf > 0:
+            snap["Cash Runway"] = "Cash flow+"
+        else:
+            snap["Cash Runway"] = "N/A"
+
+        snap["Div Yield"] = _fmt("dividendYield", lambda v: f"{v*100:.2f}%")
     except Exception:
         pass
 
@@ -2229,12 +2261,52 @@ if active_tab == "Deep Dive":
 
             st.markdown("---")
 
+            # ── Fetch financial snapshot once for use in both strip and grouped view ──
+            snap = fetch_financial_snapshot(ticker)
+
+            # Pull scan-stored values (float, short, days_to_cover) to supplement yfinance
+            _ltr_row = latest_ticker_row.iloc[0]
+            _scan_float_m = None
+            _scan_days_cover = None
+            try:
+                _fs_raw = _ltr_row.get("float_shares")
+                if _fs_raw and not pd.isna(_fs_raw):
+                    _scan_float_m = float(_fs_raw) / 1e6
+            except Exception:
+                pass
+            try:
+                _dtc_raw = _ltr_row.get("days_to_cover")
+                if _dtc_raw and not pd.isna(_dtc_raw):
+                    _scan_days_cover = float(_dtc_raw)
+            except Exception:
+                pass
+
+            # Resolve display values for key metrics strip
+            _km_float    = snap.get("Float", "N/A")
+            if _km_float == "N/A" and _scan_float_m is not None:
+                _km_float = f"{_scan_float_m:.1f}M"
+            _km_dtc      = f"{_scan_days_cover:.1f}d" if _scan_days_cover is not None else "N/A"
+            _km_runway   = snap.get("Cash Runway", "N/A")
+            _km_insider  = snap.get("Insider Own %", "N/A")
+
+            # ── Key Metrics Strip ─────────────────────────────────────────────
+            st.markdown("#### Key Metrics")
+            _km1, _km2, _km3, _km4 = st.columns(4)
+            def _metric_card(col, label, value, help_text=None):
+                col.metric(label, value, help=help_text)
+            _metric_card(_km1, "Float Size",      _km_float,   "Shares available to trade (M). Lower = more volatile.")
+            _metric_card(_km2, "Days to Cover",   _km_dtc,     "Short interest ÷ avg daily volume. >5 = squeeze potential.")
+            _metric_card(_km3, "Cash Runway",     _km_runway,  "Months of cash at current burn rate. <12 = capital risk.")
+            _metric_card(_km4, "Insider Own %",   _km_insider, "Management skin in the game.")
+
+            st.markdown("---")
+
             # ── Scan Findings | Financial Snapshot ───────────────────────────
             _sf_col, _fs_col = st.columns([1, 1])
 
             with _sf_col:
                 st.markdown("#### 📋 Last Scan Findings")
-                _ltr = latest_ticker_row.iloc[0].to_dict()
+                _ltr = _ltr_row.to_dict()
                 render_score_waterfall(_ltr)
                 _reasons_sf = _ltr.get("reasons", [])
                 if isinstance(_reasons_sf, str):
@@ -2260,31 +2332,55 @@ if active_tab == "Deep Dive":
 
             with _fs_col:
                 st.markdown("#### 💰 Financial Snapshot")
-                snap = fetch_financial_snapshot(ticker)
                 if snap:
-                    _snap_items = [(k, v) for k, v in snap.items() if v and v != "N/A"]
-                    _snap_na    = [(k, v) for k, v in snap.items() if not v or v == "N/A"]
-                    if _snap_items:
-                        snap_df = pd.DataFrame(_snap_items, columns=["Metric", "Value"]).set_index("Metric")
-                        st.dataframe(snap_df, use_container_width=True)
-                    if _snap_na:
-                        st.caption("Not available: " + ", ".join(k for k, _ in _snap_na))
-                else:
-                    st.info("Financial data unavailable — check FMP_API_KEY secret.")
+                    def _sv(k):
+                        v = snap.get(k, "N/A")
+                        return v if v and v != "N/A" else "—"
 
-                # Enrichment: earnings date, analyst target, insider
-                try:
-                    _td_enr = fetch_enrichment(ticker)
-                    if _td_enr.get("earnings_date"):
-                        st.markdown(f"📅 **Next Earnings:** {_td_enr['earnings_date']}")
-                    if _td_enr.get("analyst_target") and _td_enr.get("analyst_upside") is not None:
-                        _u_icon = "🟢" if _td_enr["analyst_upside"] > 0 else "🔴"
-                        st.markdown(f"{_u_icon} **Analyst Target:** ${_td_enr['analyst_target']} "
-                                    f"({_td_enr['analyst_upside']:+.1f}% upside)")
-                    if _td_enr.get("insider_net"):
-                        st.markdown(f"👤 **Insider Activity:** {_td_enr['insider_net']}")
-                except Exception:
-                    pass
+                    st.markdown("**📈 Growth**")
+                    _g1, _g2 = st.columns(2)
+                    _g1.metric("Rev Growth",   _sv("Rev Growth"))
+                    _g2.metric("EPS Growth",   _sv("EPS Growth"))
+                    _g3, _g4 = st.columns(2)
+                    _g3.metric("Gross Margin", _sv("Gross Margin"))
+                    _g4.metric("FCF Margin",   _sv("FCF Margin"))
+
+                    st.markdown("**🏗 Structure**")
+                    _s1, _s2, _s3 = st.columns(3)
+                    _s1.metric("Market Cap",   _sv("Market Cap"))
+                    _s2.metric("Short Float %",_sv("Short Float %"))
+                    _s3.metric("Inst Own %",   _sv("Inst Own %"))
+
+                    st.markdown("**⚠️ Risk**")
+                    _r1, _r2, _r3 = st.columns(3)
+                    _r1.metric("D/E Ratio",     _sv("D/E Ratio"))
+                    _r2.metric("Current Ratio", _sv("Current Ratio"))
+                    _r3.metric("Cash Runway",   _sv("Cash Runway"))
+
+                    st.markdown("**💲 Valuation**")
+                    _v1, _v2, _v3, _v4 = st.columns(4)
+                    _v1.metric("P/E",         _sv("P/E Ratio"))
+                    _v2.metric("P/S",         _sv("P/S Ratio"))
+                    _v3.metric("52-Wk High",  _sv("52-Wk High"))
+                    _v4.metric("52-Wk Low",   _sv("52-Wk Low"))
+
+                    # Enrichment: earnings date, analyst target
+                    try:
+                        _td_enr = fetch_enrichment(ticker)
+                        _enr_parts = []
+                        if _td_enr.get("earnings_date"):
+                            _enr_parts.append(f"📅 **Next Earnings:** {_td_enr['earnings_date']}")
+                        if _td_enr.get("analyst_target") and _td_enr.get("analyst_upside") is not None:
+                            _u_icon = "🟢" if _td_enr["analyst_upside"] > 0 else "🔴"
+                            _enr_parts.append(f"{_u_icon} **Analyst Target:** ${_td_enr['analyst_target']} ({_td_enr['analyst_upside']:+.1f}%)")
+                        if _td_enr.get("insider_net"):
+                            _enr_parts.append(f"👤 **Insider Activity:** {_td_enr['insider_net']}")
+                        for _ep in _enr_parts:
+                            st.markdown(_ep)
+                    except Exception:
+                        pass
+                else:
+                    st.info("Financial data unavailable.")
 
             st.markdown("---")
 
