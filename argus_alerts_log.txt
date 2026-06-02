@@ -3201,3 +3201,84 @@ _None today_
 ──────────────────────────────
 _Scanned 779 tickers • Top 12 picks shown_
 
+--- 2026-06-02 23:33:45 ---
+👁 *Argus Daily Scan — 02 Jun 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*HIVE* — Score: *67/100*
+⚡ _Previously flagged 20x since 20 May 2026 — signals strengthening_
+💰 Price: $4.54 | Cap: $1150M
+📊 Rev growth 219% | 6mo Momentum +44% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +86% | Inst. 37% | Cap $1150M | 🔁 Persistence x19 (decay 1.00) | 8-K: Earnings Results | 8-K: 8-K Event | 🏆 Runner sim 62% | Bull Regime Adj
+
+🟡 WATCHLIST
+*WYFI* — Score: *67/100*
+⚡ _Previously flagged 15x since 23 May 2026 — signals strengthening_
+💰 Price: $30.16 | Cap: $1165M
+📊 Rev growth 31% | Gross margin 87% | 6mo Momentum +53% | Above 50MA | Above 200MA | RS vs IWM +66% | Inst. 22% | Cap $1165M | 🔁 Persistence x14 (decay 1.00) | 8-K: Material Agreement | 8-K: 8-K Event | 8-K: Reg FD Disclosure | Bull Regime Adj
+
+🟡 WATCHLIST
+*FATN* — Score: *66/100*
+⚡ _Previously flagged 26x since 20 May 2026 — signals strengthening_
+💰 Price: $6.5 | Cap: $91M
+📊 Rev growth 90% | ROE 24% | Gross margin 91% | 6mo Momentum +148% | Above 50MA | Above 200MA | RS vs IWM +264% | Inst. 3% (undiscovered) | Cap $91M | 🔁 Persistence x25 (decay 1.00) | Bull Regime Adj
+
+🟡 WATCHLIST
+*SKLZ* — Score: *65/100*
+⚡ _Previously flagged 24x since 20 May 2026 — signals strengthening_
+💰 Price: $10.04 | Cap: $157M
+📊 Rev growth 33% | Gross margin 88% | P/S 1.4x | 6mo Momentum +89% | Above 50MA | Above 200MA | RS vs IWM +179% | Inst. 38% | Cap $157M | 🔁 Persistence x23 (decay 1.00) | 🏆 Runner sim 63% | Bull Regime Adj
+
+🟡 WATCHLIST
+*GPRK* — Score: *64/100*
+⚡ _Previously flagged 5x since 29 May 2026 — signals strengthening_
+💰 Price: $11.78 | Cap: $762M
+📊 EPS growth 44% | ROE 23% | Gross margin 72% | FCF positive | P/S 1.6x | 6mo Momentum +43% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +29% | Inst. 38% | Cap $762M | 🔁 Persistence x4 (decay 1.00) | 🏆 Runner sim 68% | Bull Regime Adj
+
+🟡 WATCHLIST
+*CLOV* — Score: *63/100*
+⚡ _Previously flagged 18x since 12 May 2026 — signals strengthening_
+💰 Price: $3.73 | Cap: $1965M
+📊 Rev growth 62% | FCF positive | P/S 0.9x | 6mo Momentum +49% | Above 50MA | Above 200MA | RS vs IWM +61% | Inst. 30% | Cap $1965M | 🔁 Persistence x17 (decay 1.00) | 🏆 Runner sim 68% | Bull Regime Adj
+
+🟡 WATCHLIST
+*SPCE* — Score: *61/100*
+⚡ _Previously flagged 6x since 28 May 2026 — signals strengthening_
+💰 Price: $4.59 | Cap: $479M
+📊 Cash runway 4q | Pre-revenue | 6mo Momentum +21% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +64% | Inst. 17% | Cap $479M | 🔁 Persistence x5 (decay 1.00) | 8-K: Other Events | 8-K: Reg FD Disclosure | 8-K: Other Events | Bull Regime Adj
+
+🟡 WATCHLIST
+*MNTS* — Score: *61/100*
+⚡ _Previously flagged 6x since 28 May 2026 — signals strengthening_
+💰 Price: $14.08 | Cap: $204M
+📊 Gross margin 65% | Pre-revenue | 6mo Momentum +31% | Above 50MA | Above 200MA | RS vs IWM +196% | Inst. 15% | Cap $204M | 🔁 Persistence x5 (decay 1.00) | Dual insider buy | 8-K: Material Agreement | 8-K: 8-K Event | 8-K: Reg FD Disclosure | Bull Regime Adj
+
+🟡 WATCHLIST
+*PAYS* — Score: *60/100*
+⚡ _Previously flagged 16x since 20 May 2026 — signals strengthening_
+💰 Price: $7.4 | Cap: $414M
+📊 Rev growth 51% | EPS growth 86% | ROE 22% | Gross margin 60% | FCF positive | 6mo Momentum +48% | Above 50MA | Above 200MA | RS vs IWM +83% | Inst. 47% | Cap $414M | 🔁 Persistence x15 (decay 0.95) | Bull Regime Adj
+
+🟡 WATCHLIST
+*FCEL* — Score: *59/100*
+⚡ _Previously flagged 20x since 20 May 2026 — signals strengthening_
+💰 Price: $24.64 | Cap: $1305M
+📊 Rev growth 61% | PEG 0.4 | 6mo Momentum +284% | Above 50MA | Above 200MA | RS vs IWM +176% | Inst. 48% | Cap $1305M | 🔁 Persistence x19 (decay 1.00) | 🏆 Runner sim 64% | Bull Regime Adj
+
+🟡 WATCHLIST
+*ABX* — Score: *58/100*
+⚡ _Previously flagged 9x since 27 May 2026 — signals strengthening_
+💰 Price: $8.83 | Cap: $847M
+📊 Rev growth 35% | EPS growth 45% | Gross margin 89% | FCF positive | P/S 3.4x | 6mo Momentum +36% | Above 200MA | Inst. 29% | Cap $847M | 🔁 Persistence x8 (decay 0.95) | 8-K: Other Events | 8-K: 8-K Event | Bull Regime Adj
+
+🟡 WATCHLIST
+*EVC* — Score: *58/100*
+⚡ _Previously flagged 14x since 14 May 2026 — signals strengthening_
+💰 Price: $9.01 | Cap: $829M
+📊 Rev growth 114% | FCF positive | P/S 1.5x | 6mo Momentum +230% | Above 50MA | Above 200MA | RS vs IWM +184% | Inst. 59% | Cap $829M | 🔁 Persistence x13 (decay 1.00) | 8-K: Officer/Director Change | 8-K: 8-K Event | 8-K: 8-K Event | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 787 tickers • Top 12 picks shown_
+
