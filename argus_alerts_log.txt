@@ -7292,3 +7292,18 @@ _None today_
 ──────────────────────────────
 _Scanned 806 tickers • Top 12 picks shown_
 
+--- 2026-07-08 12:33:03 ---
+👁 *Argus Daily Scan — 08 Jul 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*ABX* — Score: *77/100*
+⚡ _Previously flagged 33x since 27 May 2026 — signals strengthening_
+💰 Price: $11.8 | Cap: $1132M
+📊 Rev growth 35% | EPS growth 45% | Gross margin 89% | FCF positive | 6mo Momentum +47% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +29% | Inst. 28% | Cap $1132M | Squeeze setup (22% short, 12.2d cover) | 🔁 Persistence x33 (decay 0.95) | 8-K: Material Agreement | 8-K: Officer/Director Change | 8-K: 8-K Event | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 400 tickers • Top 1 picks shown_
+
