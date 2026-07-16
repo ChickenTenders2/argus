@@ -8273,3 +8273,42 @@ _Scanned 784 tickers • Top 12 picks shown_
 ────────────────────────────
 
 
+--- 2026-07-16 12:44:07 ---
+👁 *Argus Daily Scan — 16 Jul 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+🟢 HIGH CONVICTION
+*JLHL* — Score: *81/100*
+⚡ _Previously flagged 9x since 09 Jul 2026 — signals strengthening_
+💰 Price: $10.75 | Cap: $231M
+📊 Rev growth 85% | EPS growth 72% | ROE 60% | FCF positive | P/S 0.9x | 6mo Momentum +164% | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +64% | Inst. 0% (undiscovered) | Cap $231M | Tight float 1.4M shares | 🔁 Persistence x9 (decay 0.95) | Bull Regime Adj
+💡 Theme: Government Infrastructure Investment Boom
+🚀 Catalyst: Potential for increased government contracts due to 85% revenue growth and +164% 6mo momentum
+⚠️ Risk: Dependence on a single large customer 🟢
+
+──────────────────────────────
+_Scanned 400 tickers • Top 1 picks shown_
+
+--- 2026-07-16 12:44:10 ---
+
+📡 *FMP Enrichment — JLHL*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+🏛 *EDGAR Insider Activity — JLHL*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
