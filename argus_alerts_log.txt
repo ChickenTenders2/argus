@@ -8725,3 +8725,84 @@ _None today_
 ──────────────────────────────
 _Scanned 751 tickers • Top 12 picks shown_
 
+--- 2026-07-20 22:56:39 ---
+👁 *Argus Daily Scan — 20 Jul 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*AGEN* — Score: *60/100*
+⚡ _Previously flagged 7x since 13 Jul 2026 — signals strengthening_
+💰 Price: $4.97 | Cap: $207M
+📊 Rev growth 40% | Gross margin 97% | P/S 1.7x | 6mo Momentum +49% | Above 50MA | Above 200MA | RS vs IWM +7% | Inst. 24% | Cap $207M | 🔁 Persistence x6 (decay 1.00) | 8-K: Material Agreement | 8-K: 8-K Event | 8-K: Reg FD Disclosure
+
+🟡 WATCHLIST
+*LPG* — Score: *60/100*
+⚡ _Previously flagged 20x since 23 May 2026 — signals strengthening_
+💰 Price: $43.09 | Cap: $1844M
+📊 Rev growth 105% | EPS growth 898% | ROE 18% | Gross margin 69% | FCF positive | P/S 3.9x | 6mo Momentum +58% | Above 50MA | Above 200MA | RS vs IWM +14% | Cap $1844M | 🔁 Persistence x19 (decay 1.00) | 8-K: Reg FD Disclosure | 8-K: Other Events | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*PAYS* — Score: *57/100*
+⚡ _Previously flagged 43x since 20 May 2026 — signals strengthening_
+💰 Price: $8.88 | Cap: $496M
+📊 Rev growth 51% | EPS growth 86% | ROE 22% | Gross margin 60% | FCF positive | 6mo Momentum +93% | Above 50MA | Above 200MA | RS vs IWM +35% | Inst. 48% | Cap $496M | 🔁 Persistence x42 (decay 1.00)
+
+🟡 WATCHLIST
+*AMPG* — Score: *57/100*
+⚡ _Previously flagged 37x since 19 May 2026 — signals strengthening_
+💰 Price: $6.22 | Cap: $158M
+📊 Rev growth 49% | 6mo Momentum +71% | Above 50MA | Above 200MA | RS vs IWM +205% | Inst. 25% | Cap $158M | 🔁 Persistence x36 (decay 1.00) | 🏆 Runner sim 60%
+
+🟡 WATCHLIST
+*QTTB* — Score: *56/100*
+⚡ _Previously flagged 9x since 13 Jul 2026 — signals strengthening_
+💰 Price: $15.04 | Cap: $346M
+📊 ROE 157% | Gross margin 72% | 6mo Momentum +318% | Above 50MA | Above 200MA | RS vs IWM +121% | Cap $346M | Tight float 2.6M shares | 🔁 Persistence x8 (decay 1.00) | 8-K: Material Agreement | 8-K: 8-K Event | 8-K: Other Events | 🏆 Runner sim 69%
+
+🟡 WATCHLIST
+*TOI* — Score: *56/100*
+⚡ _Previously flagged 7x since 08 Jun 2026 — signals strengthening_
+💰 Price: $5.5 | Cap: $550M
+📊 Rev growth 41% | P/S 1.0x | 6mo Momentum +64% | Above 50MA | Above 200MA | RS vs IWM +51% | Inst. 46% | Cap $550M | 🔁 Persistence x6 (decay 1.00) | 🏆 Runner sim 64%
+
+🟡 WATCHLIST
+*QMCO* — Score: *56/100*
+⚡ _Previously flagged 23x since 01 Jul 2026 — signals strengthening_
+💰 Price: $10.99 | Cap: $433M
+📊 Rev growth 27% | PEG 0.8 | P/S 1.5x | 6mo Momentum +39% | Above 200MA | RS vs IWM +47% | Inst. 5% (undiscovered) | Cap $433M | 🔁 Persistence x22 (decay 1.00) | 🏆 Runner sim 69%
+
+🟡 WATCHLIST
+*TRIN* — Score: *55/100*
+⚡ _Previously flagged 6x since 28 May 2026 — signals strengthening_
+💰 Price: $17.69 | Cap: $1590M
+📊 Rev growth 33% | ROE 14% | Gross margin 100% | 6mo Momentum +16% | Above 50MA | Above 200MA | RS vs IWM +7% | Inst. 25% | Cap $1590M | 🔁 Persistence x5 (decay 1.00) | 8-K: 8-K Event | 8-K: Reg FD Disclosure | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*ABX* — Score: *55/100*
+⚡ _Previously flagged 51x since 27 May 2026 — signals strengthening_
+💰 Price: $10.26 | Cap: $984M
+📊 Rev growth 35% | EPS growth 45% | Gross margin 89% | FCF positive | P/S 3.9x | 6mo Momentum +20% | Above 50MA | Above 200MA | Inst. 29% | Cap $984M | Squeeze setup (21% short, 9.0d cover) | 🔁 Persistence x50 (decay 1.00)
+
+🟡 WATCHLIST
+*EVC* — Score: *55/100*
+⚡ _Previously flagged 66x since 14 May 2026 — signals strengthening_
+💰 Price: $11.03 | Cap: $1015M
+📊 Rev growth 114% | FCF positive | P/S 1.8x | 6mo Momentum +245% | Above 50MA | Above 200MA | RS vs IWM +206% | Inst. 59% | Cap $1015M | 🔁 Persistence x65 (decay 1.00) | 8-K: Other Events
+
+🟡 WATCHLIST
+*ATEX* — Score: *55/100*
+⚡ _Previously flagged 18x since 18 Jun 2026 — signals strengthening_
+💰 Price: $101.9 | Cap: $1987M
+📊 Rev growth 41% | EPS growth 98% | ROE 43% | Gross margin 100% | 6mo Momentum +303% | Above 50MA | Above 200MA | RS vs IWM +134% | Cap $1987M | 🔁 Persistence x17 (decay 0.86)
+
+🟡 WATCHLIST
+*JLHL* — Score: *54/100*
+⚡ _Previously flagged 14x since 09 Jul 2026 — signals strengthening_
+💰 Price: $8.61 | Cap: $185M
+📊 Rev growth 85% | EPS growth 72% | ROE 60% | FCF positive | P/S 0.7x | 6mo Momentum +120% | Inst. 0% (undiscovered) | Cap $185M | Tight float 1.4M shares | 🔁 Persistence x13 (decay 1.00)
+
+──────────────────────────────
+_Scanned 764 tickers • Top 12 picks shown_
+
