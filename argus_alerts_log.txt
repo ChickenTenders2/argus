@@ -12038,3 +12038,39 @@ _Scanned 682 tickers • Top 12 picks shown_
 ────────────────────────────
 
 
+--- 2026-08-19 11:42:53 ---
+👁 *Argus Daily Scan — 19 Aug 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+🟢 HIGH CONVICTION
+*FTK* — Score: *81/100*
+⚡ _Previously flagged 5x since 14 Aug 2026 — signals strengthening_
+💰 Price: $27.02 | Cap: $979M
+📊 Rev growth 70% | EPS growth 420% | ROE 38% | P/S 3.3x | 6mo Momentum +62% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +22% | Inst. 35% | Cap $979M | Squeeze setup (20% short, 8.8d cover) | 🔁 Persistence x5 (decay 0.95) | 8-K: Reg FD Disclosure | 8-K: Other Events | 8-K: 8-K Event | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 400 tickers • Top 1 picks shown_
+
+--- 2026-08-19 11:42:56 ---
+
+📡 *FMP Enrichment — FTK*
+──────────────────────────────
+📈 Revenue Growth: N/A
+📊 Gross Margin: N/A
+💰 FCF Yield: N/A ❓
+📉 EBITDA Growth: N/A
+🔬 Asset vs EBITDA: N/A
+🏛 Institutions: ⚠️ Not available on free tier
+🧠 Insider Buys (90d):
+      ❌ No open-market buys in last 90 days
+📅 Next Earnings: N/A
+🎯 Analyst Grades:
+      N/A
+──────────────────────────────
+
+🏛 *EDGAR Insider Activity — FTK*
+────────────────────────────
+❌ No open-market purchases in last 30 days
+────────────────────────────
+
+
