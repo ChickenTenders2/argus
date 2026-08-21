@@ -12402,3 +12402,18 @@ _None today_
 ──────────────────────────────
 _Scanned 689 tickers • Top 12 picks shown_
 
+--- 2026-08-21 11:48:35 ---
+👁 *Argus Daily Scan — 21 Aug 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*FTK* — Score: *75/100*
+⚡ _Previously flagged 9x since 14 Aug 2026 — signals strengthening_
+💰 Price: $25.0 | Cap: $906M
+📊 Rev growth 70% | EPS growth 420% | ROE 38% | P/S 3.1x | 6mo Momentum +51% | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +16% | Inst. 35% | Cap $906M | 🔁 Persistence x9 (decay 0.95) | 8-K: Other Events | 8-K: 8-K Event | 8-K: Reg FD Disclosure | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 400 tickers • Top 1 picks shown_
+
