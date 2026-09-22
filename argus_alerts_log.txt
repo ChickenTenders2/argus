@@ -15918,3 +15918,84 @@ _None today_
 ──────────────────────────────
 _Scanned 712 tickers • Top 12 picks shown_
 
+--- 2026-09-22 00:54:11 ---
+👁 *Argus Daily Scan — 22 Sep 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*NCEW* — Score: *52/100*
+⚡ _Previously flagged 1x since 22 Sep 2026 — signals strengthening_
+💰 Price: $17.22 | Cap: $56M
+📊 Rev growth 34% | P/S 1.1x | 6mo Momentum +78% | Above 50MA | Above 200MA | Inst. 0% (undiscovered) | Cap $56M | Tight float 0.6M shares | 🏆 Runner sim 67%
+
+🟡 WATCHLIST
+*AUBN* — Score: *47/100*
+⚡ _Previously flagged 1x since 22 Sep 2026 — signals strengthening_
+💰 Price: $27.5 | Cap: $96M
+📊 Rev growth 12% | EPS growth 26% | FCF positive | P/S 2.8x | 6mo Momentum +34% | Above 50MA | Above 200MA | Inst. 14% | Cap $96M | Tight float 2.2M shares | 🏆 Runner sim 83% (near historical runners)
+
+🟡 WATCHLIST
+*QNBC* — Score: *46/100*
+⚡ _Previously flagged 1x since 22 Sep 2026 — signals strengthening_
+💰 Price: $45.56 | Cap: $283M
+📊 Rev growth 40% | FCF positive | 6mo Momentum +18% | Above 50MA | Above 200MA | Inst. 7% (undiscovered) | Cap $283M | Tight float 3.9M shares
+
+🟡 WATCHLIST
+*MGYR* — Score: *42/100*
+⚡ _Previously flagged 1x since 22 Sep 2026 — signals strengthening_
+💰 Price: $19.4 | Cap: $125M
+📊 Rev growth 14% | EPS growth 23% | FCF positive | P/S 3.3x | 6mo Momentum +22% | Above 50MA | Above 200MA | Inst. 32% | Cap $125M | 🏆 Runner sim 86% (near historical runners)
+
+🟡 WATCHLIST
+*HITI* — Score: *40/100*
+⚡ _Previously flagged 7x since 15 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $234M
+📊 Rev growth 33% | EPS growth 1532% | FCF positive | P/S 0.3x | Inst. 9% (undiscovered) | Cap $234M | 🔁 Persistence x6 (decay 0.95)
+
+🟡 WATCHLIST
+*CHCI* — Score: *39/100*
+⚡ _Previously flagged 2x since 15 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $206M
+📊 Rev growth 74% | EPS growth 500% | ROE 36% | FCF positive | PEG 0.8 | P/S 2.7x | Inst. 16% | Cap $206M | Tight float 3.7M shares | 🔁 Persistence x1 (decay 0.70)
+
+🟡 WATCHLIST
+*CUE* — Score: *38/100*
+⚡ _Previously flagged 3x since 29 May 2026 — signals strengthening_
+💰 Price: $nan | Cap: $205M
+📊 Rev growth 167% | ⚡ Volume spike 2x | Inst. 23% | Cap $205M | 8-K: Reg FD Disclosure | 8-K: Other Events | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*FATN* — Score: *37/100*
+⚡ _Previously flagged 57x since 20 May 2026 — signals strengthening_
+💰 Price: $nan | Cap: $82M
+📊 Rev growth 28% | EPS growth 74% | ROE 23% | Gross margin 91% | Inst. 6% (undiscovered) | Cap $82M | 8-K: Officer/Director Change | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*HYFT* — Score: *33/100*
+⚡ _Previously flagged 1x since 22 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $69M
+📊 Rev growth 21% | Gross margin 61% | ⚡ Volume spike 2x | Inst. 9% (undiscovered) | Cap $69M
+
+🟡 WATCHLIST
+*RDZN* — Score: *33/100*
+⚡ _Previously flagged 1x since 22 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $105M
+📊 Rev growth 49% | Gross margin 61% | P/S 1.7x | Inst. 8% (undiscovered) | Cap $105M | 8-K: Officer/Director Change | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*AMCI* — Score: *33/100*
+⚡ _Previously flagged 1x since 22 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $79M
+📊 Gross margin 79% | Pre-revenue | ⚡ Volume spike 1.5x | Inst. 2% (undiscovered) | Cap $79M | Tight float 4.7M shares | 8-K: Reg FD Disclosure | 8-K: 8-K Event | 8-K: Material Agreement
+
+🟡 WATCHLIST
+*HLP* — Score: *33/100*
+⚡ _Previously flagged 2x since 15 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $152M
+📊 Rev growth 40% | EPS growth 1298% | Inst. 0% (undiscovered) | Cap $152M | 🔁 Persistence x1 (decay 0.70)
+
+──────────────────────────────
+_Scanned 1414 tickers • Top 12 picks shown_
+
