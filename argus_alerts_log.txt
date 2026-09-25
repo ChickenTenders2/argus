@@ -16410,3 +16410,84 @@ _None today_
 ──────────────────────────────
 _Scanned 713 tickers • Top 12 picks shown_
 
+--- 2026-09-25 00:32:52 ---
+👁 *Argus Daily Scan — 25 Sep 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*PBAM* — Score: *48/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $85.79 | Cap: $491M
+📊 Rev growth 14% | EPS growth 28% | ROE 17% | P/S 3.9x | 6mo Momentum +26% | Above 200MA | Inst. 10% (undiscovered) | Cap $491M | Tight float 4.6M shares | 🏆 Runner sim 65% | Bull Regime Adj
+
+🟡 WATCHLIST
+*PFX* — Score: *46/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $46.86 | Cap: $91M
+📊 Gross margin 100% | P/S 3.6x | 6mo Momentum +17% | Above 50MA | Above 200MA | Inst. 17% | Cap $91M | Tight float 1.4M shares | 🏆 Runner sim 84% (near historical runners) | Bull Regime Adj
+
+🟡 WATCHLIST
+*RDIB* — Score: *45/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $17.03 | Cap: $390M
+📊 Rev growth 11% | FCF positive | P/S 1.8x | 6mo Momentum +81% | Above 50MA | Above 200MA | Inst. 15% | Cap $390M | 🏆 Runner sim 94% (near historical runners) | Bull Regime Adj
+
+🟡 WATCHLIST
+*CBAT* — Score: *44/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $121M
+📊 Rev growth 99% | FCF positive | P/S 0.5x | ⚡ Volume spike 2x | Inst. 2% (undiscovered) | Cap $121M | 🏆 Runner sim 63% | Bull Regime Adj
+
+🟡 WATCHLIST
+*ESYN* — Score: *44/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $2.58 | Cap: $20M
+📊 Cash runway 7q | Gross margin 105% | Pre-revenue | 6mo Momentum +97% | Above 50MA | Above 200MA | Inst. 0% (undiscovered) | Tight float 0.4M shares | 🏆 Runner sim 77% (near historical runners) | Bull Regime Adj
+
+🟡 WATCHLIST
+*SVIA* — Score: *43/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $3.96 | Cap: $350M
+📊 Gross margin 100% | Pre-revenue | 6mo Momentum +57% | Above 50MA | Above 200MA | Inst. 29% | Cap $350M | 🏆 Runner sim 79% (near historical runners) | Bull Regime Adj
+
+🟡 WATCHLIST
+*CHCI* — Score: *42/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $199M
+📊 Rev growth 74% | EPS growth 500% | ROE 36% | FCF positive | PEG 0.8 | P/S 2.6x | Inst. 16% | Cap $199M | Tight float 3.7M shares | Bull Regime Adj
+
+🟡 WATCHLIST
+*FATN* — Score: *40/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $77M
+📊 Rev growth 28% | EPS growth 74% | ROE 23% | Gross margin 91% | P/S 3.8x | Inst. 6% (undiscovered) | Cap $77M | Bull Regime Adj
+
+🟡 WATCHLIST
+*EDRY* — Score: *37/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $162M
+📊 Rev growth 57% | ROE 10% | Gross margin 56% | FCF positive | P/S 2.6x | Inst. 7% (undiscovered) | Cap $162M | Tight float 2.2M shares | Bull Regime Adj
+
+🟡 WATCHLIST
+*PCLA* — Score: *36/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $69M
+📊 Rev growth 46% | Gross margin 54% | FCF positive | P/S 0.1x | Inst. 0% (undiscovered) | Cap $69M | Tight float 3.9M shares | Bull Regime Adj
+
+🟡 WATCHLIST
+*RDZN* — Score: *36/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $109M
+📊 Rev growth 49% | Gross margin 61% | P/S 1.8x | Inst. 8% (undiscovered) | Cap $109M | 8-K: Officer/Director Change | 8-K: 8-K Event | Bull Regime Adj
+
+🟡 WATCHLIST
+*HLP* — Score: *35/100*
+⚡ _Previously flagged 1x since 25 Sep 2026 — signals strengthening_
+💰 Price: $nan | Cap: $164M
+📊 Rev growth 40% | EPS growth 1298% | Inst. 0% (undiscovered) | Cap $164M | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 834 tickers • Top 12 picks shown_
+
