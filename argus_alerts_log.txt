@@ -16742,3 +16742,84 @@ _None today_
 ──────────────────────────────
 _Scanned 732 tickers • Top 12 picks shown_
 
+--- 2026-09-29 01:28:27 ---
+👁 *Argus Daily Scan — 29 Sep 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*SENEB* — Score: *61/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $187.42 | Cap: $1269M
+📊 Rev growth 36% | EPS growth 33% | ROE 17% | FCF positive | PEG 0.9 | P/S 0.7x | 6mo Momentum +27% | Above 50MA | Above 200MA | Inst. 5% (undiscovered) | Cap $1269M | Tight float 4.8M shares | 8-K: 8-K Event | 8-K: 8-K Event | 🏆 Runner sim 64%
+
+🟡 WATCHLIST
+*FTK* — Score: *60/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $28.43 | Cap: $1030M
+📊 Rev growth 70% | EPS growth 420% | ROE 38% | P/S 3.5x | 6mo Momentum +68% | Above 50MA | Above 200MA | Inst. 35% | Cap $1030M | High squeeze potential (26% short, 5.7d cover) | 8-K: Material Agreement | 8-K: Termination of Agreement | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*PXS* — Score: *56/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $6.52 | Cap: $67M
+📊 Rev growth 33% | Gross margin 60% | FCF positive | P/S 1.6x | 6mo Momentum +53% | Above 50MA | Above 200MA | Inst. 2% (undiscovered) | Cap $67M | Tight float 4.1M shares | 🏆 Runner sim 61%
+
+🟡 WATCHLIST
+*TEN* — Score: *51/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $46.31 | Cap: $1395M
+📊 Rev growth 54% | EPS growth 560% | ROE 17% | Gross margin 62% | P/S 1.5x | 6mo Momentum +25% | Above 50MA | Above 200MA | Inst. 34% | Cap $1395M
+
+🟡 WATCHLIST
+*OCC* — Score: *50/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $14.95 | Cap: $132M
+📊 Rev growth 22% | EPS growth 485% | ROE 16% | FCF positive | P/S 1.6x | 6mo Momentum +79% | Above 50MA | Above 200MA | Inst. 24% | Cap $132M | 🏆 Runner sim 61%
+
+🟡 WATCHLIST
+*MTLS* — Score: *50/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $8.58 | Cap: $495M
+📊 EPS growth 1596% | Gross margin 57% | FCF positive | P/S 1.8x | 6mo Momentum +79% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | Inst. 14% | Cap $495M | 🏆 Runner sim 78% (near historical runners)
+
+🟡 WATCHLIST
+*CHCI* — Score: *48/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $19.53 | Cap: $201M
+📊 Rev growth 74% | EPS growth 500% | ROE 36% | FCF positive | PEG 0.8 | P/S 2.6x | 6mo Momentum +10% | Above 50MA | Above 200MA | Inst. 16% | Cap $201M | Tight float 3.7M shares
+
+🟡 WATCHLIST
+*NSTS* — Score: *46/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $14.13 | Cap: $74M
+📊 Rev growth 30% | FCF positive | 6mo Momentum +23% | Above 50MA | Above 200MA | Inst. 26% | Cap $74M | Tight float 4.5M shares | 🏆 Runner sim 61%
+
+🟡 WATCHLIST
+*MX* — Score: *45/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $3.79 | Cap: $138M
+📊 P/S 0.8x | 6mo Momentum +40% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | Inst. 43% | Cap $138M | 8-K: Material Agreement | 8-K: 8-K Event | 8-K: Reg FD Disclosure
+
+🟡 WATCHLIST
+*ASRV* — Score: *45/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $4.6 | Cap: $78M
+📊 Rev growth 43% | FCF positive | PEG 0.9 | P/S 1.3x | 6mo Momentum +29% | Above 200MA | Inst. 40% | Cap $78M | 🏆 Runner sim 65%
+
+🟡 WATCHLIST
+*BPRN* — Score: *45/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $43.47 | Cap: $296M
+📊 Rev growth 62% | EPS growth 940% | FCF positive | P/S 3.4x | 6mo Momentum +29% | Above 50MA | Above 200MA | Inst. 46% | Cap $296M
+
+🟡 WATCHLIST
+*CGEN* — Score: *44/100*
+⚡ _Previously flagged 1x since 29 Sep 2026 — signals strengthening_
+💰 Price: $2.33 | Cap: $221M
+📊 Rev growth 107% | ROE 51% | Gross margin 87% | FCF positive | P/S 3.0x | 6mo Momentum +17% | Above 200MA | Inst. 15% | Cap $221M
+
+──────────────────────────────
+_Scanned 926 tickers • Top 12 picks shown_
+
