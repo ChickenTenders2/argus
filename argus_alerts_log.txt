@@ -17163,3 +17163,84 @@ _None today_
 ──────────────────────────────
 _Scanned 741 tickers • Top 12 picks shown_
 
+--- 2026-10-02 01:29:59 ---
+👁 *Argus Daily Scan — 02 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*HFBL* — Score: *49/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $24.77 | Cap: $76M
+📊 Rev growth 13% | EPS growth 24% | ROE 11% | FCF positive | P/S 3.2x | 6mo Momentum +43% | Above 50MA | Above 200MA | Inst. 7% (undiscovered) | Cap $76M | Tight float 2.0M shares | 🏆 Runner sim 66%
+
+🟡 WATCHLIST
+*QNBC* — Score: *45/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $45.44 | Cap: $282M
+📊 Rev growth 40% | FCF positive | 6mo Momentum +14% | Above 50MA | Above 200MA | Inst. 7% (undiscovered) | Cap $282M | Tight float 3.9M shares
+
+🟡 WATCHLIST
+*PBAM* — Score: *43/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $85.69 | Cap: $491M
+📊 Rev growth 14% | EPS growth 28% | ROE 17% | P/S 3.9x | 6mo Momentum +25% | Above 200MA | Inst. 20% | Cap $491M | Tight float 4.6M shares | 🏆 Runner sim 80% (near historical runners)
+
+🟡 WATCHLIST
+*FATN* — Score: *36/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $78M
+📊 Rev growth 28% | EPS growth 74% | ROE 23% | Gross margin 91% | P/S 3.8x | Inst. 6% (undiscovered) | Cap $78M
+
+🟡 WATCHLIST
+*RFL* — Score: *34/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $78M
+📊 Gross margin 95% | Pre-revenue | ⚡ Volume spike 2x | Inst. 8% (undiscovered) | Cap $78M | 8-K: Reg FD Disclosure | 8-K: Other Events | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*PCLA* — Score: *33/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $64M
+📊 Rev growth 46% | Gross margin 54% | FCF positive | P/S 0.1x | Inst. 0% (undiscovered) | Cap $64M | Tight float 4.0M shares
+
+🟡 WATCHLIST
+*SANG* — Score: *32/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $164M
+📊 Gross margin 70% | FCF positive | P/S 0.8x | ⚡ Volume spike 2x | Inst. 29% | Cap $164M | 🏆 Runner sim 80% (near historical runners)
+
+🟡 WATCHLIST
+*HLP* — Score: *32/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $190M
+📊 Rev growth 40% | EPS growth 1298% | Inst. 0% (undiscovered) | Cap $190M
+
+🟡 WATCHLIST
+*ISPR* — Score: *32/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $77M
+📊 Rev growth 32% | P/S 0.8x | Inst. 7% (undiscovered) | Cap $77M | 8-K: Reg FD Disclosure | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*LUCD* — Score: *32/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $121M
+📊 Rev growth 27% | ⚡ Volume spike 2x | Inst. 33% | Cap $121M | 🏆 Runner sim 76% (near historical runners)
+
+🟡 WATCHLIST
+*HYPR* — Score: *32/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $92M
+📊 Rev growth 45% | Gross margin 51% | ⚡ Volume spike 2x | Inst. 22% | Cap $92M
+
+🟡 WATCHLIST
+*ZJK* — Score: *32/100*
+⚡ _Previously flagged 1x since 02 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $129M
+📊 Rev growth 37% | ROE 22% | Gross margin 41% | P/S 2.0x | Inst. 0% (undiscovered) | Cap $129M
+
+──────────────────────────────
+_Scanned 1137 tickers • Top 12 picks shown_
+
