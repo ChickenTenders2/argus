@@ -17576,3 +17576,84 @@ _Scanned 764 tickers • Top 12 picks shown_
 👁 *Argus Daily Scan — 06 Oct 2026*
 No high-conviction picks found today. Market may be choppy.
 
+--- 2026-10-06 19:54:45 ---
+👁 *Argus Daily Scan — 06 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*DFDV* — Score: *68/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $4.99 | Cap: $163M
+📊 Rev growth 67% | Gross margin 98% | 6mo Momentum +40% | Above 50MA | Above 200MA | RS vs IWM +71% | Inst. 14% | Cap $163M | Dual insider buy | 8-K: Earnings Results | 8-K: Other Events | 8-K: 8-K Event | Bull Regime Adj
+
+🟡 WATCHLIST
+*HSDT* — Score: *68/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $2.67 | Cap: $174M
+📊 Rev growth 5774% | Gross margin 96% | 6mo Momentum +42% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +51% | Inst. 26% | Cap $174M | 8-K: Reg FD Disclosure | 8-K: Other Events | Bull Regime Adj
+
+🟡 WATCHLIST
+*TEN* — Score: *65/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $50.28 | Cap: $1515M
+📊 Rev growth 54% | EPS growth 560% | ROE 17% | Gross margin 62% | P/S 1.6x | 6mo Momentum +31% | Above 50MA | Above 200MA | RS vs IWM +40% | Inst. 34% | Cap $1515M | Bull Regime Adj
+
+🟡 WATCHLIST
+*HITI* — Score: *63/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $2.71 | Cap: $242M
+📊 Rev growth 33% | EPS growth 1532% | FCF positive | P/S 0.3x | 6mo Momentum +17% | Above 50MA | Above 200MA | RS vs IWM +28% | Inst. 9% (undiscovered) | Cap $242M | Bull Regime Adj
+
+🟡 WATCHLIST
+*PCLA* — Score: *62/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $6.55 | Cap: $63M
+📊 Rev growth 46% | Gross margin 54% | FCF positive | P/S 0.1x | 6mo Momentum +181% | Above 200MA | RS vs IWM +33% | Inst. 0% (undiscovered) | Cap $63M | Tight float 4.0M shares | 🏆 Runner sim 66% | Bull Regime Adj
+
+🟡 WATCHLIST
+*ELMT* — Score: *59/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $23.65 | Cap: $720M
+📊 Rev growth 35% | P/S 3.2x | 6mo Momentum +32% | Above 50MA | RS vs IWM +55% | Inst. 38% | Cap $720M | 8-K: Reg FD Disclosure | 8-K: Other Events | 8-K: 8-K Event | Bull Regime Adj
+
+🟡 WATCHLIST
+*SB* — Score: *59/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $8.56 | Cap: $974M
+📊 Rev growth 33% | ROE 10% | Gross margin 64% | FCF positive | P/S 3.2x | 6mo Momentum +33% | Above 50MA | Above 200MA | RS vs IWM +34% | Inst. 34% | Cap $974M | Bull Regime Adj
+
+🟡 WATCHLIST
+*QMCO* — Score: *59/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $34.29 | Cap: $1351M
+📊 Rev growth 26% | PEG 0.8 | 6mo Momentum +464% | Above 50MA | Above 200MA | RS vs IWM +235% | Inst. 37% | Cap $1351M | 8-K: Officer/Director Change | 8-K: Other Events | 8-K: 8-K Event | Bull Regime Adj
+
+🟡 WATCHLIST
+*VNCE* — Score: *59/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $12.31 | Cap: $159M
+📊 Rev growth 12% | ROE 14% | Gross margin 53% | FCF positive | P/S 0.5x | 6mo Momentum +411% | Above 50MA | Above 200MA | RS vs IWM +97% | Inst. 14% | Cap $159M | Tight float 4.2M shares | 🏆 Runner sim 82% (near historical runners) | Bull Regime Adj
+
+🟡 WATCHLIST
+*XHG* — Score: *58/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $2.22 | Cap: $114M
+📊 Rev growth 13% | P/S 0.3x | 6mo Momentum +161% | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +158% | Inst. 0% (undiscovered) | Cap $114M | 🏆 Runner sim 74% | Bull Regime Adj
+
+🟡 WATCHLIST
+*IMPP* — Score: *58/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $5.24 | Cap: $239M
+📊 Rev growth 140% | EPS growth 104% | ROE 17% | Gross margin 50% | FCF positive | P/S 1.0x | 6mo Momentum +22% | Above 50MA | Above 200MA | RS vs IWM +12% | Inst. 32% | Cap $239M | Bull Regime Adj
+
+🟡 WATCHLIST
+*GOTU* — Score: *58/100*
+⚡ _Previously flagged 1x since 06 Oct 2026 — signals strengthening_
+💰 Price: $2.56 | Cap: $601M
+📊 Rev growth 20% | Gross margin 68% | P/S 0.1x | 6mo Momentum +30% | Above 50MA | Above 200MA | RS vs IWM +44% | Inst. 11% | Cap $601M | 🏆 Runner sim 71% | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 748 tickers • Top 12 picks shown_
+
