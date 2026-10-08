@@ -17823,3 +17823,84 @@ _None today_
 ──────────────────────────────
 _Scanned 749 tickers • Top 12 picks shown_
 
+--- 2026-10-08 02:46:22 ---
+👁 *Argus Daily Scan — 08 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*HSDT* — Score: *58/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $2.54 | Cap: $165M
+📊 Rev growth 5774% | Gross margin 96% | 6mo Momentum +34% | Above 50MA | Above 200MA | RS vs IWM +51% | Inst. 26% | Cap $165M | 8-K: Reg FD Disclosure | 8-K: Other Events
+
+🟡 WATCHLIST
+*GOTU* — Score: *57/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $2.81 | Cap: $661M
+📊 Rev growth 20% | Gross margin 68% | P/S 0.1x | 6mo Momentum +42% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +58% | Inst. 11% | Cap $661M | 🏆 Runner sim 67%
+
+🟡 WATCHLIST
+*FATN* — Score: *55/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $4.93 | Cap: $70M
+📊 Rev growth 28% | EPS growth 74% | ROE 23% | Gross margin 91% | P/S 3.4x | 6mo Momentum +146% | Above 200MA | Inst. 5% (undiscovered) | Cap $70M | 8-K: Material Agreement | 8-K: Termination of Agreement | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*SIEB* — Score: *53/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $2.17 | Cap: $89M
+📊 Rev growth 109% | Gross margin 91% | FCF positive | PEG 0.7 | P/S 0.9x | 6mo Momentum +20% | Above 50MA | Above 200MA | Inst. 6% (undiscovered) | Cap $89M | 🏆 Runner sim 65%
+
+🟡 WATCHLIST
+*PBHC* — Score: *53/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $16.9 | Cap: $106M
+📊 Rev growth 47% | EPS growth 8256% | FCF positive | P/S 3.1x | 6mo Momentum +27% | Above 50MA | Above 200MA | Inst. 33% | Cap $106M | Tight float 3.6M shares
+
+🟡 WATCHLIST
+*BNC* — Score: *52/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $5.55 | Cap: $271M
+📊 ROE 71% | 6mo Momentum +114% | Above 50MA | Above 200MA | RS vs IWM +97% | Inst. 21% | Cap $271M | 8-K: 8-K Event | 8-K: Reg FD Disclosure | 8-K: Other Events | 🏆 Runner sim 61%
+
+🟡 WATCHLIST
+*SHIP* — Score: *51/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $17.24 | Cap: $374M
+📊 Rev growth 49% | EPS growth 784% | ROE 21% | Gross margin 67% | FCF positive | P/S 1.9x | 6mo Momentum +28% | Above 50MA | Above 200MA | Inst. 26% | Cap $374M
+
+🟡 WATCHLIST
+*TEN* — Score: *51/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $49.79 | Cap: $1500M
+📊 Rev growth 54% | EPS growth 560% | ROE 17% | Gross margin 62% | P/S 1.6x | 6mo Momentum +33% | Above 50MA | Above 200MA | Inst. 34% | Cap $1500M
+
+🟡 WATCHLIST
+*SLNG* — Score: *51/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $5.43 | Cap: $101M
+📊 FCF positive | P/S 1.8x | 6mo Momentum +50% | Above 50MA | Above 200MA | RS vs IWM +43% | Inst. 5% (undiscovered) | Cap $101M | Tight float 3.3M shares | 🏆 Runner sim 63%
+
+🟡 WATCHLIST
+*SENEB* — Score: *50/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $175.58 | Cap: $1189M
+📊 Rev growth 36% | EPS growth 33% | ROE 17% | FCF positive | PEG 0.9 | P/S 0.7x | 6mo Momentum +19% | Above 200MA | Inst. 5% (undiscovered) | Cap $1189M | Tight float 4.8M shares
+
+🟡 WATCHLIST
+*HMR* — Score: *50/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $1.74 | Cap: $103M
+📊 Rev growth 211% | ROE 16% | P/S 1.2x | 6mo Momentum +113% | Above 50MA | Above 200MA | Inst. 0% (undiscovered) | Cap $103M | 🏆 Runner sim 72%
+
+🟡 WATCHLIST
+*PCLA* — Score: *50/100*
+⚡ _Previously flagged 1x since 08 Oct 2026 — signals strengthening_
+💰 Price: $6.59 | Cap: $63M
+📊 Rev growth 46% | Gross margin 54% | FCF positive | P/S 0.1x | 6mo Momentum +192% | Above 200MA | Inst. 0% (undiscovered) | Cap $63M | Tight float 4.0M shares | 🏆 Runner sim 63%
+
+──────────────────────────────
+_Scanned 1118 tickers • Top 12 picks shown_
+
