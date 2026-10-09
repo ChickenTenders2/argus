@@ -17989,3 +17989,84 @@ _None today_
 ──────────────────────────────
 _Scanned 745 tickers • Top 12 picks shown_
 
+--- 2026-10-09 02:00:31 ---
+👁 *Argus Daily Scan — 09 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*SBC* — Score: *60/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $5.34 | Cap: $549M
+📊 Rev growth 13% | EPS growth 339% | ROE 19% | Gross margin 72% | FCF positive | P/S 3.1x | 6mo Momentum +29% | Above 50MA | Above 200MA | RS vs IWM +77% | Inst. 4% (undiscovered) | Cap $549M | 🏆 Runner sim 69%
+
+🟡 WATCHLIST
+*TEN* — Score: *59/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $51.83 | Cap: $1562M
+📊 Rev growth 54% | EPS growth 560% | ROE 17% | Gross margin 62% | P/S 1.6x | 6mo Momentum +36% | Above 50MA | Above 200MA | RS vs IWM +42% | Inst. 34% | Cap $1562M
+
+🟡 WATCHLIST
+*DFDV* — Score: *58/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $4.58 | Cap: $149M
+📊 Rev growth 67% | Gross margin 98% | 6mo Momentum +16% | Above 50MA | Above 200MA | RS vs IWM +66% | Inst. 14% | Cap $149M | 8-K: Earnings Results | 8-K: Other Events | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*HSDT* — Score: *58/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $2.38 | Cap: $155M
+📊 Rev growth 5774% | Gross margin 96% | 6mo Momentum +26% | Above 50MA | Above 200MA | RS vs IWM +44% | Inst. 26% | Cap $155M | 8-K: Reg FD Disclosure | 8-K: Other Events
+
+🟡 WATCHLIST
+*HITI* — Score: *57/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $2.58 | Cap: $230M
+📊 Rev growth 33% | EPS growth 1532% | FCF positive | P/S 0.3x | 6mo Momentum +11% | Above 50MA | Above 200MA | Volume coiling (pre-breakout) | RS vs IWM +24% | Inst. 9% (undiscovered) | Cap $230M
+
+🟡 WATCHLIST
+*FATN* — Score: *57/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $5.11 | Cap: $72M
+📊 Rev growth 28% | EPS growth 74% | ROE 23% | Gross margin 91% | P/S 3.6x | 6mo Momentum +137% | Above 200MA | RS vs IWM +8% | Inst. 5% (undiscovered) | Cap $72M | 8-K: Material Agreement | 8-K: Termination of Agreement | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*IMPP* — Score: *55/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $5.44 | Cap: $248M
+📊 Rev growth 140% | EPS growth 104% | ROE 17% | Gross margin 50% | FCF positive | P/S 1.0x | 6mo Momentum +28% | Above 50MA | Above 200MA | RS vs IWM +16% | Inst. 32% | Cap $248M
+
+🟡 WATCHLIST
+*PCRX* — Score: *55/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $36.39 | Cap: $1432M
+📊 Gross margin 79% | FCF positive | PEG 0.7 | P/S 1.9x | 6mo Momentum +53% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +48% | Cap $1432M | High squeeze potential (27% short, 14.8d cover) | 8-K: Material Agreement | 8-K: Reg FD Disclosure | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*NVEC* — Score: *55/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $111.45 | Cap: $539M
+📊 Rev growth 81% | EPS growth 79% | ROE 30% | Gross margin 79% | FCF positive | PEG 0.8 | 6mo Momentum +48% | Above 50MA | Above 200MA | RS vs IWM +32% | Cap $539M | Tight float 4.8M shares
+
+🟡 WATCHLIST
+*ASC* — Score: *54/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $19.47 | Cap: $794M
+📊 Rev growth 61% | EPS growth 573% | ROE 16% | Gross margin 45% | FCF positive | P/S 2.2x | 6mo Momentum +35% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +34% | Cap $794M
+
+🟡 WATCHLIST
+*TK* — Score: *54/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $15.37 | Cap: $1348M
+📊 Rev growth 44% | EPS growth 243% | ROE 27% | Gross margin 50% | FCF positive | P/S 1.2x | 6mo Momentum +35% | Above 50MA | Above 200MA | RS vs IWM +47% | Inst. 55% | Cap $1348M
+
+🟡 WATCHLIST
+*AUDC* — Score: *54/100*
+⚡ _Previously flagged 1x since 09 Oct 2026 — signals strengthening_
+💰 Price: $11.32 | Cap: $273M
+📊 EPS growth 89% | Gross margin 66% | FCF positive | P/S 1.1x | 6mo Momentum +31% | Above 50MA | Above 200MA | RS vs IWM +19% | Inst. 40% | Cap $273M | Options: bullish call flow | 🏆 Runner sim 83% (near historical runners)
+
+──────────────────────────────
+_Scanned 876 tickers • Top 12 picks shown_
+
