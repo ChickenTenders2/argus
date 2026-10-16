@@ -18819,3 +18819,84 @@ _None today_
 ──────────────────────────────
 _Scanned 735 tickers • Top 12 picks shown_
 
+--- 2026-10-16 00:03:48 ---
+👁 *Argus Daily Scan — 16 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*SKYA* — Score: *64/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $2.74 | Cap: $118M
+📊 Rev growth 1608% | Gross margin 83% | 6mo Momentum +43% | Above 50MA | Above 200MA | RS vs IWM +116% | Inst. 27% | Cap $118M | 8-K: Other Events | 8-K: 8-K Event | 8-K: Other Events | Bull Regime Adj
+
+🟡 WATCHLIST
+*TEN* — Score: *62/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $51.48 | Cap: $1551M
+📊 Rev growth 54% | EPS growth 560% | ROE 17% | Gross margin 62% | P/S 1.6x | 6mo Momentum +34% | Above 50MA | Above 200MA | RS vs IWM +42% | Inst. 34% | Cap $1551M | Bull Regime Adj
+
+🟡 WATCHLIST
+*GOTU* — Score: *56/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $2.67 | Cap: $628M
+📊 Rev growth 20% | Gross margin 68% | P/S 0.1x | 6mo Momentum +34% | Above 50MA | Above 200MA | RS vs IWM +63% | Inst. 11% | Cap $628M | 🏆 Runner sim 71% | Bull Regime Adj
+
+🟡 WATCHLIST
+*PAYS* — Score: *55/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $15.6 | Cap: $881M
+📊 Rev growth 48% | EPS growth 450% | ROE 31% | Gross margin 61% | FCF positive | 6mo Momentum +148% | Above 50MA | Above 200MA | RS vs IWM +81% | Inst. 55% | Cap $881M | Bull Regime Adj
+
+🟡 WATCHLIST
+*NAT* — Score: *55/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $7.82 | Cap: $1656M
+📊 Rev growth 98% | ROE 26% | Gross margin 53% | FCF positive | 6mo Momentum +40% | Above 50MA | Above 200MA | Volume coiling (pre-breakout) | RS vs IWM +37% | Inst. 58% | Cap $1656M | Bull Regime Adj
+
+🟡 WATCHLIST
+*TK* — Score: *55/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $13.99 | Cap: $1227M
+📊 Rev growth 44% | EPS growth 243% | ROE 27% | Gross margin 50% | FCF positive | P/S 1.1x | 6mo Momentum +17% | Above 50MA | Above 200MA | RS vs IWM +36% | Inst. 54% | Cap $1227M | Bull Regime Adj
+
+🟡 WATCHLIST
+*CRCT* — Score: *54/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $6.7 | Cap: $1406M
+📊 EPS growth 69% | ROE 26% | Gross margin 55% | FCF positive | P/S 2.0x | 6mo Momentum +52% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +51% | Inst. 56% | Cap $1406M | Bull Regime Adj
+
+🟡 WATCHLIST
+*HSDT* — Score: *54/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $2.35 | Cap: $153M
+📊 Rev growth 5774% | Gross margin 96% | 6mo Momentum +11% | Above 50MA | Above 200MA | ⚡ Volume spike 1.5x | RS vs IWM +35% | Inst. 26% | Cap $153M | Bull Regime Adj
+
+🟡 WATCHLIST
+*HITI* — Score: *54/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $2.56 | Cap: $228M
+📊 Rev growth 33% | EPS growth 1532% | FCF positive | P/S 0.3x | 6mo Momentum +5% | Above 50MA | Above 200MA | RS vs IWM +24% | Inst. 9% (undiscovered) | Cap $228M | Bull Regime Adj
+
+🟡 WATCHLIST
+*ASC* — Score: *52/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $18.98 | Cap: $775M
+📊 Rev growth 61% | EPS growth 573% | ROE 16% | Gross margin 45% | FCF positive | P/S 2.1x | 6mo Momentum +28% | Above 50MA | Above 200MA | RS vs IWM +31% | Cap $775M | Bull Regime Adj
+
+🟡 WATCHLIST
+*VRA* — Score: *50/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $5.99 | Cap: $172M
+📊 Gross margin 50% | FCF positive | P/S 0.6x | 6mo Momentum +55% | Above 50MA | Above 200MA | RS vs IWM +67% | Inst. 38% | Cap $172M | 🏆 Runner sim 72% | Bull Regime Adj
+
+🟡 WATCHLIST
+*SVIA* — Score: *49/100*
+⚡ _Previously flagged 1x since 16 Oct 2026 — signals strengthening_
+💰 Price: $3.89 | Cap: $309M
+📊 Gross margin 100% | Pre-revenue | 6mo Momentum +94% | Above 50MA | Above 200MA | RS vs IWM +102% | Inst. 31% | Cap $309M | 🏆 Runner sim 79% (near historical runners) | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 745 tickers • Top 12 picks shown_
+
