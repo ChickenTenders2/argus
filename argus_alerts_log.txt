@@ -19151,3 +19151,84 @@ _None today_
 ──────────────────────────────
 _Scanned 724 tickers • Top 12 picks shown_
 
+--- 2026-10-20 01:12:07 ---
+👁 *Argus Daily Scan — 20 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*NCEW* — Score: *46/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $16.53 | Cap: $53M
+📊 Rev growth 34% | P/S 1.0x | 6mo Momentum +27% | Above 200MA | Inst. 0% (undiscovered) | Cap $53M | Tight float 0.6M shares | 🏆 Runner sim 64% | Neutral Regime Adj
+
+🟡 WATCHLIST
+*SLNH* — Score: *38/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $145M
+📊 Rev growth 145% | Gross margin 59% | P/S 3.4x | ⚡ Volume spike 2x | Inst. 21% | Cap $145M | 8-K: 8-K Event | 8-K: 8-K Event | 8-K: 8-K Event | 🏆 Runner sim 67% | Neutral Regime Adj
+
+🟡 WATCHLIST
+*CHCI* — Score: *36/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $176M
+📊 Rev growth 74% | EPS growth 500% | ROE 36% | FCF positive | PEG 0.8 | P/S 2.3x | Inst. 16% | Cap $176M | Tight float 3.7M shares | Neutral Regime Adj
+
+🟡 WATCHLIST
+*EDRY* — Score: *34/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $136M
+📊 Rev growth 57% | ROE 10% | Gross margin 56% | FCF positive | P/S 2.2x | Inst. 7% (undiscovered) | Cap $136M | Tight float 0.1M shares | Neutral Regime Adj
+
+🟡 WATCHLIST
+*DVLT* — Score: *34/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $127M
+📊 Rev growth 287% | Gross margin 71% | P/S 2.7x | Inst. 6% (undiscovered) | Cap $127M | 8-K: Officer/Director Change | 8-K: Reg FD Disclosure | 8-K: 8-K Event | Neutral Regime Adj
+
+🟡 WATCHLIST
+*PBHC* — Score: *33/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $108M
+📊 Rev growth 47% | EPS growth 8256% | FCF positive | P/S 3.2x | Inst. 33% | Cap $108M | Tight float 3.6M shares | Neutral Regime Adj
+
+🟡 WATCHLIST
+*FUSB* — Score: *33/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $16.35 | Cap: $90M
+📊 Rev growth 30% | EPS growth 1065% | FCF positive | P/S 2.3x | Above 200MA | Inst. 19% | Cap $90M | Tight float 4.1M shares | Neutral Regime Adj
+
+🟡 WATCHLIST
+*SKYA* — Score: *33/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $121M
+📊 Rev growth 1608% | Gross margin 83% | Inst. 27% | Cap $121M | 8-K: Other Events | 8-K: 8-K Event | 8-K: Other Events | Neutral Regime Adj
+
+🟡 WATCHLIST
+*AIBZ* — Score: *32/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $188M
+📊 Rev growth 66% | ⚡ Volume spike 2x | Inst. 6% (undiscovered) | Cap $188M | Neutral Regime Adj
+
+🟡 WATCHLIST
+*LUCD* — Score: *32/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $72M
+📊 Rev growth 27% | ⚡ Volume spike 2x | Inst. 33% | Cap $72M | 8-K: 8-K Event | 8-K: 8-K Event | 🏆 Runner sim 76% (near historical runners) | Neutral Regime Adj
+
+🟡 WATCHLIST
+*ZJK* — Score: *30/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $111M
+📊 Rev growth 37% | ROE 22% | Gross margin 41% | P/S 1.7x | Inst. 0% (undiscovered) | Cap $111M | Neutral Regime Adj
+
+🟡 WATCHLIST
+*BGM* — Score: *30/100*
+⚡ _Previously flagged 1x since 20 Oct 2026 — signals strengthening_
+💰 Price: $nan | Cap: $120M
+📊 Rev growth 70% | FCF positive | P/S 2.5x | Inst. 0% (undiscovered) | Cap $120M | Tight float 4.6M shares | Neutral Regime Adj
+
+──────────────────────────────
+_Scanned 990 tickers • Top 12 picks shown_
+
