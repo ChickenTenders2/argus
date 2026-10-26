@@ -19900,3 +19900,84 @@ _Scanned 911 tickers • Top 12 picks shown_
 👁 *Argus Daily Scan — 26 Oct 2026*
 No high-conviction picks found today. Market may be choppy.
 
+--- 2026-10-26 20:05:47 ---
+👁 *Argus Daily Scan — 26 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*SKYA* — Score: *56/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $2.88 | Cap: $125M
+📊 Rev growth 1608% | Gross margin 83% | 6mo Momentum +61% | Above 50MA | Above 200MA | RS vs IWM +114% | Inst. 27% | Cap $125M | 8-K: Other Events | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*KRP* — Score: *53/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $16.87 | Cap: $2168M
+📊 Rev growth 38% | EPS growth 1889% | ROE 12% | Gross margin 93% | FCF positive | 6mo Momentum +19% | Above 50MA | Above 200MA | RS vs IWM +22% | Inst. 32% | Cap $2168M
+
+🟡 WATCHLIST
+*GOTU* — Score: *53/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $2.62 | Cap: $615M
+📊 Rev growth 20% | Gross margin 68% | P/S 0.1x | 6mo Momentum +36% | Above 50MA | Above 200MA | RS vs IWM +58% | Inst. 11% | Cap $615M | 🏆 Runner sim 71%
+
+🟡 WATCHLIST
+*PAYS* — Score: *52/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $14.27 | Cap: $805M
+📊 Rev growth 48% | EPS growth 450% | ROE 31% | Gross margin 61% | FCF positive | 6mo Momentum +117% | Above 50MA | Above 200MA | RS vs IWM +58% | Inst. 55% | Cap $805M
+
+🟡 WATCHLIST
+*XNCR* — Score: *52/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $29.18 | Cap: $2170M
+📊 Rev growth 18% | 6mo Momentum +140% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +53% | Cap $2170M | High squeeze potential (31% short, 11.3d cover) | 8-K: Earnings Results | 8-K: Reg FD Disclosure | 8-K: Other Events | 🏆 Runner sim 73%
+
+🟡 WATCHLIST
+*XHG* — Score: *51/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $3.62 | Cap: $187M
+📊 Rev growth 13% | P/S 0.5x | 6mo Momentum +242% | Above 50MA | Above 200MA | RS vs IWM +277% | Inst. 0% (undiscovered) | Cap $187M | 🏆 Runner sim 80% (near historical runners)
+
+🟡 WATCHLIST
+*CRCT* — Score: *50/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $6.34 | Cap: $1331M
+📊 EPS growth 69% | ROE 26% | Gross margin 55% | FCF positive | P/S 1.9x | 6mo Momentum +48% | Above 50MA | Above 200MA | RS vs IWM +36% | Inst. 56% | Cap $1331M | 🏆 Runner sim 61%
+
+🟡 WATCHLIST
+*SLN* — Score: *50/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $19.78 | Cap: $1230M
+📊 Cash runway 7q | Gross margin 86% | Pre-revenue | 6mo Momentum +157% | Above 50MA | Above 200MA | RS vs IWM +75% | Inst. 48% | Cap $1230M | 8-K: Material Agreement | 8-K: Reg FD Disclosure | 8-K: 8-K Event | 🏆 Runner sim 75% (near historical runners)
+
+🟡 WATCHLIST
+*SVIA* — Score: *50/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $3.43 | Cap: $272M
+📊 Gross margin 100% | Pre-revenue | 6mo Momentum +80% | Above 50MA | Above 200MA | RS vs IWM +109% | Inst. 34% | Cap $272M | 8-K: Officer/Director Change | 8-K: Reg FD Disclosure | 8-K: 8-K Event | 🏆 Runner sim 68%
+
+🟡 WATCHLIST
+*BNC* — Score: *50/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $5.33 | Cap: $260M
+📊 ROE 71% | 6mo Momentum +77% | Above 50MA | Above 200MA | RS vs IWM +117% | Inst. 18% | Cap $260M | 8-K: Officer/Director Change | 8-K: Reg FD Disclosure | 8-K: 8-K Event | 🏆 Runner sim 68%
+
+🟡 WATCHLIST
+*ASC* — Score: *50/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $20.7 | Cap: $846M
+📊 Rev growth 61% | EPS growth 573% | ROE 16% | Gross margin 45% | FCF positive | P/S 2.3x | 6mo Momentum +30% | Above 50MA | Above 200MA | RS vs IWM +33% | Cap $846M
+
+🟡 WATCHLIST
+*EAF* — Score: *48/100*
+⚡ _Previously flagged 1x since 26 Oct 2026 — signals strengthening_
+💰 Price: $10.68 | Cap: $287M
+📊 P/S 0.6x | 6mo Momentum +19% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +55% | Inst. 42% | Cap $287M | 8-K: Earnings Results | 8-K: 8-K Event | 🏆 Runner sim 78% (near historical runners)
+
+──────────────────────────────
+_Scanned 700 tickers • Top 12 picks shown_
+
