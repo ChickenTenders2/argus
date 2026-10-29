@@ -20230,3 +20230,84 @@ _None today_
 ──────────────────────────────
 _Scanned 697 tickers • Top 12 picks shown_
 
+--- 2026-10-29 01:44:16 ---
+👁 *Argus Daily Scan — 29 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*FATN* — Score: *50/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $5.2 | Cap: $73M
+📊 Rev growth 28% | EPS growth 74% | ROE 23% | Gross margin 91% | P/S 3.6x | 6mo Momentum +71% | Above 200MA | Inst. 6% (undiscovered) | Cap $73M
+
+🟡 WATCHLIST
+*JRSH* — Score: *49/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $5.97 | Cap: $76M
+📊 Rev growth 27% | EPS growth 418% | FCF positive | P/S 0.4x | 6mo Momentum +75% | Above 50MA | Above 200MA | Inst. 13% | Cap $76M | 🏆 Runner sim 63%
+
+🟡 WATCHLIST
+*DLTH* — Score: *48/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $4.23 | Cap: $161M
+📊 EPS growth 1266% | Gross margin 58% | FCF positive | PEG 0.8 | P/S 0.3x | 6mo Momentum +28% | Above 50MA | Above 200MA | Inst. 17% | Cap $161M | 🏆 Runner sim 76% (near historical runners)
+
+🟡 WATCHLIST
+*HFBL* — Score: *46/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $22.74 | Cap: $69M
+📊 Rev growth 13% | EPS growth 24% | ROE 11% | FCF positive | P/S 2.9x | 6mo Momentum +22% | Above 200MA | Inst. 8% (undiscovered) | Cap $69M | Tight float 2.0M shares | 8-K: Earnings Results | 8-K: 8-K Event | 8-K: Reg FD Disclosure
+
+🟡 WATCHLIST
+*CFBK* — Score: *45/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $34.53 | Cap: $234M
+📊 Rev growth 55% | EPS growth 153% | ROE 12% | FCF positive | P/S 3.9x | 6mo Momentum +18% | Above 50MA | Above 200MA | Cap $234M | 8-K: Earnings Results | 8-K: 8-K Event
+
+🟡 WATCHLIST
+*ECBK* — Score: *45/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $21.07 | Cap: $184M
+📊 Rev growth 26% | EPS growth 38% | FCF positive | 6mo Momentum +17% | Above 50MA | Above 200MA | Inst. 31% | Cap $184M | 8-K: Earnings Results | 8-K: 8-K Event | 🏆 Runner sim 66%
+
+🟡 WATCHLIST
+*CRT* — Score: *43/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $13.86 | Cap: $83M
+📊 Gross margin 100% | Pre-revenue | 6mo Momentum +32% | Above 50MA | Above 200MA | Inst. 23% | Cap $83M | Tight float 5.0M shares | 8-K: Earnings Results | 8-K: 8-K Event | 🏆 Runner sim 66%
+
+🟡 WATCHLIST
+*ACOG* — Score: *41/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $9.17 | Cap: $200M
+📊 Rev growth 268% | Gross margin 90% | 6mo Momentum +54% | Above 50MA | Above 200MA | Inst. 59% | Cap $200M
+
+🟡 WATCHLIST
+*CUE* — Score: *40/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $21.16 | Cap: $154M
+📊 Rev growth 167% | 6mo Momentum +44% | Above 200MA | Inst. 23% | Cap $154M | 🏆 Runner sim 60%
+
+🟡 WATCHLIST
+*ACB* — Score: *40/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $4.08 | Cap: $258M
+📊 Gross margin 44% | P/S 0.8x | 6mo Momentum +19% | Above 50MA | Above 200MA | Inst. 9% (undiscovered) | Cap $258M | 🏆 Runner sim 78% (near historical runners)
+
+🟡 WATCHLIST
+*BSET* — Score: *39/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $21.88 | Cap: $189M
+📊 EPS growth 167% | Gross margin 57% | FCF positive | P/S 0.6x | 6mo Momentum +54% | Above 50MA | Above 200MA | Inst. 56% | Cap $189M | 🏆 Runner sim 72%
+
+🟡 WATCHLIST
+*TRVG* — Score: *38/100*
+⚡ _Previously flagged 1x since 29 Oct 2026 — signals strengthening_
+💰 Price: $3.85 | Cap: $272M
+📊 Rev growth 21% | Gross margin 96% | FCF positive | P/S 0.5x | 6mo Momentum +36% | Inst. 32% | Cap $272M | 🏆 Runner sim 66%
+
+──────────────────────────────
+_Scanned 862 tickers • Top 12 picks shown_
+
