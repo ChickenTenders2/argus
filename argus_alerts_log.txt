@@ -20311,3 +20311,17 @@ _None today_
 ──────────────────────────────
 _Scanned 862 tickers • Top 12 picks shown_
 
+--- 2026-10-29 17:31:53 ---
+👁 *Argus Daily Scan — 29 Oct 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*PCLA* — Score: *76/100*
+💰 Price: $10.9 | Cap: $104M
+📊 Rev growth 46% | Gross margin 54% | FCF positive | P/S 0.2x | 6mo Momentum +459% | Above 50MA | Above 200MA | ⚡ Volume spike 2x | RS vs IWM +120% | Inst. 0% (undiscovered) | Cap $104M | Tight float 0.3M shares | 🏆 Runner sim 63% | Bull Regime Adj
+
+──────────────────────────────
+_Scanned 400 tickers • Top 1 picks shown_
+
