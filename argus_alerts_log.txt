@@ -22819,3 +22819,48 @@ _None today_
 ──────────────────────────────
 _Scanned 730 tickers • Top 12 picks shown_
 
+--- 2026-11-20 02:44:15 ---
+👁 *Argus Daily Scan — 20 Nov 2026*
+──────────────────────────────
+*🚀 Highest scoring picks*
+_None today_
+*📌 High scoring picks*
+🟡 WATCHLIST
+*SBH* — Score: *43/100*
+⚡ _Previously flagged 1x since 20 Nov 2026 — signals strengthening_
+💰 Price: $18.27 | Cap: $1658M
+📊 EPS growth 21% | ROE 24% | Gross margin 52% | FCF positive | PEG 0.8 | P/S 0.4x | 6mo Momentum +45% | Above 50MA | Above 200MA | RS vs IWM +20% | Cap $1658M | High squeeze potential (29% short, 13.4d cover) | 🏆 Runner sim 77% (near historical runners) | Bear Regime Adj
+
+🟡 WATCHLIST
+*CBRL* — Score: *42/100*
+⚡ _Previously flagged 1x since 20 Nov 2026 — signals strengthening_
+💰 Price: $71.67 | Cap: $1602M
+📊 EPS growth 85% | FCF positive | P/S 0.5x | 6mo Momentum +123% | Above 50MA | Above 200MA | RS vs IWM +35% | Cap $1602M | High squeeze potential (27% short, 5.6d cover) | 🏆 Runner sim 76% (near historical runners) | Bear Regime Adj
+
+🟡 WATCHLIST
+*TBCH* — Score: *41/100*
+⚡ _Previously flagged 1x since 20 Nov 2026 — signals strengthening_
+💰 Price: $15.82 | Cap: $283M
+📊 EPS growth 200% | FCF positive | PEG 1.0 | P/S 0.9x | 6mo Momentum +28% | Above 50MA | Above 200MA | RS vs IWM +37% | Cap $283M | Squeeze setup (24% short, 6.5d cover) | 🏆 Runner sim 70% | Bear Regime Adj
+
+🟡 WATCHLIST
+*VRA* — Score: *40/100*
+⚡ _Previously flagged 1x since 20 Nov 2026 — signals strengthening_
+💰 Price: $5.41 | Cap: $155M
+📊 Gross margin 50% | FCF positive | P/S 0.6x | 6mo Momentum +61% | Above 200MA | Volume coiling (pre-breakout) | RS vs IWM +82% | Inst. 38% | Cap $155M | 🏆 Runner sim 84% (near historical runners) | Bear Regime Adj
+
+🟡 WATCHLIST
+*ARQ* — Score: *38/100*
+⚡ _Previously flagged 1x since 20 Nov 2026 — signals strengthening_
+💰 Price: $2.92 | Cap: $129M
+📊 FCF positive | P/S 1.0x | 6mo Momentum +19% | Above 50MA | Above 200MA | RS vs IWM +43% | Inst. 35% | Cap $129M | 🏆 Runner sim 83% (near historical runners) | Bear Regime Adj
+
+🟡 WATCHLIST
+*CRNT* — Score: *31/100*
+⚡ _Previously flagged 1x since 20 Nov 2026 — signals strengthening_
+💰 Price: $2.15 | Cap: $196M
+📊 Rev growth 12% | EPS growth 8402% | FCF positive | PEG 1.0 | P/S 0.6x | Above 50MA | RS vs IWM +15% | Inst. 23% | Cap $196M | 🏆 Runner sim 66% | Bear Regime Adj
+
+──────────────────────────────
+_Scanned 253 tickers • Top 6 picks shown_
+
